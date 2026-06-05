@@ -1,0 +1,69 @@
+use crate::model::day::SectionKind;
+
+pub fn heading_line(lines: &[String], kind: SectionKind) -> Option<usize> {
+    let target = match kind {
+        SectionKind::Meetings => "## Meetings",
+        SectionKind::Notes => "## Notes",
+        SectionKind::Todos => "## To-dos",
+    };
+    lines.iter().position(|line| line == target)
+}
+
+pub fn section_end(lines: &[String], start: usize) -> usize {
+    for i in (start + 1)..lines.len() {
+        if lines[i].starts_with("## ") {
+            return i;
+        }
+    }
+    lines.len()
+}
+
+pub fn block_insert_index(lines: &[String], start_excl: usize, end_excl: usize) -> usize {
+    for i in (start_excl + 1..end_excl).rev() {
+        if !lines[i].trim().is_empty() {
+            return i + 1;
+        }
+    }
+    start_excl + 1
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_lines(text: &str) -> Vec<String> {
+        text.lines().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn heading_line_finds_each_section() {
+        let lines = make_lines(
+            "# 2026-06-04 (Thu)\n\n## Meetings\n\n## Notes\n\n## To-dos\n",
+        );
+        assert_eq!(heading_line(&lines, SectionKind::Meetings), Some(2));
+        assert_eq!(heading_line(&lines, SectionKind::Notes), Some(4));
+        assert_eq!(heading_line(&lines, SectionKind::Todos), Some(6));
+    }
+
+    #[test]
+    fn heading_line_returns_none_for_missing() {
+        let lines = make_lines("# 2026-06-04 (Thu)\n\n## Meetings\n\n## Notes\n");
+        assert_eq!(heading_line(&lines, SectionKind::Todos), None);
+    }
+
+    #[test]
+    fn block_insert_index_empty_block() {
+        let lines = make_lines("## Meetings\n\n## Notes\n");
+        let start = heading_line(&lines, SectionKind::Meetings).unwrap();
+        let end = section_end(&lines, start);
+        assert_eq!(block_insert_index(&lines, start, end), start + 1);
+    }
+
+    #[test]
+    fn block_insert_index_populated_block() {
+        let lines = make_lines("## Meetings\n\n- foo\n- bar\n\n## Notes\n");
+        let start = heading_line(&lines, SectionKind::Meetings).unwrap();
+        let end = section_end(&lines, start);
+        assert_eq!(block_insert_index(&lines, start, end), 4);
+    }
+}
