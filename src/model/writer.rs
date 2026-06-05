@@ -100,6 +100,43 @@ impl Document {
         ordinal
     }
 
+    pub fn add_note_heading(&mut self, name: &str) -> usize {
+        let start = ensure_section(&mut self.lines, SectionKind::Notes);
+        let end = section_end(&self.lines, start);
+        let insert_idx = block_insert_index(&self.lines, start, end);
+        let line = format!("### {}", name);
+        self.lines.insert(insert_idx, line);
+
+        let mut ordinal = 0;
+        for i in start + 1..insert_idx {
+            if self.lines[i].starts_with("### ") {
+                ordinal += 1;
+            }
+        }
+        ordinal
+    }
+
+    pub fn note_headings(&self) -> Vec<Meeting> {
+        let start = match heading_line(&self.lines, SectionKind::Notes) {
+            Some(i) => i,
+            None => return Vec::new(),
+        };
+        let end = section_end(&self.lines, start);
+        let mut notes = Vec::new();
+        for i in start + 1..end {
+            let line = &self.lines[i];
+            if let Some(rest) = line.strip_prefix("### ") {
+                notes.push(Meeting {
+                    ordinal: notes.len(),
+                    heading_line: i,
+                    time: String::new(),
+                    name: rest.to_string(),
+                });
+            }
+        }
+        notes
+    }
+
     pub fn add_block(&mut self, target: &EntryTarget, block: &[String]) {
         let insert_idx = match target {
             EntryTarget::Notes => {
@@ -111,6 +148,20 @@ impl Document {
                 let meetings = self.meetings();
                 let meeting = meetings.get(*ord).expect("meeting not found");
                 let start = meeting.heading_line;
+                let end = self
+                    .lines
+                    .iter()
+                    .enumerate()
+                    .skip(start + 1)
+                    .position(|(_, line)| line.starts_with("### ") || line.starts_with("## "))
+                    .map(|i| start + 1 + i)
+                    .unwrap_or(self.lines.len());
+                block_insert_index(&self.lines, start, end)
+            }
+            EntryTarget::NoteBlock(ord) => {
+                let notes = self.note_headings();
+                let note = notes.get(*ord).expect("note not found");
+                let start = note.heading_line;
                 let end = self
                     .lines
                     .iter()
@@ -155,10 +206,13 @@ impl Document {
         let lines = &self.lines;
         let meetings_start = heading_line(lines, SectionKind::Meetings);
         let meetings_end = meetings_start.map(|s| section_end(lines, s));
+        let notes_start = heading_line(lines, SectionKind::Notes);
+        let notes_end = notes_start.map(|s| section_end(lines, s));
 
         let mut result = Vec::new();
         let mut i = 0;
         let mut meeting_ord = 0usize;
+        let mut note_ord = 0usize;
 
         let join = |range: std::ops::Range<usize>| lines[range].join("\n");
 
@@ -209,6 +263,20 @@ impl Document {
                         text: line.clone(),
                     });
                     meeting_ord += 1;
+                    i += 1;
+                    continue;
+                }
+                let in_notes =
+                    matches!((notes_start, notes_end), (Some(s), Some(e)) if i > s && i < e);
+                if in_notes {
+                    result.push(Selectable {
+                        lines: i..i + 1,
+                        kind: SelectableKind::NoteHeading {
+                            ordinal: note_ord,
+                        },
+                        text: line.clone(),
+                    });
+                    note_ord += 1;
                     i += 1;
                     continue;
                 }
@@ -338,6 +406,49 @@ mod tests {
     use super::*;
     use crate::model::day::SelectableKind;
     use chrono::NaiveDate;
+
+    #[test]
+    fn add_note_heading_to_empty_doc() {
+        let mut doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let ord = doc.add_note_heading("Idea Bucket");
+        assert_eq!(ord, 0);
+        let notes = doc.note_headings();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].ordinal, 0);
+        assert_eq!(notes[0].name, "Idea Bucket");
+    }
+
+    #[test]
+    fn add_two_note_headings() {
+        let mut doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let ord0 = doc.add_note_heading("First");
+        let ord1 = doc.add_note_heading("Second");
+        assert_eq!(ord0, 0);
+        assert_eq!(ord1, 1);
+        let notes = doc.note_headings();
+        assert_eq!(notes.len(), 2);
+        assert_eq!(notes[0].name, "First");
+        assert_eq!(notes[1].name, "Second");
+    }
+
+    #[test]
+    fn add_entry_to_note_block() {
+        let mut doc = Document::from_text("# 2026-06-04\n\n## Meetings\n\n## Notes\n\n### Idea Bucket\n\n## To-dos\n");
+        doc.add_entry(&EntryTarget::NoteBlock(0), "point", None);
+        let text = doc.to_text();
+        let heading_pos = text.find("### Idea Bucket").unwrap();
+        let entry_pos = text.find("- point").unwrap();
+        assert!(entry_pos > heading_pos, "entry should be after note heading");
+    }
+
+    #[test]
+    fn note_heading_is_selectable() {
+        let doc = Document::from_text("# Day\n\n## Notes\n\n### Idea Bucket\n\n## To-dos\n");
+        let sel = doc.selectables();
+        assert_eq!(sel.len(), 1);
+        assert_eq!(sel[0].kind, SelectableKind::NoteHeading { ordinal: 0 });
+        assert_eq!(sel[0].text, "### Idea Bucket");
+    }
 
     #[test]
     fn add_meeting_to_empty_doc() {
