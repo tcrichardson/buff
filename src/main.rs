@@ -193,7 +193,9 @@ fn run() -> Result<()> {
                             app.input.pop();
                         }
                         KeyCode::Enter => {
-                            if app.editing.is_some() {
+                            if key.modifiers.contains(KeyModifiers::ALT) {
+                                app.input.push('\n');
+                            } else if app.editing.is_some() {
                                 kua_tin::app::actions::commit_edit(&mut app)?;
                             } else {
                                 let cmd = kua_tin::app::command::parse(&app.input);
@@ -250,6 +252,9 @@ fn run() -> Result<()> {
                         }
                         KeyCode::Char('d') => {
                             app.pending_delete = true;
+                        }
+                        KeyCode::Enter => {
+                            kua_tin::app::actions::resume_selected_meeting(&mut app);
                         }
                         KeyCode::Char('?') => {
                             app.pending_delete = false;

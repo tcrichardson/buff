@@ -1,6 +1,6 @@
 use crate::app::command::Command;
 use crate::app::state::{AppState, Context};
-use crate::model::day::EntryTarget;
+use crate::model::day::{EntryTarget, SelectableKind};
 
 pub fn go_to_date(state: &mut AppState, date: chrono::NaiveDate) -> anyhow::Result<()> {
     state.save()?;
@@ -177,6 +177,19 @@ pub fn begin_edit_selected(state: &mut AppState) {
     } else {
         state.status = "nothing selected".to_string();
     }
+}
+
+pub fn resume_selected_meeting(state: &mut AppState) {
+    if let Some(sel) = state.selectables.get(state.selected) {
+        if let SelectableKind::MeetingHeading { ordinal } = sel.kind {
+            state.context = Context::Meeting(ordinal);
+            state.update_context_display();
+            state.focus = crate::app::state::Focus::Capture;
+            state.status.clear();
+            return;
+        }
+    }
+    state.status = "not a meeting".to_string();
 }
 
 pub fn commit_edit(state: &mut AppState) -> anyhow::Result<()> {
@@ -625,5 +638,44 @@ mod tests {
             "got: {}",
             state.doc.to_text()
         );
+    }
+
+    #[test]
+    fn resume_meeting_sets_context_and_focus() {
+        use crate::model::day::SelectableKind;
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        dispatch(&mut state, Command::Note).unwrap(); // leave the meeting context
+        assert_eq!(state.context, Context::Notes);
+
+        let idx = state
+            .selectables
+            .iter()
+            .position(|s| matches!(s.kind, SelectableKind::MeetingHeading { .. }))
+            .expect("meeting heading should be selectable");
+        state.selected = idx;
+        state.focus = crate::app::state::Focus::Navigate;
+
+        resume_selected_meeting(&mut state);
+        assert_eq!(state.context, Context::Meeting(0));
+        assert_eq!(state.focus, crate::app::state::Focus::Capture);
+
+        dispatch(&mut state, Command::Entry("under meeting".to_string())).unwrap();
+        let text = state.doc.to_text();
+        let heading = text.find("### ").unwrap();
+        let entry = text.find("- under meeting").unwrap();
+        assert!(entry > heading, "entry should be under the meeting heading");
+    }
+
+    #[test]
+    fn resume_on_non_meeting_sets_status() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Entry("idea".to_string())).unwrap();
+        state.selected = 0;
+        state.focus = crate::app::state::Focus::Navigate;
+        resume_selected_meeting(&mut state);
+        assert_eq!(state.status, "not a meeting");
     }
 }
