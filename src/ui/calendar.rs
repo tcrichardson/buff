@@ -1,8 +1,10 @@
-#![allow(dead_code)]
-
 use chrono::{Datelike, NaiveDate};
+use ratatui::layout::{Constraint, Direction, Layout, Rect};
+use ratatui::style::{Modifier, Style};
+use ratatui::widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Table};
 use std::collections::BTreeSet;
 
+use crate::app::state::AppState;
 use crate::config::WeekStart;
 
 pub struct CalendarState {
@@ -17,6 +19,79 @@ impl CalendarState {
             selected: focus_date,
         }
     }
+}
+
+pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
+    let calendar = app.calendar.as_ref().unwrap();
+    let weeks_grid = weeks(calendar.visible_month, app.config.week_starts_on);
+    let dates_with_notes = crate::storage::dates_with_notes(&app.notes_dir, &app.config.date_format);
+
+    let popup_width = 32;
+    let popup_height = 14;
+    let popup_area = Rect {
+        x: area.x + (area.width.saturating_sub(popup_width)) / 2,
+        y: area.y + (area.height.saturating_sub(popup_height)) / 2,
+        width: popup_width.min(area.width),
+        height: popup_height.min(area.height),
+    };
+
+    frame.render_widget(Clear, popup_area);
+
+    let (year, month) = calendar.visible_month;
+    let month_name = chrono::NaiveDate::from_ymd_opt(year, month, 1)
+        .map(|d| d.format("%B %Y").to_string())
+        .unwrap_or_default();
+
+    let block = Block::default().title(month_name).borders(Borders::ALL);
+    let inner = block.inner(popup_area);
+    frame.render_widget(block, popup_area);
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(0), Constraint::Length(1)])
+        .split(inner);
+
+    let header = match app.config.week_starts_on {
+        WeekStart::Sunday => Row::new(vec!["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]),
+        WeekStart::Monday => Row::new(vec!["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]),
+    };
+
+    let mut rows = Vec::new();
+    for week in weeks_grid {
+        let mut cells = Vec::new();
+        for day in week {
+            match day {
+                Some(date) => {
+                    let is_selected = date == calendar.selected;
+                    let has_note = marked(date, &dates_with_notes);
+                    let mut text = format!("{:>2}", date.day());
+                    if has_note {
+                        text.push('·');
+                    } else {
+                        text.push(' ');
+                    }
+                    let style = if is_selected {
+                        Style::default().add_modifier(Modifier::REVERSED)
+                    } else {
+                        Style::default()
+                    };
+                    cells.push(Cell::from(text).style(style));
+                }
+                None => {
+                    cells.push(Cell::from("   "));
+                }
+            }
+        }
+        rows.push(Row::new(cells));
+    }
+
+    let table = Table::new(rows, [Constraint::Length(4); 7])
+        .header(header);
+
+    frame.render_widget(table, chunks[0]);
+
+    let footer = Paragraph::new("←/→ day ↑/↓ week Enter open Esc cancel");
+    frame.render_widget(footer, chunks[1]);
 }
 
 pub fn weeks(

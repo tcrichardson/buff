@@ -95,8 +95,8 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
             go_to_date(state, date)?;
         }
         Command::Goto(None) => {
+            state.calendar = Some(crate::ui::calendar::CalendarState::new(state.date));
             state.overlay = crate::app::state::Overlay::Calendar;
-            // Calendar state initialization will be in Task 17
         }
     }
     Ok(())

@@ -39,6 +39,7 @@ pub struct AppState {
     pub selectables: Vec<Selectable>,
     pub context_display: String,
     pub pending_delete: bool,
+    pub calendar: Option<crate::ui::calendar::CalendarState>,
 }
 
 impl AppState {
@@ -68,6 +69,7 @@ impl AppState {
             selectables,
             context_display,
             pending_delete: false,
+            calendar: None,
         })
     }
 

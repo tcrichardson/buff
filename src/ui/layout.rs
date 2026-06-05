@@ -1,6 +1,6 @@
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::widgets::Paragraph;
-use crate::app::state::AppState;
+use crate::app::state::{AppState, Overlay};
 
 pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
     let chunks = Layout::default()
@@ -25,6 +25,16 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
     super::document::render(frame, app, document_area);
     super::capture::render_status(frame, app, status_area);
     super::capture::render_input(frame, app, input_area);
+
+    match app.overlay {
+        Overlay::Calendar => {
+            super::calendar::render(frame, app, frame.area());
+        }
+        Overlay::Help => {
+            super::help::render(frame, frame.area());
+        }
+        Overlay::None => {}
+    }
 }
 
 #[cfg(test)]
@@ -57,6 +67,7 @@ mod tests {
             selectables,
             context_display: "context: Notes".to_string(),
             pending_delete: false,
+            calendar: None,
         }
     }
 
@@ -121,5 +132,23 @@ mod tests {
             has_reversed,
             "Expected at least one cell with REVERSED modifier in navigate mode"
         );
+    }
+
+    #[test]
+    fn render_calendar_overlay() {
+        let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let mut app = test_app(doc, Focus::Navigate, 0);
+        app.overlay = Overlay::Calendar;
+        app.calendar = Some(crate::ui::calendar::CalendarState::new(app.date));
+
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| {
+            render(frame, &app);
+        }).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        assert!(content.contains("June 2026"), "Expected 'June 2026' in buffer, got: {}", content);
     }
 }

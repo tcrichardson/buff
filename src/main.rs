@@ -86,10 +86,39 @@ fn run() -> Result<()> {
             // Overlay handling
             match app.overlay {
                 Overlay::Calendar => {
-                    if key.code == KeyCode::Esc {
-                        app.overlay = Overlay::None;
+                    match key.code {
+                        KeyCode::Left => {
+                            if let Some(cal) = app.calendar.as_mut() {
+                                kua_tin::ui::calendar::move_selection(cal, -1, 0);
+                            }
+                        }
+                        KeyCode::Right => {
+                            if let Some(cal) = app.calendar.as_mut() {
+                                kua_tin::ui::calendar::move_selection(cal, 1, 0);
+                            }
+                        }
+                        KeyCode::Up => {
+                            if let Some(cal) = app.calendar.as_mut() {
+                                kua_tin::ui::calendar::move_selection(cal, 0, -1);
+                            }
+                        }
+                        KeyCode::Down => {
+                            if let Some(cal) = app.calendar.as_mut() {
+                                kua_tin::ui::calendar::move_selection(cal, 0, 1);
+                            }
+                        }
+                        KeyCode::Enter => {
+                            if let Some(cal) = app.calendar.take() {
+                                kua_tin::app::actions::go_to_date(&mut app, cal.selected)?;
+                                app.overlay = Overlay::None;
+                            }
+                        }
+                        KeyCode::Esc => {
+                            app.overlay = Overlay::None;
+                            app.calendar = None;
+                        }
+                        _ => {}
                     }
-                    // Arrow keys and Enter: no-op for now (Task 18)
                     continue;
                 }
                 Overlay::Help => {
@@ -112,6 +141,7 @@ fn run() -> Result<()> {
                 && key.code == KeyCode::Char('g')
             {
                 app.pending_delete = false;
+                app.calendar = Some(kua_tin::ui::calendar::CalendarState::new(app.date));
                 app.overlay = Overlay::Calendar;
                 continue;
             }
