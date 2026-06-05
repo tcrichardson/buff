@@ -193,25 +193,21 @@ fn run() -> Result<()> {
                             app.input.pop();
                         }
                         KeyCode::Enter => {
-                            if key.modifiers.contains(KeyModifiers::ALT) {
-                                app.input.push('\n');
-                            } else if app.editing.is_some() {
+                            if app.editing.is_some() {
                                 kua_tin::app::actions::commit_edit(&mut app)?;
-                            } else if app.input.trim().is_empty() {
-                                // Empty (or whitespace-only) input: commit (no-op for empty,
-                                // but handles the case where user pressed Enter twice).
+                            } else {
                                 let cmd = kua_tin::app::command::parse(&app.input);
                                 kua_tin::app::actions::dispatch(&mut app, cmd)?;
                                 if app.overlay != Overlay::None {
                                     app.pending_delete = false;
                                 }
                                 app.input.clear();
-                            } else {
-                                // Non-empty input: insert newline.
-                                // This is the fallback for terminals that don't send ALT
-                                // with Enter (e.g. macOS Terminal.app / iTerm2).
-                                app.input.push('\n');
                             }
+                        }
+                        KeyCode::Char('j')
+                            if key.modifiers.contains(KeyModifiers::CONTROL) =>
+                        {
+                            app.input.push('\n');
                         }
                         KeyCode::Up | KeyCode::Down => {
                             // ignored in capture mode
