@@ -234,4 +234,11 @@ mod tests {
         assert!(first_pos < second_pos, "First should come before Second");
         assert!(second_pos < third_pos, "Second should come before Third");
     }
+
+    #[test]
+    #[should_panic(expected = "todos section missing")]
+    fn add_todo_panics_when_section_missing() {
+        let mut doc = Document::from_text("# Title\n\n## Meetings\n\n## Notes\n");
+        doc.add_todo("something", None);
+    }
 }
