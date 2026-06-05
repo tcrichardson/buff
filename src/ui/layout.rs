@@ -1,6 +1,6 @@
+use crate::app::state::{AppState, Overlay};
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::widgets::Paragraph;
-use crate::app::state::{AppState, Overlay};
 
 pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
     let chunks = Layout::default()
@@ -40,13 +40,13 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ratatui::backend::TestBackend;
-    use ratatui::style::Modifier;
-    use ratatui::Terminal;
     use crate::app::state::{AppState, Context, Focus, Overlay};
     use crate::config::Config;
     use crate::model::day::Document;
     use chrono::NaiveDate;
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
+    use ratatui::style::Modifier;
     use std::path::PathBuf;
 
     fn test_app(doc: Document, focus: Focus, selected: usize) -> AppState {
@@ -79,15 +79,20 @@ mod tests {
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| {
-            render(frame, &app);
-        }).unwrap();
+        terminal
+            .draw(|frame| {
+                render(frame, &app);
+            })
+            .unwrap();
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
         assert!(content.contains("Kua-Tin"), "Expected 'Kua-Tin' in buffer");
         assert!(content.contains("2026-06-04"), "Expected date in buffer");
-        assert!(content.contains("context: Notes"), "Expected context in buffer");
+        assert!(
+            content.contains("context: Notes"),
+            "Expected context in buffer"
+        );
     }
 
     #[test]
@@ -101,9 +106,11 @@ mod tests {
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| {
-            render(frame, &app);
-        }).unwrap();
+        terminal
+            .draw(|frame| {
+                render(frame, &app);
+            })
+            .unwrap();
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
@@ -121,14 +128,17 @@ mod tests {
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| {
-            render(frame, &app);
-        }).unwrap();
+        terminal
+            .draw(|frame| {
+                render(frame, &app);
+            })
+            .unwrap();
 
         let buffer = terminal.backend().buffer();
-        let has_reversed = buffer.content.iter().any(|cell| {
-            cell.style().add_modifier.contains(Modifier::REVERSED)
-        });
+        let has_reversed = buffer
+            .content
+            .iter()
+            .any(|cell| cell.style().add_modifier.contains(Modifier::REVERSED));
         assert!(
             has_reversed,
             "Expected at least one cell with REVERSED modifier in navigate mode"
@@ -144,13 +154,19 @@ mod tests {
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| {
-            render(frame, &app);
-        }).unwrap();
+        terminal
+            .draw(|frame| {
+                render(frame, &app);
+            })
+            .unwrap();
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("June 2026"), "Expected 'June 2026' in buffer, got: {}", content);
+        assert!(
+            content.contains("June 2026"),
+            "Expected 'June 2026' in buffer, got: {}",
+            content
+        );
     }
 
     #[test]
@@ -161,12 +177,18 @@ mod tests {
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| {
-            render(frame, &app);
-        }).unwrap();
+        terminal
+            .draw(|frame| {
+                render(frame, &app);
+            })
+            .unwrap();
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("/meeting"), "Expected '/meeting' in buffer, got: {}", content);
+        assert!(
+            content.contains("/meeting"),
+            "Expected '/meeting' in buffer, got: {}",
+            content
+        );
     }
 }

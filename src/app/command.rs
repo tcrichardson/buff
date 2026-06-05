@@ -44,9 +44,7 @@ pub fn parse(input: &str) -> Command {
             } else {
                 match chrono::NaiveDate::parse_from_str(rest, "%Y-%m-%d") {
                     Ok(date) => Command::Goto(Some(date)),
-                    Err(_) => {
-                        Command::InvalidArgs("invalid date, use YYYY-MM-DD".to_string())
-                    }
+                    Err(_) => Command::InvalidArgs("invalid date, use YYYY-MM-DD".to_string()),
                 }
             }
         }
@@ -72,7 +70,10 @@ mod tests {
 
     #[test]
     fn parse_plain_text() {
-        assert_eq!(parse("hello world"), Command::Entry("hello world".to_string()));
+        assert_eq!(
+            parse("hello world"),
+            Command::Entry("hello world".to_string())
+        );
     }
 
     #[test]
@@ -168,10 +169,7 @@ mod tests {
 
     #[test]
     fn parse_unknown() {
-        assert_eq!(
-            parse("/bogus"),
-            Command::Unknown("bogus".to_string())
-        );
+        assert_eq!(parse("/bogus"), Command::Unknown("bogus".to_string()));
     }
 
     #[test]

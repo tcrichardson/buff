@@ -56,9 +56,7 @@ mod tests {
 
     #[test]
     fn heading_line_finds_each_section() {
-        let lines = make_lines(
-            "# 2026-06-04 (Thu)\n\n## Meetings\n\n## Notes\n\n## To-dos\n",
-        );
+        let lines = make_lines("# 2026-06-04 (Thu)\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
         assert_eq!(heading_line(&lines, SectionKind::Meetings), Some(2));
         assert_eq!(heading_line(&lines, SectionKind::Notes), Some(4));
         assert_eq!(heading_line(&lines, SectionKind::Todos), Some(6));

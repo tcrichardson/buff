@@ -1,7 +1,7 @@
 pub mod calendar;
-mod document;
 mod capture;
-pub mod layout;
+mod document;
 pub mod help;
+pub mod layout;
 
 pub use layout::render;

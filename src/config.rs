@@ -102,7 +102,11 @@ mod tests {
         let default = Path::new("/default/kuatin");
 
         assert_eq!(
-            resolve_notes_dir(Some("/cli/dir".to_string()), Some("/config/dir".to_string()), default),
+            resolve_notes_dir(
+                Some("/cli/dir".to_string()),
+                Some("/config/dir".to_string()),
+                default
+            ),
             PathBuf::from("/cli/dir")
         );
         assert_eq!(
@@ -132,5 +136,4 @@ mod tests {
             result.display()
         );
     }
-
 }

@@ -1,6 +1,6 @@
+use crate::model::day::SectionKind;
 use crate::model::day::{Document, EntryTarget, Meeting, Selectable, SelectableKind};
 use crate::model::parser::{block_insert_index, ensure_section, heading_line, section_end};
-use crate::model::day::SectionKind;
 
 impl Document {
     pub fn meetings(&self) -> Vec<Meeting> {
@@ -212,8 +212,7 @@ mod tests {
 
     #[test]
     fn add_entry_to_notes() {
-        let mut doc =
-            Document::from_text("# 2026-06-04\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
+        let mut doc = Document::from_text("# 2026-06-04\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
         doc.add_entry(&EntryTarget::Notes, "hi", None);
         let text = doc.to_text();
         assert!(text.contains("## Notes\n- hi\n"), "got: {}", text);
@@ -235,8 +234,7 @@ mod tests {
 
     #[test]
     fn add_entry_with_timestamp() {
-        let mut doc =
-            Document::from_text("# 2026-06-04\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
+        let mut doc = Document::from_text("# 2026-06-04\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
         doc.add_entry(&EntryTarget::Notes, "point", Some("09:20"));
         let text = doc.to_text();
         assert!(text.contains("- 09:20 point\n"), "got: {}", text);
@@ -262,17 +260,19 @@ mod tests {
 
     #[test]
     fn add_todo_standalone() {
-        let mut doc =
-            Document::from_text("# 2026-06-04\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
+        let mut doc = Document::from_text("# 2026-06-04\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
         doc.add_todo("Renew cert", None);
         let text = doc.to_text();
-        assert!(text.contains("## To-dos\n- [ ] Renew cert\n"), "got: {}", text);
+        assert!(
+            text.contains("## To-dos\n- [ ] Renew cert\n"),
+            "got: {}",
+            text
+        );
     }
 
     #[test]
     fn add_todo_with_meeting_tag() {
-        let mut doc =
-            Document::from_text("# 2026-06-04\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
+        let mut doc = Document::from_text("# 2026-06-04\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
         doc.add_todo("Follow up", Some("Standup"));
         let text = doc.to_text();
         assert!(
@@ -298,8 +298,7 @@ mod tests {
 
     #[test]
     fn add_todo_ordering_preserved() {
-        let mut doc =
-            Document::from_text("# 2026-06-04\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
+        let mut doc = Document::from_text("# 2026-06-04\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
         doc.add_todo("First", None);
         doc.add_todo("Second", None);
         doc.add_todo("Third", None);
@@ -318,7 +317,11 @@ mod tests {
         let mut doc = Document::from_text("# Title\n\n## Meetings\n\n## Notes\n");
         doc.add_todo("something", None);
         let text = doc.to_text();
-        assert!(text.contains("## To-dos\n- [ ] something\n"), "got: {}", text);
+        assert!(
+            text.contains("## To-dos\n- [ ] something\n"),
+            "got: {}",
+            text
+        );
     }
 
     #[test]
@@ -336,8 +339,16 @@ mod tests {
         );
         doc.add_entry(&EntryTarget::Notes, "idea", None);
         let text = doc.to_text();
-        assert!(text.contains("Some random prose here.\n"), "prose at top missing: {}", text);
-        assert!(text.contains("More prose at the end.\n"), "prose at end missing: {}", text);
+        assert!(
+            text.contains("Some random prose here.\n"),
+            "prose at top missing: {}",
+            text
+        );
+        assert!(
+            text.contains("More prose at the end.\n"),
+            "prose at end missing: {}",
+            text
+        );
         assert!(text.contains("- idea\n"), "entry missing: {}", text);
     }
 
@@ -346,7 +357,11 @@ mod tests {
         let mut doc = Document::from_text("# Title\n\n## Notes\n\n## To-dos\n");
         doc.add_meeting("09:15", "Standup");
         let text = doc.to_text();
-        assert!(text.contains("## Meetings\n### 09:15 Standup\n"), "got: {}", text);
+        assert!(
+            text.contains("## Meetings\n### 09:15 Standup\n"),
+            "got: {}",
+            text
+        );
     }
 
     #[test]
@@ -451,8 +466,14 @@ mod tests {
         doc.toggle_todo(2).unwrap(); // toggle the checked todo (index 2 in selectables)
         let text = doc.to_text();
         assert!(text.contains("- idea\n"), "notes entry should be unchanged");
-        assert!(text.contains("- [ ] todo1\n"), "unchecked todo should be unchanged");
-        assert!(text.contains("- [ ] todo2\n"), "checked todo should become unchecked");
+        assert!(
+            text.contains("- [ ] todo1\n"),
+            "unchecked todo should be unchanged"
+        );
+        assert!(
+            text.contains("- [ ] todo2\n"),
+            "checked todo should become unchecked"
+        );
     }
 
     #[test]
@@ -475,9 +496,8 @@ mod tests {
 
     #[test]
     fn delete_middle_selectable_removes_line() {
-        let mut doc = Document::from_text(
-            "# 2026-06-04\n\n## Notes\n\n- first\n- second\n- third\n",
-        );
+        let mut doc =
+            Document::from_text("# 2026-06-04\n\n## Notes\n\n- first\n- second\n- third\n");
         doc.delete_selectable(1).unwrap();
         let text = doc.to_text();
         assert!(text.contains("- first\n"), "first should remain");
@@ -487,9 +507,8 @@ mod tests {
 
     #[test]
     fn delete_updates_selectable_indices() {
-        let mut doc = Document::from_text(
-            "# 2026-06-04\n\n## Notes\n\n- first\n- second\n- third\n",
-        );
+        let mut doc =
+            Document::from_text("# 2026-06-04\n\n## Notes\n\n- first\n- second\n- third\n");
         doc.delete_selectable(1).unwrap();
         let sel = doc.selectables();
         assert_eq!(sel.len(), 2);

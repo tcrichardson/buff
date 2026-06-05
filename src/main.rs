@@ -53,8 +53,7 @@ fn run() -> Result<()> {
     }
 
     // Load config and open today's note
-    let (config, notes_dir) =
-        kua_tin::config::load(cli_notes_dir).context("Config error")?;
+    let (config, notes_dir) = kua_tin::config::load(cli_notes_dir).context("Config error")?;
 
     let mut app = kua_tin::app::state::AppState::open_day(
         notes_dir,
@@ -77,9 +76,7 @@ fn run() -> Result<()> {
 
         if let Some(key) = read_key()? {
             // Ctrl-C always quits
-            if key.modifiers.contains(KeyModifiers::CONTROL)
-                && key.code == KeyCode::Char('c')
-            {
+            if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
                 break Ok(());
             }
 
@@ -132,16 +129,12 @@ fn run() -> Result<()> {
             }
 
             // Global keys
-            if key.modifiers.contains(KeyModifiers::CONTROL)
-                && key.code == KeyCode::Char('t')
-            {
+            if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('t') {
                 kua_tin::app::actions::go_today(&mut app)?;
                 app.status.clear();
                 continue;
             }
-            if key.modifiers.contains(KeyModifiers::CONTROL)
-                && key.code == KeyCode::Char('g')
-            {
+            if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('g') {
                 app.pending_delete = false;
                 app.calendar = Some(kua_tin::ui::calendar::CalendarState::new(app.date));
                 app.overlay = Overlay::Calendar;

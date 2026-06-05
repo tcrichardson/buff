@@ -1,7 +1,7 @@
+use crate::app::state::AppState;
 use ratatui::layout::Rect;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
-use crate::app::state::AppState;
 
 pub fn render_status(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
     let text = if !app.status.is_empty() {

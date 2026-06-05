@@ -8,7 +8,8 @@ pub fn go_to_date(state: &mut AppState, date: chrono::NaiveDate) -> anyhow::Resu
     let config = state.config.clone();
     *state = AppState::open_day(notes_dir, config, date)?;
     state.save()?;
-    state.dates_with_notes = crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
+    state.dates_with_notes =
+        crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
     Ok(())
 }
 
@@ -47,7 +48,8 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
             }
             state.selectables = state.doc.selectables();
             state.save()?;
-            state.dates_with_notes = crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
+            state.dates_with_notes =
+                crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
             state.status.clear();
         }
         Command::Meeting(name) => {
@@ -56,7 +58,8 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
             state.selectables = state.doc.selectables();
             state.update_context_display();
             state.save()?;
-            state.dates_with_notes = crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
+            state.dates_with_notes =
+                crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
             state.status.clear();
         }
         Command::Note => {
@@ -66,15 +69,14 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
         }
         Command::Todo(text) => {
             let meeting_name = match &state.context {
-                Context::Meeting(ord) => {
-                    state.doc.meetings().get(*ord).map(|m| m.name.clone())
-                }
+                Context::Meeting(ord) => state.doc.meetings().get(*ord).map(|m| m.name.clone()),
                 _ => None,
             };
             state.doc.add_todo(&text, meeting_name.as_deref());
             state.selectables = state.doc.selectables();
             state.save()?;
-            state.dates_with_notes = crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
+            state.dates_with_notes =
+                crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
             state.status.clear();
         }
         Command::Leave => {
@@ -145,7 +147,8 @@ pub fn toggle_selected(state: &mut AppState) {
         Ok(()) => {
             state.selectables = state.doc.selectables();
             let _ = state.save();
-            state.dates_with_notes = crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
+            state.dates_with_notes =
+                crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
         }
         Err(e) => {
             state.status = e.to_string();
@@ -163,7 +166,8 @@ pub fn delete_selected(state: &mut AppState) -> anyhow::Result<()> {
         state.selected = 0;
     }
     state.save()?;
-    state.dates_with_notes = crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
+    state.dates_with_notes =
+        crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
     Ok(())
 }
 
@@ -185,7 +189,8 @@ pub fn commit_edit(state: &mut AppState) -> anyhow::Result<()> {
         state.input.clear();
         state.focus = crate::app::state::Focus::Navigate;
         state.save()?;
-        state.dates_with_notes = crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
+        state.dates_with_notes =
+            crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
         state.status.clear();
     }
     Ok(())
@@ -200,7 +205,12 @@ mod tests {
 
     fn test_state(tmp: &tempfile::TempDir) -> AppState {
         let config = Config::default();
-        AppState::open_day(tmp.path().to_path_buf(), config, NaiveDate::from_ymd_opt(2026, 6, 4).unwrap()).unwrap()
+        AppState::open_day(
+            tmp.path().to_path_buf(),
+            config,
+            NaiveDate::from_ymd_opt(2026, 6, 4).unwrap(),
+        )
+        .unwrap()
     }
 
     #[test]
@@ -223,7 +233,10 @@ mod tests {
         let text = state.doc.to_text();
         let meeting_pos = text.find("### ").unwrap();
         let entry_pos = text.find("- point").unwrap();
-        assert!(entry_pos > meeting_pos, "entry should be after meeting heading");
+        assert!(
+            entry_pos > meeting_pos,
+            "entry should be after meeting heading"
+        );
         assert_eq!(state.context, Context::Meeting(0));
     }
 
@@ -234,7 +247,11 @@ mod tests {
         dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
         dispatch(&mut state, Command::Todo("follow up".to_string())).unwrap();
         let text = state.doc.to_text();
-        assert!(text.contains("- [ ] follow up _(Standup)_"), "got: {}", text);
+        assert!(
+            text.contains("- [ ] follow up _(Standup)_"),
+            "got: {}",
+            text
+        );
         assert_eq!(state.context, Context::Meeting(0));
     }
 
@@ -300,7 +317,10 @@ mod tests {
         let path = tmp.path().join("2026-06-04-Thu.md");
         std::fs::write(&path, "# Custom\n\n## Meetings\n\n## Notes\n\n## To-dos\n").unwrap();
         let state = test_state(&tmp);
-        assert_eq!(state.doc.to_text(), "# Custom\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
+        assert_eq!(
+            state.doc.to_text(),
+            "# Custom\n\n## Meetings\n\n## Notes\n\n## To-dos\n"
+        );
     }
 
     #[test]
@@ -385,7 +405,11 @@ mod tests {
         state.selected = 0;
         toggle_selected(&mut state);
         let text = state.doc.to_text();
-        assert!(text.contains("- [x] buy milk"), "todo should be checked: {}", text);
+        assert!(
+            text.contains("- [x] buy milk"),
+            "todo should be checked: {}",
+            text
+        );
         let path = tmp.path().join("2026-06-04-Thu.md");
         let saved = std::fs::read_to_string(&path).unwrap();
         assert!(saved.contains("- [x] buy milk"), "saved: {}", saved);
@@ -451,7 +475,10 @@ mod tests {
         assert!(text.contains("- first\n"), "first should remain");
         assert!(!text.contains("- second\n"), "second should be removed");
         assert!(text.contains("- third\n"), "third should remain");
-        assert_eq!(state.selected, 1, "selection should be clamped to last index");
+        assert_eq!(
+            state.selected, 1,
+            "selection should be clamped to last index"
+        );
     }
 
     #[test]
@@ -505,17 +532,28 @@ mod tests {
         go_to_date(&mut state, NaiveDate::from_ymd_opt(2026, 6, 5).unwrap()).unwrap();
         let path = tmp.path().join("2026-06-04-Thu.md");
         let saved = std::fs::read_to_string(&path).unwrap();
-        assert!(saved.contains("- hello\n"), "original day should be persisted: {}", saved);
+        assert!(
+            saved.contains("- hello\n"),
+            "original day should be persisted: {}",
+            saved
+        );
     }
 
     #[test]
     fn go_to_date_loads_existing() {
         let tmp = tempfile::tempdir().unwrap();
         let path = tmp.path().join("2026-06-05-Fri.md");
-        std::fs::write(&path, "# Custom Day\n\n## Meetings\n\n## Notes\n\n## To-dos\n").unwrap();
+        std::fs::write(
+            &path,
+            "# Custom Day\n\n## Meetings\n\n## Notes\n\n## To-dos\n",
+        )
+        .unwrap();
         let mut state = test_state(&tmp);
         go_to_date(&mut state, NaiveDate::from_ymd_opt(2026, 6, 5).unwrap()).unwrap();
-        assert_eq!(state.doc.to_text(), "# Custom Day\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
+        assert_eq!(
+            state.doc.to_text(),
+            "# Custom Day\n\n## Meetings\n\n## Notes\n\n## To-dos\n"
+        );
     }
 
     #[test]
