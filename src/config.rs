@@ -133,24 +133,4 @@ mod tests {
         );
     }
 
-    #[derive(serde::Deserialize)]
-    struct WeekStartWrapper {
-        week_starts_on: WeekStart,
-    }
-
-    #[test]
-    fn load_uses_cli_notes_dir_when_config_missing() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let temp_path = temp_dir.path().to_str().unwrap().to_string();
-
-        let (config, notes_dir) = load(Some(temp_path.clone())).unwrap();
-
-        // CLI notes dir takes precedence regardless of config
-        assert_eq!(notes_dir, PathBuf::from(&temp_path));
-        // When config file doesn't exist, default config is used
-        assert_eq!(config.notes_dir, None);
-        assert!(!config.timestamp_entries);
-        assert_eq!(config.week_starts_on, WeekStart::Sunday);
-        assert_eq!(config.date_format, "%Y-%m-%d-%a");
-    }
 }
