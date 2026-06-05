@@ -88,6 +88,18 @@ impl Document {
             }
         }
     }
+
+    pub fn add_todo(&mut self, text: &str, meeting_name: Option<&str>) {
+        let start = heading_line(&self.lines, SectionKind::Todos)
+            .expect("todos section missing");
+        let end = section_end(&self.lines, start);
+        let insert_idx = block_insert_index(&self.lines, start, end);
+        let line = match meeting_name {
+            Some(n) => format!("- [ ] {} _({})_", text, n),
+            None => format!("- [ ] {}", text),
+        };
+        self.lines.insert(insert_idx, line);
+    }
 }
 
 #[cfg(test)]
@@ -168,5 +180,58 @@ mod tests {
         let todos_start = text.find("## To-dos").unwrap();
         let todos_section = &text[todos_start..];
         assert_eq!(todos_section, "## To-dos\n\n- [ ] todo1\n");
+    }
+
+    #[test]
+    fn add_todo_standalone() {
+        let mut doc =
+            Document::from_text("# 2026-06-04\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
+        doc.add_todo("Renew cert", None);
+        let text = doc.to_text();
+        assert!(text.contains("## To-dos\n- [ ] Renew cert\n"), "got: {}", text);
+    }
+
+    #[test]
+    fn add_todo_with_meeting_tag() {
+        let mut doc =
+            Document::from_text("# 2026-06-04\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
+        doc.add_todo("Follow up", Some("Standup"));
+        let text = doc.to_text();
+        assert!(
+            text.contains("## To-dos\n- [ ] Follow up _(Standup)_\n"),
+            "got: {}",
+            text
+        );
+    }
+
+    #[test]
+    fn add_todo_always_in_todos_section() {
+        let mut doc = Document::from_text(
+            "# 2026-06-04\n\n## Meetings\n\n### 09:15 Standup\n\n## Notes\n\n## To-dos\n",
+        );
+        doc.add_meeting("09:15", "Standup");
+        doc.add_todo("Action item", None);
+        let text = doc.to_text();
+
+        let todos_start = text.find("## To-dos").unwrap();
+        let todos_section = &text[todos_start..];
+        assert!(todos_section.contains("- [ ] Action item"));
+    }
+
+    #[test]
+    fn add_todo_ordering_preserved() {
+        let mut doc =
+            Document::from_text("# 2026-06-04\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
+        doc.add_todo("First", None);
+        doc.add_todo("Second", None);
+        doc.add_todo("Third", None);
+        let text = doc.to_text();
+
+        let first_pos = text.find("- [ ] First").unwrap();
+        let second_pos = text.find("- [ ] Second").unwrap();
+        let third_pos = text.find("- [ ] Third").unwrap();
+
+        assert!(first_pos < second_pos, "First should come before Second");
+        assert!(second_pos < third_pos, "Second should come before Third");
     }
 }
