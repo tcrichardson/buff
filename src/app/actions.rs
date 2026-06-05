@@ -48,6 +48,7 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
             state.selectables = state.doc.selectables();
             state.save()?;
             state.dates_with_notes = crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
+            state.status.clear();
         }
         Command::Meeting(name) => {
             let ord = state.doc.add_meeting(&state.current_time_hhmm(), &name);
@@ -56,10 +57,12 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
             state.update_context_display();
             state.save()?;
             state.dates_with_notes = crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
+            state.status.clear();
         }
         Command::Note => {
             state.context = Context::Notes;
             state.update_context_display();
+            state.status.clear();
         }
         Command::Todo(text) => {
             let meeting_name = match &state.context {
@@ -72,10 +75,12 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
             state.selectables = state.doc.selectables();
             state.save()?;
             state.dates_with_notes = crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
+            state.status.clear();
         }
         Command::Leave => {
             state.context = Context::Notes;
             state.update_context_display();
+            state.status.clear();
         }
         Command::Help => {
             state.status = "Press ? for help, /quit to exit".to_string();
@@ -94,9 +99,11 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
         }
         Command::Today => {
             go_today(state)?;
+            state.status.clear();
         }
         Command::Goto(Some(date)) => {
             go_to_date(state, date)?;
+            state.status.clear();
         }
         Command::Goto(None) => {
             state.calendar = Some(crate::ui::calendar::CalendarState::new(state.date));
@@ -179,6 +186,7 @@ pub fn commit_edit(state: &mut AppState) -> anyhow::Result<()> {
         state.focus = crate::app::state::Focus::Navigate;
         state.save()?;
         state.dates_with_notes = crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
+        state.status.clear();
     }
     Ok(())
 }
@@ -508,5 +516,35 @@ mod tests {
         let mut state = test_state(&tmp);
         go_to_date(&mut state, NaiveDate::from_ymd_opt(2026, 6, 5).unwrap()).unwrap();
         assert_eq!(state.doc.to_text(), "# Custom Day\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
+    }
+
+    #[test]
+    fn status_cleared_after_successful_entry() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Summarize).unwrap();
+        assert_eq!(state.status, "summarize is not implemented yet");
+        dispatch(&mut state, Command::Entry("hello".to_string())).unwrap();
+        assert!(state.status.is_empty());
+    }
+
+    #[test]
+    fn status_cleared_after_successful_meeting() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Unknown("bogus".to_string())).unwrap();
+        assert_eq!(state.status, "Unknown command: /bogus");
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        assert!(state.status.is_empty());
+    }
+
+    #[test]
+    fn status_preserved_for_info_commands() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Summarize).unwrap();
+        assert_eq!(state.status, "summarize is not implemented yet");
+        dispatch(&mut state, Command::Help).unwrap();
+        assert_eq!(state.status, "Press ? for help, /quit to exit");
     }
 }
