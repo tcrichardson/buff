@@ -127,6 +127,7 @@ fn run() -> Result<()> {
                         }
                     }
                     Focus::Navigate => {
+                        app.pending_delete = false;
                         app.focus = Focus::Capture;
                     }
                 }
@@ -182,7 +183,9 @@ fn run() -> Result<()> {
                     }
                 }
                 Focus::Navigate => {
-                    if app.pending_delete {
+                    if key.modifiers.contains(KeyModifiers::CONTROL) {
+                        // ignore Ctrl combos in navigate mode
+                    } else if app.pending_delete {
                         match key.code {
                             KeyCode::Char('d') => {
                                 kua_tin::app::actions::delete_selected(&mut app)?;
