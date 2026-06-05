@@ -197,18 +197,20 @@ fn run() -> Result<()> {
                                 app.input.push('\n');
                             } else if app.editing.is_some() {
                                 kua_tin::app::actions::commit_edit(&mut app)?;
-                            } else if !app.input.is_empty() {
-                                // Fallback for terminals that don't send ALT with Enter
-                                // (e.g. macOS Terminal.app / iTerm2 without "Use Option as Meta").
-                                // When input is non-empty, plain Enter inserts a newline.
-                                app.input.push('\n');
-                            } else {
+                            } else if app.input.trim().is_empty() {
+                                // Empty (or whitespace-only) input: commit (no-op for empty,
+                                // but handles the case where user pressed Enter twice).
                                 let cmd = kua_tin::app::command::parse(&app.input);
                                 kua_tin::app::actions::dispatch(&mut app, cmd)?;
                                 if app.overlay != Overlay::None {
                                     app.pending_delete = false;
                                 }
                                 app.input.clear();
+                            } else {
+                                // Non-empty input: insert newline.
+                                // This is the fallback for terminals that don't send ALT
+                                // with Enter (e.g. macOS Terminal.app / iTerm2).
+                                app.input.push('\n');
                             }
                         }
                         KeyCode::Up | KeyCode::Down => {
