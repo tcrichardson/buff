@@ -26,7 +26,7 @@ pub fn dates_with_notes(notes_dir: &Path, date_format: &str) -> BTreeSet<NaiveDa
     };
 
     for entry in entries.filter_map(Result::ok) {
-        if !entry.file_type().map_or(false, |ft| ft.is_file()) {
+        if !entry.file_type().is_ok_and(|ft| ft.is_file()) {
             continue;
         }
         let name = entry.file_name();
