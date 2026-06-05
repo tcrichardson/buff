@@ -19,6 +19,24 @@ pub fn section_end(lines: &[String], start: usize) -> usize {
         .unwrap_or(lines.len())
 }
 
+pub fn ensure_section(lines: &mut Vec<String>, kind: SectionKind) -> usize {
+    if let Some(idx) = heading_line(lines, kind) {
+        return idx;
+    }
+
+    if lines.last().map(|s| !s.is_empty()).unwrap_or(true) {
+        lines.push(String::new());
+    }
+
+    let heading = match kind {
+        SectionKind::Meetings => "## Meetings",
+        SectionKind::Notes => "## Notes",
+        SectionKind::Todos => "## To-dos",
+    };
+    lines.push(heading.to_string());
+    lines.len() - 1
+}
+
 pub fn block_insert_index(lines: &[String], start_excl: usize, end_excl: usize) -> usize {
     for i in (start_excl + 1..end_excl).rev() {
         if !lines[i].trim().is_empty() {
@@ -62,6 +80,38 @@ mod tests {
     fn section_end_returns_len_when_no_next_heading() {
         let lines = make_lines("## Meetings\n- foo\n");
         assert_eq!(section_end(&lines, 0), 2);
+    }
+
+    #[test]
+    fn ensure_section_returns_existing_index() {
+        let mut lines = make_lines("## Meetings\n\n## Notes\n");
+        let idx = ensure_section(&mut lines, SectionKind::Notes);
+        assert_eq!(idx, 2);
+        assert_eq!(lines.len(), 3);
+    }
+
+    #[test]
+    fn ensure_section_missing_appends_heading() {
+        let mut lines = make_lines("## Meetings\n");
+        let idx = ensure_section(&mut lines, SectionKind::Notes);
+        assert_eq!(idx, 2);
+        assert_eq!(lines, vec!["## Meetings", "", "## Notes"]);
+    }
+
+    #[test]
+    fn ensure_section_missing_when_already_blank_before() {
+        let mut lines = make_lines("## Meetings\n\n");
+        let idx = ensure_section(&mut lines, SectionKind::Notes);
+        assert_eq!(idx, 2);
+        assert_eq!(lines, vec!["## Meetings", "", "## Notes"]);
+    }
+
+    #[test]
+    fn ensure_section_on_empty_vec() {
+        let mut lines: Vec<String> = Vec::new();
+        let idx = ensure_section(&mut lines, SectionKind::Todos);
+        assert_eq!(idx, 1);
+        assert_eq!(lines, vec!["", "## To-dos"]);
     }
 
     #[test]

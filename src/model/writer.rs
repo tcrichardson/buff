@@ -1,5 +1,5 @@
 use crate::model::day::{Document, EntryTarget, Meeting, Selectable, SelectableKind};
-use crate::model::parser::{block_insert_index, heading_line, section_end};
+use crate::model::parser::{block_insert_index, ensure_section, heading_line, section_end};
 use crate::model::day::SectionKind;
 
 impl Document {
@@ -37,8 +37,7 @@ impl Document {
     }
 
     pub fn add_meeting(&mut self, time: &str, name: &str) -> usize {
-        let start = heading_line(&self.lines, SectionKind::Meetings)
-            .expect("meetings section missing");
+        let start = ensure_section(&mut self.lines, SectionKind::Meetings);
         let end = section_end(&self.lines, start);
         let insert_idx = block_insert_index(&self.lines, start, end);
         let line = if time.is_empty() {
@@ -65,8 +64,7 @@ impl Document {
 
         match target {
             EntryTarget::Notes => {
-                let start = heading_line(&self.lines, SectionKind::Notes)
-                    .expect("notes section missing");
+                let start = ensure_section(&mut self.lines, SectionKind::Notes);
                 let end = section_end(&self.lines, start);
                 let insert_idx = block_insert_index(&self.lines, start, end);
                 self.lines.insert(insert_idx, bullet);
@@ -90,8 +88,7 @@ impl Document {
     }
 
     pub fn add_todo(&mut self, text: &str, meeting_name: Option<&str>) {
-        let start = heading_line(&self.lines, SectionKind::Todos)
-            .expect("todos section missing");
+        let start = ensure_section(&mut self.lines, SectionKind::Todos);
         let end = section_end(&self.lines, start);
         let insert_idx = block_insert_index(&self.lines, start, end);
         let line = match meeting_name {
@@ -317,10 +314,39 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "todos section missing")]
-    fn add_todo_panics_when_section_missing() {
+    fn add_todo_creates_missing_section() {
         let mut doc = Document::from_text("# Title\n\n## Meetings\n\n## Notes\n");
         doc.add_todo("something", None);
+        let text = doc.to_text();
+        assert!(text.contains("## To-dos\n- [ ] something\n"), "got: {}", text);
+    }
+
+    #[test]
+    fn add_entry_creates_missing_notes_section() {
+        let mut doc = Document::from_text("# Title\n\n## Meetings\n\n## To-dos\n");
+        doc.add_entry(&EntryTarget::Notes, "idea", None);
+        let text = doc.to_text();
+        assert!(text.contains("## Notes\n- idea\n"), "got: {}", text);
+    }
+
+    #[test]
+    fn arbitrary_extra_lines_preserved() {
+        let mut doc = Document::from_text(
+            "# Title\n\nSome random prose here.\n\n## Meetings\n\n## Notes\n\n## To-dos\n\nMore prose at the end.\n",
+        );
+        doc.add_entry(&EntryTarget::Notes, "idea", None);
+        let text = doc.to_text();
+        assert!(text.contains("Some random prose here.\n"), "prose at top missing: {}", text);
+        assert!(text.contains("More prose at the end.\n"), "prose at end missing: {}", text);
+        assert!(text.contains("- idea\n"), "entry missing: {}", text);
+    }
+
+    #[test]
+    fn add_meeting_creates_missing_meetings_section() {
+        let mut doc = Document::from_text("# Title\n\n## Notes\n\n## To-dos\n");
+        doc.add_meeting("09:15", "Standup");
+        let text = doc.to_text();
+        assert!(text.contains("## Meetings\n### 09:15 Standup\n"), "got: {}", text);
     }
 
     #[test]
