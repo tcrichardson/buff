@@ -20,7 +20,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
     let status_area = chunks[2];
     let input_area = chunks[3];
 
-    let title = format!("Kua-Tin — {}", app.date.format("%Y-%m-%d (%a)"));
+    let title = format!("buff — {}", app.date.format("%Y-%m-%d (%a)"));
     let title_widget = Paragraph::new(title);
     frame.render_widget(title_widget, title_area);
 
@@ -89,7 +89,7 @@ mod tests {
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("Kua-Tin"), "Expected 'Kua-Tin' in buffer");
+        assert!(content.contains("buff"), "Expected 'buff' in buffer");
         assert!(content.contains("2026-06-04"), "Expected date in buffer");
         assert!(
             content.contains("context: Notes"),

@@ -28,9 +28,9 @@ impl Default for Config {
 }
 
 pub fn config_path() -> PathBuf {
-    match directories::ProjectDirs::from("", "", "kuatin") {
+    match directories::ProjectDirs::from("", "", "buff") {
         Some(dirs) => dirs.config_dir().join("config.toml"),
-        None => PathBuf::from(shellexpand::tilde("~/.config/kuatin/config.toml").as_ref()),
+        None => PathBuf::from(shellexpand::tilde("~/.config/buff/config.toml").as_ref()),
     }
 }
 
@@ -38,9 +38,9 @@ pub fn default_notes_dir() -> PathBuf {
     if let Some(user_dirs) = directories::UserDirs::new()
         && let Some(docs) = user_dirs.document_dir()
     {
-        return docs.join("kuatin");
+        return docs.join("buff");
     }
-    PathBuf::from(shellexpand::tilde("~/kuatin").as_ref())
+    PathBuf::from(shellexpand::tilde("~/buff").as_ref())
 }
 
 pub fn load(cli_notes_dir: Option<String>) -> anyhow::Result<(Config, PathBuf)> {
@@ -99,7 +99,7 @@ mod tests {
 
     #[test]
     fn resolve_notes_dir_precedence() {
-        let default = Path::new("/default/kuatin");
+        let default = Path::new("/default/buff");
 
         assert_eq!(
             resolve_notes_dir(
@@ -115,13 +115,13 @@ mod tests {
         );
         assert_eq!(
             resolve_notes_dir(None, None, default),
-            PathBuf::from("/default/kuatin")
+            PathBuf::from("/default/buff")
         );
     }
 
     #[test]
     fn resolve_notes_dir_tilde_expansion() {
-        let default = Path::new("/default/kuatin");
+        let default = Path::new("/default/buff");
         let result = resolve_notes_dir(Some("~/foo".to_string()), None, default);
         let home = std::env::var("HOME").expect("HOME not set");
         assert!(

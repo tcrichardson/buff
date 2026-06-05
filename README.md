@@ -1,11 +1,11 @@
-# Kua-Tin
+# buff
 
 A keyboard-driven terminal UI for bullet-journal-style daily notes. Notes are stored as plain Markdown — one file per day — so they work with any editor, version control, or sync tool.
 
 ## Quick start
 
 ```bash
-cargo run -- --notes-dir ~/Documents/kuatin
+cargo run -- --notes-dir ~/Documents/buff
 ```
 
 The app opens today's note, creating it from a template if it doesn't exist yet.
@@ -77,10 +77,10 @@ All entry types — bullets (including multi-line), to-dos, meeting headings, an
 
 ## Configuration
 
-Create `~/.config/kuatin/config.toml`:
+Create `~/.config/buff/config.toml`:
 
 ```toml
-notes_dir = "~/Documents/kuatin"   # where daily files are stored
+notes_dir = "~/Documents/buff"   # where daily files are stored
 timestamp_entries = false          # prefix every bullet with HH:MM
 week_starts_on = "sunday"          # calendar layout: sunday or monday
 date_format = "%Y-%m-%d-%a"       # day-file naming pattern

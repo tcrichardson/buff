@@ -39,11 +39,11 @@ fn run() -> Result<()> {
                 }
             },
             "--help" => {
-                println!("Usage: kua-tin [--notes-dir <path>]");
+                println!("Usage: buff [--notes-dir <path>]");
                 return Ok(());
             }
             "--version" => {
-                println!("kua-tin {}", env!("CARGO_PKG_VERSION"));
+                println!("buff {}", env!("CARGO_PKG_VERSION"));
                 return Ok(());
             }
             _ => {
@@ -53,9 +53,9 @@ fn run() -> Result<()> {
     }
 
     // Load config and open today's note
-    let (config, notes_dir) = kua_tin::config::load(cli_notes_dir).context("Config error")?;
+    let (config, notes_dir) = buff::config::load(cli_notes_dir).context("Config error")?;
 
-    let mut app = kua_tin::app::state::AppState::open_day(
+    let mut app = buff::app::state::AppState::open_day(
         notes_dir,
         config,
         chrono::Local::now().date_naive(),
@@ -66,12 +66,12 @@ fn run() -> Result<()> {
     let mut terminal = ratatui::init();
     let _guard = TerminalGuard;
 
-    use kua_tin::app::state::{Focus, Overlay};
+    use buff::app::state::{Focus, Overlay};
 
     // Main event loop
     loop {
         terminal.draw(|frame| {
-            kua_tin::ui::render(frame, &app);
+            buff::ui::render(frame, &app);
         })?;
 
         if let Some(key) = read_key()? {
@@ -86,27 +86,27 @@ fn run() -> Result<()> {
                     match key.code {
                         KeyCode::Left => {
                             if let Some(cal) = app.calendar.as_mut() {
-                                kua_tin::ui::calendar::move_selection(cal, -1, 0);
+                                buff::ui::calendar::move_selection(cal, -1, 0);
                             }
                         }
                         KeyCode::Right => {
                             if let Some(cal) = app.calendar.as_mut() {
-                                kua_tin::ui::calendar::move_selection(cal, 1, 0);
+                                buff::ui::calendar::move_selection(cal, 1, 0);
                             }
                         }
                         KeyCode::Up => {
                             if let Some(cal) = app.calendar.as_mut() {
-                                kua_tin::ui::calendar::move_selection(cal, 0, -1);
+                                buff::ui::calendar::move_selection(cal, 0, -1);
                             }
                         }
                         KeyCode::Down => {
                             if let Some(cal) = app.calendar.as_mut() {
-                                kua_tin::ui::calendar::move_selection(cal, 0, 1);
+                                buff::ui::calendar::move_selection(cal, 0, 1);
                             }
                         }
                         KeyCode::Enter => {
                             if let Some(cal) = app.calendar.take() {
-                                kua_tin::app::actions::go_to_date(&mut app, cal.selected)?;
+                                buff::app::actions::go_to_date(&mut app, cal.selected)?;
                                 app.status.clear();
                                 app.overlay = Overlay::None;
                             }
@@ -130,13 +130,13 @@ fn run() -> Result<()> {
 
             // Global keys
             if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('t') {
-                kua_tin::app::actions::go_today(&mut app)?;
+                buff::app::actions::go_today(&mut app)?;
                 app.status.clear();
                 continue;
             }
             if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('g') {
                 app.pending_delete = false;
-                app.calendar = Some(kua_tin::ui::calendar::CalendarState::new(app.date));
+                app.calendar = Some(buff::ui::calendar::CalendarState::new(app.date));
                 app.overlay = Overlay::Calendar;
                 continue;
             }
@@ -168,11 +168,11 @@ fn run() -> Result<()> {
             if can_navigate {
                 match key.code {
                     KeyCode::Char('[') => {
-                        kua_tin::app::actions::go_prev_day(&mut app)?;
+                        buff::app::actions::go_prev_day(&mut app)?;
                         continue;
                     }
                     KeyCode::Char(']') => {
-                        kua_tin::app::actions::go_next_day(&mut app)?;
+                        buff::app::actions::go_next_day(&mut app)?;
                         continue;
                     }
                     _ => {}
@@ -194,10 +194,10 @@ fn run() -> Result<()> {
                         }
                         KeyCode::Enter => {
                             if app.editing.is_some() {
-                                kua_tin::app::actions::commit_edit(&mut app)?;
+                                buff::app::actions::commit_edit(&mut app)?;
                             } else {
-                                let cmd = kua_tin::app::command::parse(&app.input);
-                                kua_tin::app::actions::dispatch(&mut app, cmd)?;
+                                let cmd = buff::app::command::parse(&app.input);
+                                buff::app::actions::dispatch(&mut app, cmd)?;
                                 if app.overlay != Overlay::None {
                                     app.pending_delete = false;
                                 }
@@ -221,7 +221,7 @@ fn run() -> Result<()> {
                     } else if app.pending_delete {
                         match key.code {
                             KeyCode::Char('d') => {
-                                if let Err(e) = kua_tin::app::actions::delete_selected(&mut app) {
+                                if let Err(e) = buff::app::actions::delete_selected(&mut app) {
                                     app.status = e.to_string();
                                 }
                                 app.pending_delete = false;
@@ -236,28 +236,28 @@ fn run() -> Result<()> {
 
                     match key.code {
                         KeyCode::Char('j') | KeyCode::Down => {
-                            kua_tin::app::actions::select_next(&mut app);
+                            buff::app::actions::select_next(&mut app);
                         }
                         KeyCode::Char('k') | KeyCode::Up => {
-                            kua_tin::app::actions::select_prev(&mut app);
+                            buff::app::actions::select_prev(&mut app);
                         }
                         KeyCode::Char('g') => {
-                            kua_tin::app::actions::select_first(&mut app);
+                            buff::app::actions::select_first(&mut app);
                         }
                         KeyCode::Char('G') => {
-                            kua_tin::app::actions::select_last(&mut app);
+                            buff::app::actions::select_last(&mut app);
                         }
                         KeyCode::Char(' ') | KeyCode::Char('x') => {
-                            kua_tin::app::actions::toggle_selected(&mut app);
+                            buff::app::actions::toggle_selected(&mut app);
                         }
                         KeyCode::Char('e') => {
-                            kua_tin::app::actions::begin_edit_selected(&mut app);
+                            buff::app::actions::begin_edit_selected(&mut app);
                         }
                         KeyCode::Char('d') => {
                             app.pending_delete = true;
                         }
                         KeyCode::Enter => {
-                            kua_tin::app::actions::resume_selected_meeting(&mut app);
+                            buff::app::actions::resume_selected_meeting(&mut app);
                         }
                         KeyCode::Char('?') => {
                             app.pending_delete = false;

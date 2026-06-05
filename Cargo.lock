@@ -99,6 +99,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "buff"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "crossterm",
+ "directories",
+ "ratatui",
+ "serde",
+ "shellexpand",
+ "tempfile",
+ "toml",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -690,21 +705,6 @@ dependencies = [
  "hashbrown 0.16.1",
  "portable-atomic",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "kua-tin"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "crossterm",
- "directories",
- "ratatui",
- "serde",
- "shellexpand",
- "tempfile",
- "toml",
 ]
 
 [[package]]
