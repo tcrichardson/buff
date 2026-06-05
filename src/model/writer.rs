@@ -2,6 +2,50 @@ use crate::model::day::SectionKind;
 use crate::model::day::{Document, EntryTarget, Meeting, Selectable, SelectableKind};
 use crate::model::parser::{block_insert_index, ensure_section, heading_line, section_end};
 
+/// True if the first line of an entry already looks like Markdown and should be
+/// stored verbatim rather than wrapped in a bullet.
+pub fn looks_like_markdown(first_line: &str) -> bool {
+    let t = first_line.trim_start();
+    if t.starts_with("```") {
+        return true;
+    }
+    if t == ">" || t.starts_with("> ") {
+        return true;
+    }
+    if t.starts_with("- ") || t.starts_with("* ") || t.starts_with("+ ") {
+        return true;
+    }
+    if crate::model::parser::heading_level(t).is_some() {
+        return true;
+    }
+    crate::model::parser::is_ordered(t)
+}
+
+/// Convert composed (possibly multi-line) input into the Markdown lines to store.
+/// Plain text becomes a bullet (with optional `HH:MM` timestamp on the first
+/// line); anything that looks like Markdown is stored verbatim with no timestamp.
+pub fn format_entry(input: &str, timestamp: Option<&str>) -> Vec<String> {
+    let mut raw: Vec<&str> = input.split('\n').collect();
+    while raw.len() > 1 && raw.last().map(|l| l.trim().is_empty()).unwrap_or(false) {
+        raw.pop();
+    }
+
+    if looks_like_markdown(raw[0]) {
+        return raw.iter().map(|s| s.to_string()).collect();
+    }
+
+    let mut out = Vec::with_capacity(raw.len());
+    let first = match timestamp {
+        Some(ts) => format!("- {} {}", ts, raw[0]),
+        None => format!("- {}", raw[0]),
+    };
+    out.push(first);
+    for line in &raw[1..] {
+        out.push(format!("  {}", line));
+    }
+    out
+}
+
 impl Document {
     pub fn meetings(&self) -> Vec<Meeting> {
         let start = match heading_line(&self.lines, SectionKind::Meetings) {
@@ -532,5 +576,80 @@ mod tests {
         let result = doc.delete_selectable(99);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().to_string(), "index out of bounds");
+    }
+
+    #[test]
+    fn format_plain_single_line_becomes_bullet() {
+        assert_eq!(format_entry("hello world", None), vec!["- hello world"]);
+    }
+
+    #[test]
+    fn format_plain_single_line_with_timestamp() {
+        assert_eq!(format_entry("hello", Some("09:20")), vec!["- 09:20 hello"]);
+    }
+
+    #[test]
+    fn format_plain_multiline_indents_continuation() {
+        assert_eq!(
+            format_entry("first\nsecond\nthird", None),
+            vec!["- first", "  second", "  third"]
+        );
+    }
+
+    #[test]
+    fn format_plain_multiline_timestamp_first_line_only() {
+        assert_eq!(
+            format_entry("first\nsecond", Some("09:20")),
+            vec!["- 09:20 first", "  second"]
+        );
+    }
+
+    #[test]
+    fn format_heading_passthrough_verbatim() {
+        assert_eq!(format_entry("## Section", None), vec!["## Section"]);
+    }
+
+    #[test]
+    fn format_quote_passthrough_verbatim() {
+        assert_eq!(format_entry("> a quote", Some("09:20")), vec!["> a quote"]);
+    }
+
+    #[test]
+    fn format_ordered_list_passthrough_verbatim() {
+        assert_eq!(format_entry("1. first", None), vec!["1. first"]);
+    }
+
+    #[test]
+    fn format_explicit_bullet_passthrough_verbatim() {
+        assert_eq!(format_entry("- already", None), vec!["- already"]);
+    }
+
+    #[test]
+    fn format_code_fence_multiline_verbatim() {
+        assert_eq!(
+            format_entry("```rust\nfn main() {}\n```", None),
+            vec!["```rust", "fn main() {}", "```"]
+        );
+    }
+
+    #[test]
+    fn format_strips_trailing_blank_lines() {
+        assert_eq!(format_entry("hello\n", None), vec!["- hello"]);
+    }
+
+    #[test]
+    fn looks_like_markdown_detects_signals() {
+        assert!(looks_like_markdown("# h"));
+        assert!(looks_like_markdown("###### h"));
+        assert!(looks_like_markdown("> q"));
+        assert!(looks_like_markdown("```"));
+        assert!(looks_like_markdown("- b"));
+        assert!(looks_like_markdown("* b"));
+        assert!(looks_like_markdown("+ b"));
+        assert!(looks_like_markdown("1. x"));
+        assert!(looks_like_markdown("2) x"));
+        assert!(!looks_like_markdown("plain text"));
+        assert!(!looks_like_markdown("12.5 dollars"));
+        assert!(!looks_like_markdown("#nospace"));
     }
 }

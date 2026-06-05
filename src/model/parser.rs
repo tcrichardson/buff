@@ -46,6 +46,26 @@ pub fn block_insert_index(lines: &[String], start_excl: usize, end_excl: usize) 
     start_excl + 1
 }
 
+/// Number of leading `#` (1..=6) if the line is an ATX heading (`#` then a space).
+pub fn heading_level(line: &str) -> Option<usize> {
+    let hashes = line.chars().take_while(|&c| c == '#').count();
+    if (1..=6).contains(&hashes) && line.chars().nth(hashes) == Some(' ') {
+        Some(hashes)
+    } else {
+        None
+    }
+}
+
+/// True if the line starts an ordered-list item: digits then `. ` or `) `.
+pub fn is_ordered(line: &str) -> bool {
+    let digits = line.chars().take_while(|c| c.is_ascii_digit()).count();
+    if digits == 0 {
+        return false;
+    }
+    let rest = &line[digits..];
+    rest.starts_with(". ") || rest.starts_with(") ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
