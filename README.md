@@ -40,13 +40,14 @@ stored verbatim:
 
 ### Multi-line notes
 
-Press **Alt+Enter** (Option+Enter on macOS) to add a line break while composing;
-**Enter** commits the whole entry. Plain multi-line text is stored as a single
-bullet with the following lines indented; code fences and quotes are stored
-verbatim.
+Press **Enter** while the capture bar has text to insert a line break;
+press **Enter** on an empty bar to commit. Plain multi-line text is stored as a
+single bullet with the following lines indented; code fences and quotes are
+stored verbatim.
 
-> macOS note: enable "Use Option as Meta key" in Terminal.app/iTerm2 settings so
-> Option+Enter reaches the app.
+> Terminal note: on macOS, Option+Enter only works when "Use Option as Meta key"
+> is enabled in Terminal.app/iTerm2. As a fallback, plain Enter also inserts a
+> newline when the input bar is not empty.
 
 ### Navigate mode
 

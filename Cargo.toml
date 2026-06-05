@@ -11,6 +11,8 @@ toml = "1"
 directories = "6"
 shellexpand = "3"
 anyhow = "1"
+crossterm = "0.29.0"
 
 [dev-dependencies]
+crossterm = "0.29.0"
 tempfile = "3"

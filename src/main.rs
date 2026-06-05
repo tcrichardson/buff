@@ -197,6 +197,11 @@ fn run() -> Result<()> {
                                 app.input.push('\n');
                             } else if app.editing.is_some() {
                                 kua_tin::app::actions::commit_edit(&mut app)?;
+                            } else if !app.input.is_empty() {
+                                // Fallback for terminals that don't send ALT with Enter
+                                // (e.g. macOS Terminal.app / iTerm2 without "Use Option as Meta").
+                                // When input is non-empty, plain Enter inserts a newline.
+                                app.input.push('\n');
                             } else {
                                 let cmd = kua_tin::app::command::parse(&app.input);
                                 kua_tin::app::actions::dispatch(&mut app, cmd)?;
