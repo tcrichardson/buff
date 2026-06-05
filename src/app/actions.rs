@@ -68,6 +68,75 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub fn select_next(state: &mut AppState) {
+    let count = state.doc.selectables().len();
+    if count > 0 {
+        state.selected = (state.selected + 1).min(count - 1);
+    }
+}
+
+pub fn select_prev(state: &mut AppState) {
+    if state.selected > 0 {
+        state.selected -= 1;
+    }
+}
+
+pub fn select_first(state: &mut AppState) {
+    state.selected = 0;
+}
+
+pub fn select_last(state: &mut AppState) {
+    let count = state.doc.selectables().len();
+    if count > 0 {
+        state.selected = count - 1;
+    }
+}
+
+pub fn toggle_selected(state: &mut AppState) -> anyhow::Result<()> {
+    match state.doc.toggle_todo(state.selected) {
+        Ok(()) => {
+            state.save()?;
+            Ok(())
+        }
+        Err(e) => {
+            state.status = e.to_string();
+            Ok(())
+        }
+    }
+}
+
+pub fn delete_selected(state: &mut AppState) -> anyhow::Result<()> {
+    state.doc.delete_selectable(state.selected)?;
+    let count = state.doc.selectables().len();
+    if count > 0 {
+        state.selected = state.selected.min(count - 1);
+    } else {
+        state.selected = 0;
+    }
+    state.save()?;
+    Ok(())
+}
+
+pub fn begin_edit_selected(state: &mut AppState) {
+    let selectables = state.doc.selectables();
+    if let Some(sel) = selectables.get(state.selected) {
+        state.editing = Some(state.selected);
+        state.input = sel.text.clone();
+        state.focus = crate::app::state::Focus::Capture;
+    }
+}
+
+pub fn commit_edit(state: &mut AppState) -> anyhow::Result<()> {
+    if let Some(idx) = state.editing {
+        state.doc.edit_selectable(idx, &state.input)?;
+        state.editing = None;
+        state.input.clear();
+        state.focus = crate::app::state::Focus::Navigate;
+        state.save()?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -188,5 +257,134 @@ mod tests {
         let path = tmp.path().join("2026-06-04-Thu.md");
         let saved = std::fs::read_to_string(&path).unwrap();
         assert!(saved.contains("- hello\n"), "saved: {}", saved);
+    }
+
+    #[test]
+    fn select_next_moves_down() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Entry("first".to_string())).unwrap();
+        dispatch(&mut state, Command::Entry("second".to_string())).unwrap();
+        state.selected = 0;
+        select_next(&mut state);
+        assert_eq!(state.selected, 1);
+    }
+
+    #[test]
+    fn select_next_clamps_at_end() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Entry("first".to_string())).unwrap();
+        state.selected = 0;
+        select_next(&mut state);
+        assert_eq!(state.selected, 0);
+    }
+
+    #[test]
+    fn select_prev_moves_up() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Entry("first".to_string())).unwrap();
+        dispatch(&mut state, Command::Entry("second".to_string())).unwrap();
+        state.selected = 1;
+        select_prev(&mut state);
+        assert_eq!(state.selected, 0);
+    }
+
+    #[test]
+    fn select_prev_stops_at_zero() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Entry("first".to_string())).unwrap();
+        state.selected = 0;
+        select_prev(&mut state);
+        assert_eq!(state.selected, 0);
+    }
+
+    #[test]
+    fn select_first_goes_to_zero() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Entry("first".to_string())).unwrap();
+        dispatch(&mut state, Command::Entry("second".to_string())).unwrap();
+        state.selected = 1;
+        select_first(&mut state);
+        assert_eq!(state.selected, 0);
+    }
+
+    #[test]
+    fn select_last_goes_to_end() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Entry("first".to_string())).unwrap();
+        dispatch(&mut state, Command::Entry("second".to_string())).unwrap();
+        state.selected = 0;
+        select_last(&mut state);
+        assert_eq!(state.selected, 1);
+    }
+
+    #[test]
+    fn toggle_selected_todo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Todo("buy milk".to_string())).unwrap();
+        state.selected = 0;
+        toggle_selected(&mut state).unwrap();
+        let text = state.doc.to_text();
+        assert!(text.contains("- [x] buy milk"), "todo should be checked: {}", text);
+        let path = tmp.path().join("2026-06-04-Thu.md");
+        let saved = std::fs::read_to_string(&path).unwrap();
+        assert!(saved.contains("- [x] buy milk"), "saved: {}", saved);
+    }
+
+    #[test]
+    fn toggle_selected_entry_sets_status() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Entry("idea".to_string())).unwrap();
+        state.selected = 0;
+        let before = state.doc.to_text();
+        toggle_selected(&mut state).unwrap();
+        assert_eq!(state.status, "not a to-do");
+        assert_eq!(state.doc.to_text(), before);
+    }
+
+    #[test]
+    fn delete_selected_removes_line() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Entry("first".to_string())).unwrap();
+        dispatch(&mut state, Command::Entry("second".to_string())).unwrap();
+        dispatch(&mut state, Command::Entry("third".to_string())).unwrap();
+        state.selected = 1;
+        delete_selected(&mut state).unwrap();
+        let text = state.doc.to_text();
+        assert!(text.contains("- first\n"), "first should remain");
+        assert!(!text.contains("- second\n"), "second should be removed");
+        assert!(text.contains("- third\n"), "third should remain");
+        assert_eq!(state.selected, 1, "selection should be clamped to last index");
+    }
+
+    #[test]
+    fn edit_flow() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Entry("idea".to_string())).unwrap();
+        state.selected = 0;
+        begin_edit_selected(&mut state);
+        assert_eq!(state.editing, Some(0));
+        assert_eq!(state.input, "idea");
+        assert_eq!(state.focus, crate::app::state::Focus::Capture);
+        state.input = "new idea".to_string();
+        commit_edit(&mut state).unwrap();
+        let text = state.doc.to_text();
+        assert!(text.contains("- new idea\n"), "got: {}", text);
+        assert!(!text.contains("- idea\n"), "old text should be gone");
+        assert_eq!(state.editing, None);
+        assert_eq!(state.focus, crate::app::state::Focus::Navigate);
+        assert!(state.input.is_empty());
+        let path = tmp.path().join("2026-06-04-Thu.md");
+        let saved = std::fs::read_to_string(&path).unwrap();
+        assert!(saved.contains("- new idea\n"), "saved: {}", saved);
     }
 }
