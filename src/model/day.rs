@@ -34,13 +34,17 @@ pub struct Meeting {
     pub name: String,
 }
 
+#[derive(Debug)]
 pub struct Document {
     lines: Vec<String>,
 }
 
 impl Document {
     pub fn from_text(text: &str) -> Document {
-        let mut lines: Vec<String> = text.split('\n').map(|s| s.to_string()).collect();
+        let mut lines: Vec<String> = text
+            .split('\n')
+            .map(|s| s.strip_suffix('\r').unwrap_or(s).to_string())
+            .collect();
         if lines.last().map(|s| s.is_empty()).unwrap_or(false) {
             lines.pop();
         }
@@ -60,11 +64,11 @@ impl Document {
         let title = date.format("%Y-%m-%d (%a)").to_string();
         let lines = vec![
             format!("# {}", title),
-            String::new(),
+            "".to_string(),
             "## Meetings".to_string(),
-            String::new(),
+            "".to_string(),
             "## Notes".to_string(),
-            String::new(),
+            "".to_string(),
             "## To-dos".to_string(),
         ];
         Document { lines }
@@ -80,6 +84,32 @@ mod tests {
         let input = "a\nb\n";
         let doc = Document::from_text(input);
         assert_eq!(doc.to_text(), input);
+    }
+
+    #[test]
+    fn from_text_empty_normalizes_to_single_trailing_newline() {
+        assert_eq!(Document::from_text("").to_text(), "\n");
+    }
+
+    #[test]
+    fn from_text_no_trailing_newline_normalizes() {
+        assert_eq!(Document::from_text("a").to_text(), "a\n");
+    }
+
+    #[test]
+    fn from_text_with_trailing_newline_preserved() {
+        assert_eq!(Document::from_text("a\n").to_text(), "a\n");
+    }
+
+    #[test]
+    fn from_text_multiple_lines_with_trailing_newline_preserved() {
+        assert_eq!(Document::from_text("a\nb\n").to_text(), "a\nb\n");
+    }
+
+    #[test]
+    fn from_text_crlf_strips_carriage_return() {
+        let doc = Document::from_text("a\r\nb\r\n");
+        assert_eq!(doc.to_text(), "a\nb\n");
     }
 
     #[test]

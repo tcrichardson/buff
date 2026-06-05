@@ -10,12 +10,13 @@ pub fn heading_line(lines: &[String], kind: SectionKind) -> Option<usize> {
 }
 
 pub fn section_end(lines: &[String], start: usize) -> usize {
-    for i in (start + 1)..lines.len() {
-        if lines[i].starts_with("## ") {
-            return i;
-        }
-    }
-    lines.len()
+    lines
+        .iter()
+        .enumerate()
+        .skip(start + 1)
+        .position(|(_, line)| line.starts_with("## "))
+        .map(|i| start + 1 + i)
+        .unwrap_or(lines.len())
 }
 
 pub fn block_insert_index(lines: &[String], start_excl: usize, end_excl: usize) -> usize {
@@ -49,6 +50,18 @@ mod tests {
     fn heading_line_returns_none_for_missing() {
         let lines = make_lines("# 2026-06-04 (Thu)\n\n## Meetings\n\n## Notes\n");
         assert_eq!(heading_line(&lines, SectionKind::Todos), None);
+    }
+
+    #[test]
+    fn section_end_finds_next_heading() {
+        let lines = make_lines("## Meetings\n- foo\n## Notes\n");
+        assert_eq!(section_end(&lines, 0), 2);
+    }
+
+    #[test]
+    fn section_end_returns_len_when_no_next_heading() {
+        let lines = make_lines("## Meetings\n- foo\n");
+        assert_eq!(section_end(&lines, 0), 2);
     }
 
     #[test]
