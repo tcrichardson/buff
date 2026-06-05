@@ -1,4 +1,4 @@
-use crate::model::day::{Document, EntryTarget, Meeting};
+use crate::model::day::{Document, EntryTarget, Meeting, Selectable, SelectableKind};
 use crate::model::parser::{block_insert_index, heading_line, section_end};
 use crate::model::day::SectionKind;
 
@@ -100,11 +100,64 @@ impl Document {
         };
         self.lines.insert(insert_idx, line);
     }
+
+    pub fn selectables(&self) -> Vec<Selectable> {
+        let mut result = Vec::new();
+        for (i, line) in self.lines.iter().enumerate() {
+            if let Some(rest) = line.strip_prefix("- [ ] ") {
+                result.push(Selectable {
+                    line: i,
+                    kind: SelectableKind::Todo { done: false },
+                    text: rest.to_string(),
+                });
+            } else if let Some(rest) = line.strip_prefix("- [x] ") {
+                result.push(Selectable {
+                    line: i,
+                    kind: SelectableKind::Todo { done: true },
+                    text: rest.to_string(),
+                });
+            } else if let Some(rest) = line.strip_prefix("- [X] ") {
+                result.push(Selectable {
+                    line: i,
+                    kind: SelectableKind::Todo { done: true },
+                    text: rest.to_string(),
+                });
+            } else if let Some(rest) = line.strip_prefix("- ") {
+                result.push(Selectable {
+                    line: i,
+                    kind: SelectableKind::Entry,
+                    text: rest.to_string(),
+                });
+            }
+        }
+        result
+    }
+
+    pub fn toggle_todo(&mut self, sel_index: usize) -> anyhow::Result<()> {
+        let selectables = self.selectables();
+        let sel = selectables
+            .get(sel_index)
+            .ok_or_else(|| anyhow::anyhow!("index out of bounds"))?;
+        match sel.kind {
+            SelectableKind::Todo { done } => {
+                let line = &self.lines[sel.line];
+                let new_line = if done {
+                    format!("- [ ] {}", &line[6..])
+                } else {
+                    format!("- [x] {}", &line[6..])
+                };
+                self.lines[sel.line] = new_line;
+                Ok(())
+            }
+            SelectableKind::Entry => Err(anyhow::anyhow!("not a to-do")),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::day::SelectableKind;
     use chrono::NaiveDate;
 
     #[test]
@@ -240,5 +293,111 @@ mod tests {
     fn add_todo_panics_when_section_missing() {
         let mut doc = Document::from_text("# Title\n\n## Meetings\n\n## Notes\n");
         doc.add_todo("something", None);
+    }
+
+    #[test]
+    fn selectables_over_spec_example() {
+        let text = r"# 2026-06-04
+
+## Meetings
+
+### 09:15 Standup
+
+- point A
+- point B
+
+### 10:00 Review
+
+## Notes
+
+- idea 1
+- idea 2 _(tag)_
+
+## To-dos
+
+- [ ] unchecked todo
+- [x] checked todo
+- [ ] tagged todo _(meeting)_
+- regular entry in todos
+";
+        let doc = Document::from_text(text);
+        let sel = doc.selectables();
+        assert_eq!(sel.len(), 8, "expected 8 selectables, got {:?}", sel);
+
+        assert_eq!(sel[0].line, 6);
+        assert_eq!(sel[0].kind, SelectableKind::Entry);
+        assert_eq!(sel[0].text, "point A");
+
+        assert_eq!(sel[1].line, 7);
+        assert_eq!(sel[1].kind, SelectableKind::Entry);
+        assert_eq!(sel[1].text, "point B");
+
+        assert_eq!(sel[2].line, 13);
+        assert_eq!(sel[2].kind, SelectableKind::Entry);
+        assert_eq!(sel[2].text, "idea 1");
+
+        assert_eq!(sel[3].line, 14);
+        assert_eq!(sel[3].kind, SelectableKind::Entry);
+        assert_eq!(sel[3].text, "idea 2 _(tag)_");
+
+        assert_eq!(sel[4].line, 18);
+        assert_eq!(sel[4].kind, SelectableKind::Todo { done: false });
+        assert_eq!(sel[4].text, "unchecked todo");
+
+        assert_eq!(sel[5].line, 19);
+        assert_eq!(sel[5].kind, SelectableKind::Todo { done: true });
+        assert_eq!(sel[5].text, "checked todo");
+
+        assert_eq!(sel[6].line, 20);
+        assert_eq!(sel[6].kind, SelectableKind::Todo { done: false });
+        assert_eq!(sel[6].text, "tagged todo _(meeting)_");
+
+        assert_eq!(sel[7].line, 21);
+        assert_eq!(sel[7].kind, SelectableKind::Entry);
+        assert_eq!(sel[7].text, "regular entry in todos");
+    }
+
+    #[test]
+    fn toggle_unchecked_todo() {
+        let mut doc = Document::from_text("# 2026-06-04\n\n## To-dos\n\n- [ ] unchecked\n");
+        doc.toggle_todo(0).unwrap();
+        let text = doc.to_text();
+        assert!(text.contains("- [x] unchecked\n"), "got: {}", text);
+    }
+
+    #[test]
+    fn toggle_checked_todo() {
+        let mut doc = Document::from_text("# 2026-06-04\n\n## To-dos\n\n- [x] checked\n");
+        doc.toggle_todo(0).unwrap();
+        let text = doc.to_text();
+        assert!(text.contains("- [ ] checked\n"), "got: {}", text);
+    }
+
+    #[test]
+    fn toggle_checked_todo_uppercase_x() {
+        let mut doc = Document::from_text("# 2026-06-04\n\n## To-dos\n\n- [X] checked\n");
+        doc.toggle_todo(0).unwrap();
+        let text = doc.to_text();
+        assert!(text.contains("- [ ] checked\n"), "got: {}", text);
+    }
+
+    #[test]
+    fn toggle_entry_returns_err() {
+        let mut doc = Document::from_text("# 2026-06-04\n\n## Notes\n\n- idea\n");
+        let result = doc.toggle_todo(0);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().to_string(), "not a to-do");
+    }
+
+    #[test]
+    fn toggle_non_todo_lines_unchanged() {
+        let mut doc = Document::from_text(
+            "# 2026-06-04\n\n## Notes\n\n- idea\n\n## To-dos\n\n- [ ] todo1\n- [x] todo2\n",
+        );
+        doc.toggle_todo(2).unwrap(); // toggle the checked todo (index 2 in selectables)
+        let text = doc.to_text();
+        assert!(text.contains("- idea\n"), "notes entry should be unchanged");
+        assert!(text.contains("- [ ] todo1\n"), "unchecked todo should be unchanged");
+        assert!(text.contains("- [ ] todo2\n"), "checked todo should become unchecked");
     }
 }
