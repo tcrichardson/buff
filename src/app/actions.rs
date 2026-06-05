@@ -82,6 +82,9 @@ pub fn select_prev(state: &mut AppState) {
 }
 
 pub fn select_first(state: &mut AppState) {
+    if state.doc.selectables().is_empty() {
+        return;
+    }
     state.selected = 0;
 }
 
@@ -92,15 +95,13 @@ pub fn select_last(state: &mut AppState) {
     }
 }
 
-pub fn toggle_selected(state: &mut AppState) -> anyhow::Result<()> {
+pub fn toggle_selected(state: &mut AppState) {
     match state.doc.toggle_todo(state.selected) {
         Ok(()) => {
-            state.save()?;
-            Ok(())
+            let _ = state.save();
         }
         Err(e) => {
             state.status = e.to_string();
-            Ok(())
         }
     }
 }
@@ -123,6 +124,8 @@ pub fn begin_edit_selected(state: &mut AppState) {
         state.editing = Some(state.selected);
         state.input = sel.text.clone();
         state.focus = crate::app::state::Focus::Capture;
+    } else {
+        state.status = "nothing selected".to_string();
     }
 }
 
@@ -329,7 +332,7 @@ mod tests {
         let mut state = test_state(&tmp);
         dispatch(&mut state, Command::Todo("buy milk".to_string())).unwrap();
         state.selected = 0;
-        toggle_selected(&mut state).unwrap();
+        toggle_selected(&mut state);
         let text = state.doc.to_text();
         assert!(text.contains("- [x] buy milk"), "todo should be checked: {}", text);
         let path = tmp.path().join("2026-06-04-Thu.md");
@@ -344,9 +347,44 @@ mod tests {
         dispatch(&mut state, Command::Entry("idea".to_string())).unwrap();
         state.selected = 0;
         let before = state.doc.to_text();
-        toggle_selected(&mut state).unwrap();
+        toggle_selected(&mut state);
         assert_eq!(state.status, "not a to-do");
         assert_eq!(state.doc.to_text(), before);
+    }
+
+    #[test]
+    fn select_next_empty_doc_no_panic() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.selected = 0;
+        select_next(&mut state);
+        assert_eq!(state.selected, 0);
+    }
+
+    #[test]
+    fn select_prev_empty_doc_no_panic() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.selected = 0;
+        select_prev(&mut state);
+        assert_eq!(state.selected, 0);
+    }
+
+    #[test]
+    fn delete_selected_empty_doc_errors() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        assert!(delete_selected(&mut state).is_err());
+    }
+
+    #[test]
+    fn commit_edit_none_is_noop() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = crate::app::state::Focus::Capture;
+        assert!(commit_edit(&mut state).is_ok());
+        assert_eq!(state.editing, None);
+        assert_eq!(state.focus, crate::app::state::Focus::Capture);
     }
 
     #[test]
