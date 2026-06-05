@@ -77,7 +77,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
                 .or_else(|| if line == ">" { Some("") } else { None })
             {
                 Line::from(vec![
-                    Span::styled("│ ", Style::default().fg(Color::Magenta)),
+                    Span::styled("│ ", Style::default().fg(Color::Magenta).add_modifier(Modifier::ITALIC)),
                     Span::styled(rest, Style::default().add_modifier(Modifier::ITALIC)),
                 ])
                 .style(highlight)
