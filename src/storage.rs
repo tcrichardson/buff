@@ -7,7 +7,7 @@ pub fn stem_for(date: NaiveDate, date_format: &str) -> String {
 }
 
 pub fn file_name_for(date: NaiveDate, date_format: &str) -> String {
-    format!("{}.md", stem_for(date, date_format))
+    format!("{}.md", date.format(date_format))
 }
 
 pub fn path_for(notes_dir: &Path, date: NaiveDate, date_format: &str) -> PathBuf {
@@ -15,7 +15,7 @@ pub fn path_for(notes_dir: &Path, date: NaiveDate, date_format: &str) -> PathBuf
 }
 
 pub fn note_exists(notes_dir: &Path, date: NaiveDate, date_format: &str) -> bool {
-    path_for(notes_dir, date, date_format).exists()
+    path_for(notes_dir, date, date_format).is_file()
 }
 
 pub fn dates_with_notes(notes_dir: &Path, date_format: &str) -> BTreeSet<NaiveDate> {
@@ -26,7 +26,11 @@ pub fn dates_with_notes(notes_dir: &Path, date_format: &str) -> BTreeSet<NaiveDa
     };
 
     for entry in entries.filter_map(Result::ok) {
-        let path = entry.path();
+        if !entry.file_type().map_or(false, |ft| ft.is_file()) {
+            continue;
+        }
+        let name = entry.file_name();
+        let path = Path::new(&name);
         if path.extension().and_then(|s| s.to_str()) != Some("md") {
             continue;
         }
@@ -106,5 +110,20 @@ mod tests {
         .into_iter()
         .collect();
         assert_eq!(dates, expected);
+    }
+
+    #[test]
+    fn dates_with_notes_returns_empty_for_empty_directory() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dates = dates_with_notes(tmp.path(), "%Y-%m-%d-%a");
+        assert!(dates.is_empty());
+    }
+
+    #[test]
+    fn dates_with_notes_ignores_directory_masquerading_as_md() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::create_dir(tmp.path().join("2026-06-04-Thu.md")).unwrap();
+        let dates = dates_with_notes(tmp.path(), "%Y-%m-%d-%a");
+        assert!(dates.is_empty());
     }
 }
