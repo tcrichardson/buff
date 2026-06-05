@@ -17,7 +17,9 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
         .iter()
         .enumerate()
         .map(|(i, line)| {
-            let is_selected = selected_range.as_ref().map_or(false, |r| r.contains(&i));
+            let is_selected = selected_range
+                .as_ref()
+                .is_some_and(|r| r.contains(&i));
             let highlight = if is_selected {
                 Style::default().add_modifier(Modifier::REVERSED)
             } else {

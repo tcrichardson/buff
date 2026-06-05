@@ -617,6 +617,16 @@ mod tests {
     }
 
     #[test]
+    fn replace_checked_todo_keeps_done_state() {
+        let mut doc = Document::from_text("# Day\n\n## To-dos\n\n- [x] checked\n");
+        let new_lines = crate::model::writer::format_entry("- [x] done", None);
+        doc.replace_selectable(0, &new_lines).unwrap();
+        let text = doc.to_text();
+        assert!(text.contains("- [x] done\n"), "got: {}", text);
+        assert!(!text.contains("- [x] checked\n"), "old text should be gone");
+    }
+
+    #[test]
     fn format_plain_single_line_becomes_bullet() {
         assert_eq!(format_entry("hello world", None), vec!["- hello world"]);
     }
