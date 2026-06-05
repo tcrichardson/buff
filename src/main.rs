@@ -111,6 +111,7 @@ fn run() -> Result<()> {
             if key.modifiers.contains(KeyModifiers::CONTROL)
                 && key.code == KeyCode::Char('g')
             {
+                app.pending_delete = false;
                 app.overlay = Overlay::Calendar;
                 continue;
             }
@@ -172,6 +173,9 @@ fn run() -> Result<()> {
                             } else {
                                 let cmd = kua_tin::app::command::parse(&app.input);
                                 kua_tin::app::actions::dispatch(&mut app, cmd)?;
+                                if app.overlay != Overlay::None {
+                                    app.pending_delete = false;
+                                }
                                 app.input.clear();
                                 app.status.clear();
                             }
@@ -188,7 +192,9 @@ fn run() -> Result<()> {
                     } else if app.pending_delete {
                         match key.code {
                             KeyCode::Char('d') => {
-                                kua_tin::app::actions::delete_selected(&mut app)?;
+                                if let Err(e) = kua_tin::app::actions::delete_selected(&mut app) {
+                                    app.status = e.to_string();
+                                }
                                 app.pending_delete = false;
                                 continue;
                             }
@@ -222,9 +228,11 @@ fn run() -> Result<()> {
                             app.pending_delete = true;
                         }
                         KeyCode::Char('?') => {
+                            app.pending_delete = false;
                             app.overlay = Overlay::Help;
                         }
                         KeyCode::Char('i') => {
+                            app.pending_delete = false;
                             app.focus = Focus::Capture;
                         }
                         _ => {}
