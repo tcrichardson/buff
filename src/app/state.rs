@@ -38,6 +38,7 @@ pub struct AppState {
     pub should_quit: bool,
     pub selectables: Vec<Selectable>,
     pub context_display: String,
+    pub pending_delete: bool,
 }
 
 impl AppState {
@@ -66,6 +67,7 @@ impl AppState {
             should_quit: false,
             selectables,
             context_display,
+            pending_delete: false,
         })
     }
 

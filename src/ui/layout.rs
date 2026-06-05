@@ -56,6 +56,7 @@ mod tests {
             should_quit: false,
             selectables,
             context_display: "context: Notes".to_string(),
+            pending_delete: false,
         }
     }
 

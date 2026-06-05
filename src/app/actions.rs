@@ -7,6 +7,7 @@ pub fn go_to_date(state: &mut AppState, date: chrono::NaiveDate) -> anyhow::Resu
     let notes_dir = state.notes_dir.clone();
     let config = state.config.clone();
     *state = AppState::open_day(notes_dir, config, date)?;
+    state.pending_delete = false;
     state.save()?;
     Ok(())
 }
