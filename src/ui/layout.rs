@@ -3,13 +3,15 @@ use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::widgets::Paragraph;
 
 pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
+    let input_line_count = app.input.split('\n').count().max(1) as u16;
+    let input_height = (input_line_count + 2).clamp(3, 12);
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(1),
             Constraint::Min(0),
             Constraint::Length(1),
-            Constraint::Length(3),
+            Constraint::Length(input_height),
         ])
         .split(frame.area());
 
@@ -167,6 +169,22 @@ mod tests {
             "Expected 'June 2026' in buffer, got: {}",
             content
         );
+    }
+
+    #[test]
+    fn render_multiline_input() {
+        let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let mut app = test_app(doc, Focus::Capture, 0);
+        app.input = "line one\nline two".to_string();
+
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app)).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        assert!(content.contains("line one"), "first line missing: {}", content);
+        assert!(content.contains("line two"), "second line missing: {}", content);
     }
 
     #[test]

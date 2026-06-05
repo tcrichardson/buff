@@ -22,19 +22,42 @@ pub fn render_status(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
 }
 
 pub fn render_input(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
+    use ratatui::text::Text;
+
     let (title, prefix) = if app.editing.is_some() {
         ("Edit", "Edit: › ")
     } else {
         ("Capture", "› ")
     };
     let block = Block::default().title(title).borders(Borders::ALL);
-    let text = format!("{}{}", prefix, app.input);
-    let paragraph = Paragraph::new(text).block(block);
+
+    let input_lines: Vec<&str> = app.input.split('\n').collect();
+    let rendered: Vec<Line> = input_lines
+        .iter()
+        .enumerate()
+        .map(|(i, l)| {
+            if i == 0 {
+                Line::from(format!("{}{}", prefix, l))
+            } else {
+                Line::from((*l).to_string())
+            }
+        })
+        .collect();
+
+    let paragraph = Paragraph::new(Text::from(rendered)).block(block);
     frame.render_widget(paragraph, area);
 
+    let last = input_lines.len() - 1;
+    let last_len = input_lines[last].chars().count();
+    let col = if last == 0 {
+        prefix.chars().count() + last_len
+    } else {
+        last_len
+    };
     let inner_x = area.x + 1;
     let inner_y = area.y + 1;
-    let cursor_x = inner_x + prefix.chars().count() as u16 + app.input.chars().count() as u16;
-    let cursor_y = inner_y;
-    frame.set_cursor_position(ratatui::layout::Position::new(cursor_x, cursor_y));
+    frame.set_cursor_position(ratatui::layout::Position::new(
+        inner_x + col as u16,
+        inner_y + last as u16,
+    ));
 }
