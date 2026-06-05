@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::model::day::Document;
+use crate::model::day::{Document, Selectable};
 use crate::storage;
 use chrono::NaiveDate;
 use std::path::PathBuf;
@@ -36,6 +36,8 @@ pub struct AppState {
     pub overlay: Overlay,
     pub editing: Option<usize>,
     pub should_quit: bool,
+    pub selectables: Vec<Selectable>,
+    pub context_display: String,
 }
 
 impl AppState {
@@ -47,6 +49,8 @@ impl AppState {
         } else {
             Document::new_for_date(date)
         };
+        let selectables = doc.selectables();
+        let context_display = "context: Notes".to_string();
         Ok(Self {
             doc,
             date,
@@ -60,6 +64,8 @@ impl AppState {
             overlay: Overlay::None,
             editing: None,
             should_quit: false,
+            selectables,
+            context_display,
         })
     }
 
@@ -74,5 +80,18 @@ impl AppState {
 
     pub fn current_time_hhmm(&self) -> String {
         chrono::Local::now().format("%H:%M").to_string()
+    }
+
+    pub fn update_context_display(&mut self) {
+        self.context_display = match self.context {
+            Context::Notes => "context: Notes".to_string(),
+            Context::Meeting(ord) => {
+                let meetings = self.doc.meetings();
+                match meetings.get(ord) {
+                    Some(m) => format!("context: {}", m.name),
+                    None => "context: Notes".to_string(),
+                }
+            }
+        };
     }
 }

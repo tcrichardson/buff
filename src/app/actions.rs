@@ -44,15 +44,19 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
                     state.doc.add_entry(&EntryTarget::Meeting(*ord), text, time);
                 }
             }
+            state.selectables = state.doc.selectables();
             state.save()?;
         }
         Command::Meeting(name) => {
             let ord = state.doc.add_meeting(&state.current_time_hhmm(), &name);
             state.context = Context::Meeting(ord);
+            state.selectables = state.doc.selectables();
+            state.update_context_display();
             state.save()?;
         }
         Command::Note => {
             state.context = Context::Notes;
+            state.update_context_display();
         }
         Command::Todo(text) => {
             let meeting_name = match &state.context {
@@ -62,10 +66,12 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
                 _ => None,
             };
             state.doc.add_todo(&text, meeting_name.as_deref());
+            state.selectables = state.doc.selectables();
             state.save()?;
         }
         Command::Leave => {
             state.context = Context::Notes;
+            state.update_context_display();
         }
         Command::Help => {
             state.status = "Press ? for help, /quit to exit".to_string();
@@ -97,7 +103,7 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
 }
 
 pub fn select_next(state: &mut AppState) {
-    let count = state.doc.selectables().len();
+    let count = state.selectables.len();
     if count > 0 {
         state.selected = (state.selected + 1).min(count - 1);
     }
@@ -110,14 +116,14 @@ pub fn select_prev(state: &mut AppState) {
 }
 
 pub fn select_first(state: &mut AppState) {
-    if state.doc.selectables().is_empty() {
+    if state.selectables.is_empty() {
         return;
     }
     state.selected = 0;
 }
 
 pub fn select_last(state: &mut AppState) {
-    let count = state.doc.selectables().len();
+    let count = state.selectables.len();
     if count > 0 {
         state.selected = count - 1;
     }
@@ -126,6 +132,7 @@ pub fn select_last(state: &mut AppState) {
 pub fn toggle_selected(state: &mut AppState) {
     match state.doc.toggle_todo(state.selected) {
         Ok(()) => {
+            state.selectables = state.doc.selectables();
             let _ = state.save();
         }
         Err(e) => {
@@ -136,7 +143,8 @@ pub fn toggle_selected(state: &mut AppState) {
 
 pub fn delete_selected(state: &mut AppState) -> anyhow::Result<()> {
     state.doc.delete_selectable(state.selected)?;
-    let count = state.doc.selectables().len();
+    state.selectables = state.doc.selectables();
+    let count = state.selectables.len();
     if count > 0 {
         state.selected = state.selected.min(count - 1);
     } else {
@@ -147,8 +155,7 @@ pub fn delete_selected(state: &mut AppState) -> anyhow::Result<()> {
 }
 
 pub fn begin_edit_selected(state: &mut AppState) {
-    let selectables = state.doc.selectables();
-    if let Some(sel) = selectables.get(state.selected) {
+    if let Some(sel) = state.selectables.get(state.selected) {
         state.editing = Some(state.selected);
         state.input = sel.text.clone();
         state.focus = crate::app::state::Focus::Capture;
@@ -160,6 +167,7 @@ pub fn begin_edit_selected(state: &mut AppState) {
 pub fn commit_edit(state: &mut AppState) -> anyhow::Result<()> {
     if let Some(idx) = state.editing {
         state.doc.edit_selectable(idx, &state.input)?;
+        state.selectables = state.doc.selectables();
         state.editing = None;
         state.input.clear();
         state.focus = crate::app::state::Focus::Navigate;

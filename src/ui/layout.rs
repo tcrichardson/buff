@@ -40,6 +40,7 @@ mod tests {
     use std::path::PathBuf;
 
     fn test_app(doc: Document, focus: Focus, selected: usize) -> AppState {
+        let selectables = doc.selectables();
         AppState {
             doc,
             date: NaiveDate::from_ymd_opt(2026, 6, 4).unwrap(),
@@ -53,6 +54,8 @@ mod tests {
             overlay: Overlay::None,
             editing: None,
             should_quit: false,
+            selectables,
+            context_display: "context: Notes".to_string(),
         }
     }
 

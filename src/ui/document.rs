@@ -5,9 +5,8 @@ use ratatui::widgets::Paragraph;
 use crate::app::state::{AppState, Focus};
 
 pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
-    let selectables = app.doc.selectables();
     let selected_line = if app.focus == Focus::Navigate {
-        selectables.get(app.selected).map(|s| s.line)
+        app.selectables.get(app.selected).map(|s| s.line)
     } else {
         None
     };
@@ -40,16 +39,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
             .style(highlight)
         } else if let Some(rest) = line.strip_prefix("- [ ] ") {
             Line::from(vec![Span::raw("☐ "), Span::raw(rest)]).style(highlight)
-        } else if let Some(rest) = line.strip_prefix("- [x] ") {
-            Line::from(vec![
-                Span::styled("☑ ", Style::default().fg(Color::Green)),
-                Span::styled(
-                    rest,
-                    Style::default().fg(Color::Green).add_modifier(Modifier::CROSSED_OUT),
-                ),
-            ])
-            .style(highlight)
-        } else if let Some(rest) = line.strip_prefix("- [X] ") {
+        } else if let Some(rest) = line.strip_prefix("- [x] ").or_else(|| line.strip_prefix("- [X] ")) {
             Line::from(vec![
                 Span::styled("☑ ", Style::default().fg(Color::Green)),
                 Span::styled(
@@ -66,7 +56,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
     }).collect();
 
     let scroll_offset = if let Some(sel_line) = selected_line {
-        let visible_height = area.height.saturating_sub(2) as usize;
+        let visible_height = area.height as usize;
         (sel_line + 1).saturating_sub(visible_height)
     } else {
         0

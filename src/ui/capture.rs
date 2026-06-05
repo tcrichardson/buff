@@ -1,29 +1,20 @@
 use ratatui::layout::Rect;
-use ratatui::text::Line;
+use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
-use crate::app::state::{AppState, Context};
+use crate::app::state::AppState;
 
 pub fn render_status(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
     let text = if !app.status.is_empty() {
         Line::from(app.status.as_str())
     } else {
-        let context_str = match app.context {
-            Context::Notes => "context: Notes".to_string(),
-            Context::Meeting(ord) => {
-                let meetings = app.doc.meetings();
-                match meetings.get(ord) {
-                    Some(m) => format!("context: {}", m.name),
-                    None => "context: Notes".to_string(),
-                }
-            }
-        };
+        let context_str = app.context_display.clone();
         let help = "[? help]";
         let total_len = context_str.len() + help.len();
         let spaces = (area.width as usize).saturating_sub(total_len);
         Line::from(vec![
-            ratatui::text::Span::raw(context_str),
-            ratatui::text::Span::raw(" ".repeat(spaces)),
-            ratatui::text::Span::raw(help),
+            Span::raw(context_str),
+            Span::raw(" ".repeat(spaces)),
+            Span::raw(help),
         ])
     };
     let paragraph = Paragraph::new(text);
