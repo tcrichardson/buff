@@ -35,10 +35,10 @@ pub fn config_path() -> PathBuf {
 }
 
 pub fn default_notes_dir() -> PathBuf {
-    if let Some(user_dirs) = directories::UserDirs::new() {
-        if let Some(docs) = user_dirs.document_dir() {
-            return docs.join("kuatin");
-        }
+    if let Some(user_dirs) = directories::UserDirs::new()
+        && let Some(docs) = user_dirs.document_dir()
+    {
+        return docs.join("kuatin");
     }
     PathBuf::from(shellexpand::tilde("~/kuatin").as_ref())
 }
@@ -46,7 +46,8 @@ pub fn default_notes_dir() -> PathBuf {
 pub fn load(cli_notes_dir: Option<String>) -> anyhow::Result<(Config, PathBuf)> {
     let config = match std::fs::read_to_string(config_path()) {
         Ok(contents) => toml::from_str(&contents)?,
-        Err(_) => Config::default(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Config::default(),
+        Err(e) => return Err(e.into()),
     };
 
     let notes_dir = resolve_notes_dir(
@@ -79,7 +80,7 @@ mod tests {
         "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert_eq!(config.notes_dir, Some("/path/to/notes".to_string()));
-        assert_eq!(config.timestamp_entries, true);
+        assert!(config.timestamp_entries);
         assert_eq!(config.week_starts_on, WeekStart::Monday);
         assert_eq!(config.date_format, "%d/%m/%Y");
     }
@@ -91,7 +92,7 @@ mod tests {
         "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert_eq!(config.notes_dir, None);
-        assert_eq!(config.timestamp_entries, true);
+        assert!(config.timestamp_entries);
         assert_eq!(config.week_starts_on, WeekStart::Sunday);
         assert_eq!(config.date_format, "%Y-%m-%d-%a");
     }
@@ -99,15 +100,13 @@ mod tests {
     #[test]
     fn resolve_notes_dir_precedence() {
         let default = Path::new("/default/kuatin");
-        let cli = Some("/cli/dir".to_string());
-        let cfg = Some("/config/dir".to_string());
 
         assert_eq!(
-            resolve_notes_dir(cli.clone(), cfg.clone(), default),
+            resolve_notes_dir(Some("/cli/dir".to_string()), Some("/config/dir".to_string()), default),
             PathBuf::from("/cli/dir")
         );
         assert_eq!(
-            resolve_notes_dir(None, cfg.clone(), default),
+            resolve_notes_dir(None, Some("/config/dir".to_string()), default),
             PathBuf::from("/config/dir")
         );
         assert_eq!(
@@ -140,11 +139,18 @@ mod tests {
     }
 
     #[test]
-    fn week_start_deserializes_lowercase() {
-        let sunday: WeekStartWrapper = toml::from_str(r#"week_starts_on = "sunday""#).unwrap();
-        assert_eq!(sunday.week_starts_on, WeekStart::Sunday);
+    fn load_uses_cli_notes_dir_when_config_missing() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_path = temp_dir.path().to_str().unwrap().to_string();
 
-        let monday: WeekStartWrapper = toml::from_str(r#"week_starts_on = "monday""#).unwrap();
-        assert_eq!(monday.week_starts_on, WeekStart::Monday);
+        let (config, notes_dir) = load(Some(temp_path.clone())).unwrap();
+
+        // CLI notes dir takes precedence regardless of config
+        assert_eq!(notes_dir, PathBuf::from(&temp_path));
+        // When config file doesn't exist, default config is used
+        assert_eq!(config.notes_dir, None);
+        assert!(!config.timestamp_entries);
+        assert_eq!(config.week_starts_on, WeekStart::Sunday);
+        assert_eq!(config.date_format, "%Y-%m-%d-%a");
     }
 }
