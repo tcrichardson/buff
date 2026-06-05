@@ -42,6 +42,7 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
             let target = match &state.context {
                 Context::Notes => EntryTarget::Notes,
                 Context::Meeting(ord) => EntryTarget::Meeting(*ord),
+                Context::NoteBlock(ord) => EntryTarget::NoteBlock(*ord),
             };
             state.doc.add_block(&target, &block);
             state.selectables = state.doc.selectables();
@@ -60,14 +61,26 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
                 crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
             state.status.clear();
         }
-        Command::Note => {
-            state.context = Context::Notes;
-            state.update_context_display();
-            state.status.clear();
+        Command::Note(name) => {
+            if let Some(n) = name {
+                let ord = state.doc.add_note_heading(&n);
+                state.context = Context::NoteBlock(ord);
+                state.selectables = state.doc.selectables();
+                state.update_context_display();
+                state.save()?;
+                state.dates_with_notes =
+                    crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
+                state.status.clear();
+            } else {
+                state.context = Context::Notes;
+                state.update_context_display();
+                state.status.clear();
+            }
         }
         Command::Todo(text) => {
             let meeting_name = match &state.context {
                 Context::Meeting(ord) => state.doc.meetings().get(*ord).map(|m| m.name.clone()),
+                Context::NoteBlock(ord) => state.doc.note_headings().get(*ord).map(|n| n.name.clone()),
                 _ => None,
             };
             state.doc.add_todo(&text, meeting_name.as_deref());
@@ -179,17 +192,27 @@ pub fn begin_edit_selected(state: &mut AppState) {
     }
 }
 
-pub fn resume_selected_meeting(state: &mut AppState) {
-    if let Some(sel) = state.selectables.get(state.selected)
-        && let SelectableKind::MeetingHeading { ordinal } = sel.kind
-    {
-        state.context = Context::Meeting(ordinal);
-        state.update_context_display();
-        state.focus = crate::app::state::Focus::Capture;
-        state.status.clear();
-        return;
+pub fn resume_selected_heading(state: &mut AppState) {
+    if let Some(sel) = state.selectables.get(state.selected) {
+        match sel.kind {
+            SelectableKind::MeetingHeading { ordinal } => {
+                state.context = Context::Meeting(ordinal);
+                state.update_context_display();
+                state.focus = crate::app::state::Focus::Capture;
+                state.status.clear();
+                return;
+            }
+            SelectableKind::NoteHeading { ordinal } => {
+                state.context = Context::NoteBlock(ordinal);
+                state.update_context_display();
+                state.focus = crate::app::state::Focus::Capture;
+                state.status.clear();
+                return;
+            }
+            _ => {}
+        }
     }
-    state.status = "not a meeting".to_string();
+    state.status = "not a meeting or note".to_string();
 }
 
 pub fn commit_edit(state: &mut AppState) -> anyhow::Result<()> {
@@ -281,7 +304,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
-        dispatch(&mut state, Command::Note).unwrap();
+        dispatch(&mut state, Command::Note(None)).unwrap();
         assert_eq!(state.context, Context::Notes);
     }
 
@@ -650,7 +673,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
-        dispatch(&mut state, Command::Note).unwrap(); // leave the meeting context
+        dispatch(&mut state, Command::Note(None)).unwrap(); // leave the meeting context
         assert_eq!(state.context, Context::Notes);
 
         let idx = state
@@ -661,7 +684,7 @@ mod tests {
         state.selected = idx;
         state.focus = crate::app::state::Focus::Navigate;
 
-        resume_selected_meeting(&mut state);
+        resume_selected_heading(&mut state);
         assert_eq!(state.context, Context::Meeting(0));
         assert_eq!(state.focus, crate::app::state::Focus::Capture);
 
@@ -679,7 +702,72 @@ mod tests {
         dispatch(&mut state, Command::Entry("idea".to_string())).unwrap();
         state.selected = 0;
         state.focus = crate::app::state::Focus::Navigate;
-        resume_selected_meeting(&mut state);
-        assert_eq!(state.status, "not a meeting");
+        resume_selected_heading(&mut state);
+        assert_eq!(state.status, "not a meeting or note");
+    }
+
+    #[test]
+    fn note_then_entry_nests_bullet() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Note(Some("Idea Bucket".to_string()))).unwrap();
+        dispatch(&mut state, Command::Entry("point".to_string())).unwrap();
+        let text = state.doc.to_text();
+        let heading_pos = text.find("### Idea Bucket").unwrap();
+        let entry_pos = text.find("- point").unwrap();
+        assert!(entry_pos > heading_pos, "entry should be after note heading");
+        assert_eq!(state.context, Context::NoteBlock(0));
+    }
+
+    #[test]
+    fn note_without_name_resets_context() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Note(Some("Idea Bucket".to_string()))).unwrap();
+        dispatch(&mut state, Command::Note(None)).unwrap();
+        assert_eq!(state.context, Context::Notes);
+    }
+
+    #[test]
+    fn resume_note_sets_context_and_focus() {
+        use crate::model::day::SelectableKind;
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Note(Some("Idea Bucket".to_string()))).unwrap();
+        dispatch(&mut state, Command::Note(None)).unwrap(); // leave the note context
+        assert_eq!(state.context, Context::Notes);
+
+        let idx = state
+            .selectables
+            .iter()
+            .position(|s| matches!(s.kind, SelectableKind::NoteHeading { .. }))
+            .expect("note heading should be selectable");
+        state.selected = idx;
+        state.focus = crate::app::state::Focus::Navigate;
+
+        resume_selected_heading(&mut state);
+        assert_eq!(state.context, Context::NoteBlock(0));
+        assert_eq!(state.focus, crate::app::state::Focus::Capture);
+
+        dispatch(&mut state, Command::Entry("under note".to_string())).unwrap();
+        let text = state.doc.to_text();
+        let heading = text.find("### Idea Bucket").unwrap();
+        let entry = text.find("- under note").unwrap();
+        assert!(entry > heading, "entry should be under the note heading");
+    }
+
+    #[test]
+    fn todo_in_note_gets_tag() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Note(Some("Idea Bucket".to_string()))).unwrap();
+        dispatch(&mut state, Command::Todo("follow up".to_string())).unwrap();
+        let text = state.doc.to_text();
+        assert!(
+            text.contains("- [ ] follow up _(Idea Bucket)_"),
+            "got: {}",
+            text
+        );
+        assert_eq!(state.context, Context::NoteBlock(0));
     }
 }

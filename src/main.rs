@@ -257,7 +257,7 @@ fn run() -> Result<()> {
                             app.pending_delete = true;
                         }
                         KeyCode::Enter => {
-                            buff::app::actions::resume_selected_meeting(&mut app);
+                            buff::app::actions::resume_selected_heading(&mut app);
                         }
                         KeyCode::Char('?') => {
                             app.pending_delete = false;
