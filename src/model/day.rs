@@ -36,7 +36,7 @@ pub struct Meeting {
 
 #[derive(Debug)]
 pub struct Document {
-    lines: Vec<String>,
+    pub(crate) lines: Vec<String>,
 }
 
 impl Document {
