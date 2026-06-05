@@ -183,8 +183,16 @@ mod tests {
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("line one"), "first line missing: {}", content);
-        assert!(content.contains("line two"), "second line missing: {}", content);
+        assert!(
+            content.contains("line one"),
+            "first line missing: {}",
+            content
+        );
+        assert!(
+            content.contains("line two"),
+            "second line missing: {}",
+            content
+        );
     }
 
     #[test]
@@ -192,7 +200,10 @@ mod tests {
         let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
         let mut app = test_app(doc, Focus::Capture, 0);
         // 15 lines — more than the 10-line inner height
-        app.input = (1..=15).map(|n| format!("line {}", n)).collect::<Vec<_>>().join("\n");
+        app.input = (1..=15)
+            .map(|n| format!("line {}", n))
+            .collect::<Vec<_>>()
+            .join("\n");
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
@@ -201,7 +212,11 @@ mod tests {
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
         // The last visible line should be present (scrolled into view)
-        assert!(content.contains("line 15"), "last line should be visible after scroll: {}", content);
+        assert!(
+            content.contains("line 15"),
+            "last line should be visible after scroll: {}",
+            content
+        );
     }
 
     #[test]
@@ -240,8 +255,20 @@ mod tests {
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("a quote"), "quote text missing: {}", content);
-        assert!(content.contains("first item"), "numbered text missing: {}", content);
-        assert!(content.contains("code line"), "code text missing: {}", content);
+        assert!(
+            content.contains("a quote"),
+            "quote text missing: {}",
+            content
+        );
+        assert!(
+            content.contains("first item"),
+            "numbered text missing: {}",
+            content
+        );
+        assert!(
+            content.contains("code line"),
+            "code text missing: {}",
+            content
+        );
     }
 }

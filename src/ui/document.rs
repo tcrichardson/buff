@@ -18,9 +18,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
         .iter()
         .enumerate()
         .map(|(i, line)| {
-            let is_selected = selected_range
-                .as_ref()
-                .is_some_and(|r| r.contains(&i));
+            let is_selected = selected_range.as_ref().is_some_and(|r| r.contains(&i));
             let highlight = if is_selected {
                 Style::default().add_modifier(Modifier::REVERSED)
             } else {
@@ -42,19 +40,25 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
             if let Some(rest) = line.strip_prefix("# ") {
                 Line::from(vec![Span::styled(
                     format!("# {}", rest),
-                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::White)
+                        .add_modifier(Modifier::BOLD),
                 )])
                 .style(highlight)
             } else if let Some(rest) = line.strip_prefix("## ") {
                 Line::from(vec![Span::styled(
                     format!("## {}", rest),
-                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
                 )])
                 .style(highlight)
             } else if let Some(rest) = line.strip_prefix("### ") {
                 Line::from(vec![Span::styled(
                     format!("### {}", rest),
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
                 )])
                 .style(highlight)
             } else if let Some(rest) = line.strip_prefix("- [ ] ") {
@@ -67,7 +71,9 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
                     Span::styled("☑ ", Style::default().fg(Color::Green)),
                     Span::styled(
                         rest,
-                        Style::default().fg(Color::Green).add_modifier(Modifier::CROSSED_OUT),
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::CROSSED_OUT),
                     ),
                 ])
                 .style(highlight)
@@ -76,7 +82,12 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
                 .or_else(|| if line == ">" { Some("") } else { None })
             {
                 Line::from(vec![
-                    Span::styled("│ ", Style::default().fg(Color::Magenta).add_modifier(Modifier::ITALIC)),
+                    Span::styled(
+                        "│ ",
+                        Style::default()
+                            .fg(Color::Magenta)
+                            .add_modifier(Modifier::ITALIC),
+                    ),
                     Span::styled(rest, Style::default().add_modifier(Modifier::ITALIC)),
                 ])
                 .style(highlight)

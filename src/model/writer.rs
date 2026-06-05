@@ -198,11 +198,14 @@ impl Document {
 
             // Meeting heading inside the Meetings section.
             if line.starts_with("### ") {
-                let in_meetings = matches!((meetings_start, meetings_end), (Some(s), Some(e)) if i > s && i < e);
+                let in_meetings =
+                    matches!((meetings_start, meetings_end), (Some(s), Some(e)) if i > s && i < e);
                 if in_meetings {
                     result.push(Selectable {
                         lines: i..i + 1,
-                        kind: SelectableKind::MeetingHeading { ordinal: meeting_ord },
+                        kind: SelectableKind::MeetingHeading {
+                            ordinal: meeting_ord,
+                        },
                         text: line.clone(),
                     });
                     meeting_ord += 1;
@@ -305,7 +308,11 @@ impl Document {
     }
 
     /// Replace the selected block's line range with `new_lines`.
-    pub fn replace_selectable(&mut self, sel_index: usize, new_lines: &[String]) -> anyhow::Result<()> {
+    pub fn replace_selectable(
+        &mut self,
+        sel_index: usize,
+        new_lines: &[String],
+    ) -> anyhow::Result<()> {
         let selectables = self.selectables();
         let sel = selectables
             .get(sel_index)
@@ -604,8 +611,10 @@ mod tests {
 
     #[test]
     fn replace_selectable_multiline_block() {
-        let mut doc = Document::from_text("# 2026-06-04\n\n## Notes\n\n- first\n  cont\n\n- last\n");
-        doc.replace_selectable(0, &["- replaced".to_string()]).unwrap();
+        let mut doc =
+            Document::from_text("# 2026-06-04\n\n## Notes\n\n- first\n  cont\n\n- last\n");
+        doc.replace_selectable(0, &["- replaced".to_string()])
+            .unwrap();
         let text = doc.to_text();
         assert!(text.contains("- replaced\n"), "got: {}", text);
         assert!(!text.contains("  cont\n"), "continuation should be gone");
@@ -711,16 +720,19 @@ mod tests {
         let doc = Document::from_text(text);
         let sel = doc.selectables();
 
-        let kinds: Vec<_> = sel.iter().map(|s| (s.lines.clone(), s.kind.clone())).collect();
+        let kinds: Vec<_> = sel
+            .iter()
+            .map(|s| (s.lines.clone(), s.kind.clone()))
+            .collect();
         assert_eq!(
             kinds,
             vec![
                 (4..5, SelectableKind::MeetingHeading { ordinal: 0 }),
-                (6..8, SelectableKind::Bullet),                 // "- point A" + "  more A"
-                (11..12, SelectableKind::Bullet),               // "- idea"
+                (6..8, SelectableKind::Bullet), // "- point A" + "  more A"
+                (11..12, SelectableKind::Bullet), // "- idea"
                 (12..13, SelectableKind::Quote),
                 (13..14, SelectableKind::Numbered),
-                (15..18, SelectableKind::CodeBlock),            // fence + body + fence
+                (15..18, SelectableKind::CodeBlock), // fence + body + fence
                 (21..22, SelectableKind::Todo { done: false }),
                 (22..23, SelectableKind::Todo { done: true }),
             ]
@@ -759,7 +771,14 @@ mod tests {
     #[test]
     fn add_block_inserts_multiple_lines_into_notes() {
         let mut doc = Document::from_text("# Day\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
-        doc.add_block(&EntryTarget::Notes, &["- one".to_string(), "  two".to_string()]);
-        assert!(doc.to_text().contains("## Notes\n- one\n  two\n"), "got: {}", doc.to_text());
+        doc.add_block(
+            &EntryTarget::Notes,
+            &["- one".to_string(), "  two".to_string()],
+        );
+        assert!(
+            doc.to_text().contains("## Notes\n- one\n  two\n"),
+            "got: {}",
+            doc.to_text()
+        );
     }
 }

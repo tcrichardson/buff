@@ -625,7 +625,11 @@ mod tests {
         dispatch(&mut state, Command::Entry("## Section".to_string())).unwrap();
         let text = state.doc.to_text();
         assert!(text.contains("## Section\n"), "got: {}", text);
-        assert!(!text.contains("- ## Section"), "should not be wrapped: {}", text);
+        assert!(
+            !text.contains("- ## Section"),
+            "should not be wrapped: {}",
+            text
+        );
     }
 
     #[test]
