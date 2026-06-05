@@ -15,6 +15,7 @@ pub enum Focus {
 pub enum Context {
     Notes,
     Meeting(usize),
+    NoteBlock(usize),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -97,6 +98,13 @@ impl AppState {
                 let meetings = self.doc.meetings();
                 match meetings.get(ord) {
                     Some(m) => format!("context: {}", m.name),
+                    None => "context: Notes".to_string(),
+                }
+            }
+            Context::NoteBlock(ord) => {
+                let notes = self.doc.note_headings();
+                match notes.get(ord) {
+                    Some(n) => format!("context: {}", n.name),
                     None => "context: Notes".to_string(),
                 }
             }

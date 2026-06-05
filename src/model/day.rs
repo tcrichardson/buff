@@ -12,6 +12,7 @@ pub enum SectionKind {
 pub enum EntryTarget {
     Notes,
     Meeting(usize),
+    NoteBlock(usize),
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -19,6 +20,7 @@ pub enum SelectableKind {
     Bullet,
     Todo { done: bool },
     MeetingHeading { ordinal: usize },
+    NoteHeading { ordinal: usize },
     MarkdownHeading,
     Quote,
     Numbered,
