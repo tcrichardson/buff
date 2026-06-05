@@ -188,6 +188,23 @@ mod tests {
     }
 
     #[test]
+    fn render_multiline_input_scrolls_when_too_tall() {
+        let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let mut app = test_app(doc, Focus::Capture, 0);
+        // 15 lines — more than the 10-line inner height
+        app.input = (1..=15).map(|n| format!("line {}", n)).collect::<Vec<_>>().join("\n");
+
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app)).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        // The last visible line should be present (scrolled into view)
+        assert!(content.contains("line 15"), "last line should be visible after scroll: {}", content);
+    }
+
+    #[test]
     fn render_help_overlay() {
         let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
         let mut app = test_app(doc, Focus::Navigate, 0);

@@ -44,10 +44,15 @@ pub fn render_input(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
         })
         .collect();
 
-    let paragraph = Paragraph::new(Text::from(rendered)).block(block);
+    let inner_height = area.height.saturating_sub(2);
+    let overflow = input_lines.len().saturating_sub(inner_height as usize);
+
+    let paragraph = Paragraph::new(Text::from(rendered))
+        .block(block)
+        .scroll((overflow as u16, 0));
     frame.render_widget(paragraph, area);
 
-    let last = input_lines.len() - 1;
+    let last = input_lines.len().saturating_sub(1);
     let last_len = input_lines[last].chars().count();
     let col = if last == 0 {
         prefix.chars().count() + last_len
@@ -58,6 +63,6 @@ pub fn render_input(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
     let inner_y = area.y + 1;
     frame.set_cursor_position(ratatui::layout::Position::new(
         inner_x + col as u16,
-        inner_y + last as u16,
+        inner_y + (last.saturating_sub(overflow)) as u16,
     ));
 }

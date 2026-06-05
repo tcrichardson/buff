@@ -180,14 +180,14 @@ pub fn begin_edit_selected(state: &mut AppState) {
 }
 
 pub fn resume_selected_meeting(state: &mut AppState) {
-    if let Some(sel) = state.selectables.get(state.selected) {
-        if let SelectableKind::MeetingHeading { ordinal } = sel.kind {
-            state.context = Context::Meeting(ordinal);
-            state.update_context_display();
-            state.focus = crate::app::state::Focus::Capture;
-            state.status.clear();
-            return;
-        }
+    if let Some(sel) = state.selectables.get(state.selected)
+        && let SelectableKind::MeetingHeading { ordinal } = sel.kind
+    {
+        state.context = Context::Meeting(ordinal);
+        state.update_context_display();
+        state.focus = crate::app::state::Focus::Capture;
+        state.status.clear();
+        return;
     }
     state.status = "not a meeting".to_string();
 }
