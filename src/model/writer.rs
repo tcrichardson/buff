@@ -143,34 +143,140 @@ impl Document {
     }
 
     pub fn selectables(&self) -> Vec<Selectable> {
+        use crate::model::parser::{
+            continuation_end, heading_level, is_bullet, is_fence, is_ordered, is_quote,
+            is_section_heading, todo_state,
+        };
+
+        let lines = &self.lines;
+        let meetings_start = heading_line(lines, SectionKind::Meetings);
+        let meetings_end = meetings_start.map(|s| section_end(lines, s));
+
         let mut result = Vec::new();
-        for (i, line) in self.lines.iter().enumerate() {
-            if let Some(rest) = line.strip_prefix("- [ ] ") {
-                result.push(Selectable {
-                    line: i,
-                    kind: SelectableKind::Todo { done: false },
-                    text: rest.to_string(),
-                });
-            } else if let Some(rest) = line.strip_prefix("- [x] ") {
-                result.push(Selectable {
-                    line: i,
-                    kind: SelectableKind::Todo { done: true },
-                    text: rest.to_string(),
-                });
-            } else if let Some(rest) = line.strip_prefix("- [X] ") {
-                result.push(Selectable {
-                    line: i,
-                    kind: SelectableKind::Todo { done: true },
-                    text: rest.to_string(),
-                });
-            } else if let Some(rest) = line.strip_prefix("- ") {
-                result.push(Selectable {
-                    line: i,
-                    kind: SelectableKind::Entry,
-                    text: rest.to_string(),
-                });
+        let mut i = 0;
+        let mut meeting_ord = 0usize;
+
+        let join = |range: std::ops::Range<usize>| lines[range].join("\n");
+
+        while i < lines.len() {
+            let line = &lines[i];
+
+            if line.trim().is_empty() {
+                i += 1;
+                continue;
             }
+            // Structural headings (day title at line 0, fixed section headings) are not selectable.
+            if (i == 0 && line.starts_with("# ")) || is_section_heading(line) {
+                i += 1;
+                continue;
+            }
+
+            // Code fence: run to the closing fence (or section end / EOF).
+            if is_fence(line) {
+                let start = i;
+                let mut j = i + 1;
+                while j < lines.len() && !is_fence(&lines[j]) && !is_section_heading(&lines[j]) {
+                    j += 1;
+                }
+                let end = if j < lines.len() && is_fence(&lines[j]) {
+                    j + 1
+                } else {
+                    j
+                };
+                result.push(Selectable {
+                    lines: start..end,
+                    kind: SelectableKind::CodeBlock,
+                    text: join(start..end),
+                });
+                i = end;
+                continue;
+            }
+
+            // Meeting heading inside the Meetings section.
+            if line.starts_with("### ") {
+                let in_meetings = matches!((meetings_start, meetings_end), (Some(s), Some(e)) if i > s && i < e);
+                if in_meetings {
+                    result.push(Selectable {
+                        lines: i..i + 1,
+                        kind: SelectableKind::MeetingHeading { ordinal: meeting_ord },
+                        text: line.clone(),
+                    });
+                    meeting_ord += 1;
+                    i += 1;
+                    continue;
+                }
+            }
+
+            // Markdown heading typed as a note.
+            if heading_level(line).is_some() {
+                result.push(Selectable {
+                    lines: i..i + 1,
+                    kind: SelectableKind::MarkdownHeading,
+                    text: line.clone(),
+                });
+                i += 1;
+                continue;
+            }
+
+            // Blockquote (consecutive quote lines).
+            if is_quote(line) {
+                let start = i;
+                let mut j = i + 1;
+                while j < lines.len() && is_quote(&lines[j]) {
+                    j += 1;
+                }
+                result.push(Selectable {
+                    lines: start..j,
+                    kind: SelectableKind::Quote,
+                    text: join(start..j),
+                });
+                i = j;
+                continue;
+            }
+
+            // Todo (check before bullet, since "- [ ]" also matches "- ").
+            if let Some(done) = todo_state(line) {
+                let end = continuation_end(lines, i + 1);
+                result.push(Selectable {
+                    lines: i..end,
+                    kind: SelectableKind::Todo { done },
+                    text: join(i..end),
+                });
+                i = end;
+                continue;
+            }
+
+            if is_bullet(line) {
+                let end = continuation_end(lines, i + 1);
+                result.push(Selectable {
+                    lines: i..end,
+                    kind: SelectableKind::Bullet,
+                    text: join(i..end),
+                });
+                i = end;
+                continue;
+            }
+
+            if is_ordered(line) {
+                let end = continuation_end(lines, i + 1);
+                result.push(Selectable {
+                    lines: i..end,
+                    kind: SelectableKind::Numbered,
+                    text: join(i..end),
+                });
+                i = end;
+                continue;
+            }
+
+            // Anything else: a single-line Raw block (e.g. external edits).
+            result.push(Selectable {
+                lines: i..i + 1,
+                kind: SelectableKind::Raw,
+                text: line.clone(),
+            });
+            i += 1;
         }
+
         result
     }
 
@@ -181,35 +287,27 @@ impl Document {
             .ok_or_else(|| anyhow::anyhow!("index out of bounds"))?;
         match sel.kind {
             SelectableKind::Todo { done } => {
-                let line = &self.lines[sel.line];
-                let new_line = if done {
-                    format!("- [ ] {}", &line[6..])
+                let li = sel.lines.start;
+                let content = &self.lines[li][6..];
+                self.lines[li] = if done {
+                    format!("- [ ] {}", content)
                 } else {
-                    format!("- [x] {}", &line[6..])
+                    format!("- [x] {}", content)
                 };
-                self.lines[sel.line] = new_line;
                 Ok(())
             }
-            SelectableKind::Entry => Err(anyhow::anyhow!("not a to-do")),
+            _ => Err(anyhow::anyhow!("not a to-do")),
         }
     }
 
-    pub fn edit_selectable(&mut self, sel_index: usize, new_text: &str) -> anyhow::Result<()> {
+    /// Replace the selected block's line range with `new_lines`.
+    pub fn replace_selectable(&mut self, sel_index: usize, new_lines: &[String]) -> anyhow::Result<()> {
         let selectables = self.selectables();
         let sel = selectables
             .get(sel_index)
             .ok_or_else(|| anyhow::anyhow!("index out of bounds"))?;
-        let new_line = match sel.kind {
-            SelectableKind::Entry => format!("- {}", new_text),
-            SelectableKind::Todo { done } => {
-                if done {
-                    format!("- [x] {}", new_text)
-                } else {
-                    format!("- [ ] {}", new_text)
-                }
-            }
-        };
-        self.lines[sel.line] = new_line;
+        let range = sel.lines.clone();
+        self.lines.splice(range, new_lines.iter().cloned());
         Ok(())
     }
 
@@ -218,7 +316,8 @@ impl Document {
         let sel = selectables
             .get(sel_index)
             .ok_or_else(|| anyhow::anyhow!("index out of bounds"))?;
-        self.lines.remove(sel.line);
+        let range = sel.lines.clone();
+        self.lines.drain(range);
         Ok(())
     }
 }
@@ -409,68 +508,6 @@ mod tests {
     }
 
     #[test]
-    fn selectables_over_spec_example() {
-        let text = r"# 2026-06-04
-
-## Meetings
-
-### 09:15 Standup
-
-- point A
-- point B
-
-### 10:00 Review
-
-## Notes
-
-- idea 1
-- idea 2 _(tag)_
-
-## To-dos
-
-- [ ] unchecked todo
-- [x] checked todo
-- [ ] tagged todo _(meeting)_
-- regular entry in todos
-";
-        let doc = Document::from_text(text);
-        let sel = doc.selectables();
-        assert_eq!(sel.len(), 8, "expected 8 selectables, got {:?}", sel);
-
-        assert_eq!(sel[0].line, 6);
-        assert_eq!(sel[0].kind, SelectableKind::Entry);
-        assert_eq!(sel[0].text, "point A");
-
-        assert_eq!(sel[1].line, 7);
-        assert_eq!(sel[1].kind, SelectableKind::Entry);
-        assert_eq!(sel[1].text, "point B");
-
-        assert_eq!(sel[2].line, 13);
-        assert_eq!(sel[2].kind, SelectableKind::Entry);
-        assert_eq!(sel[2].text, "idea 1");
-
-        assert_eq!(sel[3].line, 14);
-        assert_eq!(sel[3].kind, SelectableKind::Entry);
-        assert_eq!(sel[3].text, "idea 2 _(tag)_");
-
-        assert_eq!(sel[4].line, 18);
-        assert_eq!(sel[4].kind, SelectableKind::Todo { done: false });
-        assert_eq!(sel[4].text, "unchecked todo");
-
-        assert_eq!(sel[5].line, 19);
-        assert_eq!(sel[5].kind, SelectableKind::Todo { done: true });
-        assert_eq!(sel[5].text, "checked todo");
-
-        assert_eq!(sel[6].line, 20);
-        assert_eq!(sel[6].kind, SelectableKind::Todo { done: false });
-        assert_eq!(sel[6].text, "tagged todo _(meeting)_");
-
-        assert_eq!(sel[7].line, 21);
-        assert_eq!(sel[7].kind, SelectableKind::Entry);
-        assert_eq!(sel[7].text, "regular entry in todos");
-    }
-
-    #[test]
     fn toggle_unchecked_todo() {
         let mut doc = Document::from_text("# 2026-06-04\n\n## To-dos\n\n- [ ] unchecked\n");
         doc.toggle_todo(0).unwrap();
@@ -521,24 +558,6 @@ mod tests {
     }
 
     #[test]
-    fn edit_entry_keeps_marker_and_swaps_text() {
-        let mut doc = Document::from_text("# 2026-06-04\n\n## Notes\n\n- idea\n");
-        doc.edit_selectable(0, "new idea").unwrap();
-        let text = doc.to_text();
-        assert!(text.contains("- new idea\n"), "got: {}", text);
-        assert!(!text.contains("- idea\n"), "old text should be gone");
-    }
-
-    #[test]
-    fn edit_checked_todo_keeps_marker_and_swaps_text() {
-        let mut doc = Document::from_text("# 2026-06-04\n\n## To-dos\n\n- [x] checked\n");
-        doc.edit_selectable(0, "done").unwrap();
-        let text = doc.to_text();
-        assert!(text.contains("- [x] done\n"), "got: {}", text);
-        assert!(!text.contains("- [x] checked\n"), "old text should be gone");
-    }
-
-    #[test]
     fn delete_middle_selectable_removes_line() {
         let mut doc =
             Document::from_text("# 2026-06-04\n\n## Notes\n\n- first\n- second\n- third\n");
@@ -556,24 +575,43 @@ mod tests {
         doc.delete_selectable(1).unwrap();
         let sel = doc.selectables();
         assert_eq!(sel.len(), 2);
-        assert_eq!(sel[0].line, 4);
-        assert_eq!(sel[0].text, "first");
-        assert_eq!(sel[1].line, 5);
-        assert_eq!(sel[1].text, "third");
-    }
-
-    #[test]
-    fn edit_out_of_bounds_returns_err() {
-        let mut doc = Document::from_text("# 2026-06-04\n\n## Notes\n\n- idea\n");
-        let result = doc.edit_selectable(99, "x");
-        assert!(result.is_err());
-        assert_eq!(result.unwrap_err().to_string(), "index out of bounds");
+        assert_eq!(sel[0].lines.start, 4);
+        assert_eq!(sel[0].text, "- first");
+        assert_eq!(sel[1].lines.start, 5);
+        assert_eq!(sel[1].text, "- third");
     }
 
     #[test]
     fn delete_out_of_bounds_returns_err() {
         let mut doc = Document::from_text("# 2026-06-04\n\n## Notes\n\n- idea\n");
         let result = doc.delete_selectable(99);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().to_string(), "index out of bounds");
+    }
+
+    #[test]
+    fn replace_selectable_swaps_lines() {
+        let mut doc = Document::from_text("# 2026-06-04\n\n## Notes\n\n- old\n");
+        doc.replace_selectable(0, &["> new".to_string()]).unwrap();
+        let text = doc.to_text();
+        assert!(text.contains("> new\n"), "got: {}", text);
+        assert!(!text.contains("- old\n"), "old text should be gone");
+    }
+
+    #[test]
+    fn replace_selectable_multiline_block() {
+        let mut doc = Document::from_text("# 2026-06-04\n\n## Notes\n\n- first\n  cont\n\n- last\n");
+        doc.replace_selectable(0, &["- replaced".to_string()]).unwrap();
+        let text = doc.to_text();
+        assert!(text.contains("- replaced\n"), "got: {}", text);
+        assert!(!text.contains("  cont\n"), "continuation should be gone");
+        assert!(text.contains("- last\n"), "last should remain");
+    }
+
+    #[test]
+    fn replace_selectable_out_of_bounds_returns_err() {
+        let mut doc = Document::from_text("# 2026-06-04\n\n## Notes\n\n- idea\n");
+        let result = doc.replace_selectable(99, &["x".to_string()]);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().to_string(), "index out of bounds");
     }
@@ -651,5 +689,56 @@ mod tests {
         assert!(!looks_like_markdown("plain text"));
         assert!(!looks_like_markdown("12.5 dollars"));
         assert!(!looks_like_markdown("#nospace"));
+    }
+
+    #[test]
+    fn classify_blocks_full_example() {
+        let text = "# 2026-06-04 (Thu)\n\n## Meetings\n\n### 09:15 Standup\n\n- point A\n  more A\n\n## Notes\n\n- idea\n> a quote\n1. one\n\n```rust\nfn x() {}\n```\n\n## To-dos\n\n- [ ] todo1\n- [x] todo2\n";
+        let doc = Document::from_text(text);
+        let sel = doc.selectables();
+
+        let kinds: Vec<_> = sel.iter().map(|s| (s.lines.clone(), s.kind.clone())).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                (4..5, SelectableKind::MeetingHeading { ordinal: 0 }),
+                (6..8, SelectableKind::Bullet),                 // "- point A" + "  more A"
+                (11..12, SelectableKind::Bullet),               // "- idea"
+                (12..13, SelectableKind::Quote),
+                (13..14, SelectableKind::Numbered),
+                (15..18, SelectableKind::CodeBlock),            // fence + body + fence
+                (21..22, SelectableKind::Todo { done: false }),
+                (22..23, SelectableKind::Todo { done: true }),
+            ]
+        );
+        assert_eq!(sel[1].text, "- point A\n  more A");
+        assert_eq!(sel[5].text, "```rust\nfn x() {}\n```");
+    }
+
+    #[test]
+    fn classify_markdown_heading_in_notes_is_selectable() {
+        let doc = Document::from_text("# Day\n\n## Notes\n\n## Subsection\n\n## To-dos\n");
+        let sel = doc.selectables();
+        assert_eq!(sel.len(), 1);
+        assert_eq!(sel[0].kind, SelectableKind::MarkdownHeading);
+        assert_eq!(sel[0].text, "## Subsection");
+    }
+
+    #[test]
+    fn classify_unterminated_fence_runs_to_section_end() {
+        let doc = Document::from_text("# Day\n\n## Notes\n\n```\nstuff\n\n## To-dos\n");
+        let sel = doc.selectables();
+        assert_eq!(sel.len(), 1);
+        assert_eq!(sel[0].kind, SelectableKind::CodeBlock);
+        assert_eq!(sel[0].lines, 4..7);
+    }
+
+    #[test]
+    fn classify_raw_external_line_is_selectable() {
+        let doc = Document::from_text("# Day\n\n## Notes\n\nplain external line\n\n## To-dos\n");
+        let sel = doc.selectables();
+        assert_eq!(sel.len(), 1);
+        assert_eq!(sel[0].kind, SelectableKind::Raw);
+        assert_eq!(sel[0].text, "plain external line");
     }
 }

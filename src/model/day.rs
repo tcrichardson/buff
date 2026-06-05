@@ -1,4 +1,5 @@
 use chrono::NaiveDate;
+use std::ops::Range;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum SectionKind {
@@ -15,13 +16,19 @@ pub enum EntryTarget {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum SelectableKind {
-    Entry,
+    Bullet,
     Todo { done: bool },
+    MeetingHeading { ordinal: usize },
+    MarkdownHeading,
+    Quote,
+    Numbered,
+    CodeBlock,
+    Raw,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Selectable {
-    pub line: usize,
+    pub lines: Range<usize>,
     pub kind: SelectableKind,
     pub text: String,
 }

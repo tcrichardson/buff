@@ -5,8 +5,8 @@ use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::Paragraph;
 
 pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
-    let selected_line = if app.focus == Focus::Navigate {
-        app.selectables.get(app.selected).map(|s| s.line)
+    let selected_range: Option<std::ops::Range<usize>> = if app.focus == Focus::Navigate {
+        app.selectables.get(app.selected).map(|s| s.lines.clone())
     } else {
         None
     };
@@ -17,7 +17,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
         .iter()
         .enumerate()
         .map(|(i, line)| {
-            let is_selected = selected_line == Some(i);
+            let is_selected = selected_range.as_ref().map_or(false, |r| r.contains(&i));
             let highlight = if is_selected {
                 Style::default().add_modifier(Modifier::REVERSED)
             } else {
@@ -96,9 +96,9 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
         })
         .collect();
 
-    let scroll_offset = if let Some(sel_line) = selected_line {
+    let scroll_offset = if let Some(r) = selected_range {
         let visible_height = area.height as usize;
-        (sel_line + 1).saturating_sub(visible_height)
+        r.end.saturating_sub(visible_height)
     } else {
         0
     };

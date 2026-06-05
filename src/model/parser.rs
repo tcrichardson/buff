@@ -66,6 +66,53 @@ pub fn is_ordered(line: &str) -> bool {
     rest.starts_with(". ") || rest.starts_with(") ")
 }
 
+pub fn is_section_heading(line: &str) -> bool {
+    matches!(line, "## Meetings" | "## Notes" | "## To-dos")
+}
+
+pub fn is_fence(line: &str) -> bool {
+    line.trim_start().starts_with("```")
+}
+
+pub fn is_quote(line: &str) -> bool {
+    let t = line.trim_start();
+    t == ">" || t.starts_with("> ")
+}
+
+pub fn is_bullet(line: &str) -> bool {
+    line.starts_with("- ") || line.starts_with("* ") || line.starts_with("+ ")
+}
+
+/// `Some(false)` for `- [ ]`, `Some(true)` for `- [x]`/`- [X]`, else `None`.
+pub fn todo_state(line: &str) -> Option<bool> {
+    if line.starts_with("- [ ] ") {
+        Some(false)
+    } else if line.starts_with("- [x] ") || line.starts_with("- [X] ") {
+        Some(true)
+    } else {
+        None
+    }
+}
+
+/// Index after the last continuation line starting at `from`. A continuation
+/// line is non-blank and indented by at least two spaces (or a tab).
+pub fn continuation_end(lines: &[String], from: usize) -> usize {
+    let mut j = from;
+    while j < lines.len() {
+        let l = &lines[j];
+        if l.trim().is_empty() {
+            break;
+        }
+        let indent = l.len() - l.trim_start().len();
+        if indent >= 2 || l.starts_with('\t') {
+            j += 1;
+        } else {
+            break;
+        }
+    }
+    j
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

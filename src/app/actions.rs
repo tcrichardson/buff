@@ -183,7 +183,8 @@ pub fn begin_edit_selected(state: &mut AppState) {
 
 pub fn commit_edit(state: &mut AppState) -> anyhow::Result<()> {
     if let Some(idx) = state.editing {
-        state.doc.edit_selectable(idx, &state.input)?;
+        let new_lines = crate::model::writer::format_entry(&state.input, None);
+        state.doc.replace_selectable(idx, &new_lines)?;
         state.selectables = state.doc.selectables();
         state.editing = None;
         state.input.clear();
@@ -489,7 +490,7 @@ mod tests {
         state.selected = 0;
         begin_edit_selected(&mut state);
         assert_eq!(state.editing, Some(0));
-        assert_eq!(state.input, "idea");
+        assert_eq!(state.input, "- idea");
         assert_eq!(state.focus, crate::app::state::Focus::Capture);
         state.input = "new idea".to_string();
         commit_edit(&mut state).unwrap();
