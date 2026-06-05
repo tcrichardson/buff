@@ -100,18 +100,12 @@ impl Document {
         ordinal
     }
 
-    pub fn add_entry(&mut self, target: &EntryTarget, text: &str, time: Option<&str>) {
-        let bullet = match time {
-            Some(t) => format!("- {} {}", t, text),
-            None => format!("- {}", text),
-        };
-
-        match target {
+    pub fn add_block(&mut self, target: &EntryTarget, block: &[String]) {
+        let insert_idx = match target {
             EntryTarget::Notes => {
                 let start = ensure_section(&mut self.lines, SectionKind::Notes);
                 let end = section_end(&self.lines, start);
-                let insert_idx = block_insert_index(&self.lines, start, end);
-                self.lines.insert(insert_idx, bullet);
+                block_insert_index(&self.lines, start, end)
             }
             EntryTarget::Meeting(ord) => {
                 let meetings = self.meetings();
@@ -125,10 +119,20 @@ impl Document {
                     .position(|(_, line)| line.starts_with("### ") || line.starts_with("## "))
                     .map(|i| start + 1 + i)
                     .unwrap_or(self.lines.len());
-                let insert_idx = block_insert_index(&self.lines, start, end);
-                self.lines.insert(insert_idx, bullet);
+                block_insert_index(&self.lines, start, end)
             }
+        };
+        for (k, line) in block.iter().enumerate() {
+            self.lines.insert(insert_idx + k, line.clone());
         }
+    }
+
+    pub fn add_entry(&mut self, target: &EntryTarget, text: &str, time: Option<&str>) {
+        let bullet = match time {
+            Some(t) => format!("- {} {}", t, text),
+            None => format!("- {}", text),
+        };
+        self.add_block(target, &[bullet]);
     }
 
     pub fn add_todo(&mut self, text: &str, meeting_name: Option<&str>) {
@@ -750,5 +754,12 @@ mod tests {
         assert_eq!(sel.len(), 1);
         assert_eq!(sel[0].kind, SelectableKind::Raw);
         assert_eq!(sel[0].text, "plain external line");
+    }
+
+    #[test]
+    fn add_block_inserts_multiple_lines_into_notes() {
+        let mut doc = Document::from_text("# Day\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
+        doc.add_block(&EntryTarget::Notes, &["- one".to_string(), "  two".to_string()]);
+        assert!(doc.to_text().contains("## Notes\n- one\n  two\n"), "got: {}", doc.to_text());
     }
 }

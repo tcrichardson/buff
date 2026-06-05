@@ -38,14 +38,12 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
             } else {
                 None
             };
-            match &state.context {
-                Context::Notes => {
-                    state.doc.add_entry(&EntryTarget::Notes, text, time);
-                }
-                Context::Meeting(ord) => {
-                    state.doc.add_entry(&EntryTarget::Meeting(*ord), text, time);
-                }
-            }
+            let block = crate::model::writer::format_entry(text, time);
+            let target = match &state.context {
+                Context::Notes => EntryTarget::Notes,
+                Context::Meeting(ord) => EntryTarget::Meeting(*ord),
+            };
+            state.doc.add_block(&target, &block);
             state.selectables = state.doc.selectables();
             state.save()?;
             state.dates_with_notes =
@@ -605,5 +603,27 @@ mod tests {
         assert_eq!(state.status, "Unknown command: /bogus");
         dispatch(&mut state, Command::Todo("buy milk".to_string())).unwrap();
         assert!(state.status.is_empty());
+    }
+
+    #[test]
+    fn entry_markdown_heading_stored_verbatim() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Entry("## Section".to_string())).unwrap();
+        let text = state.doc.to_text();
+        assert!(text.contains("## Section\n"), "got: {}", text);
+        assert!(!text.contains("- ## Section"), "should not be wrapped: {}", text);
+    }
+
+    #[test]
+    fn entry_multiline_plain_becomes_indented_bullet() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Entry("first\nsecond".to_string())).unwrap();
+        assert!(
+            state.doc.to_text().contains("- first\n  second\n"),
+            "got: {}",
+            state.doc.to_text()
+        );
     }
 }
