@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use chrono::{Datelike, NaiveDate};
 use std::collections::BTreeSet;
 
@@ -39,7 +41,7 @@ pub fn weeks(
     .signed_duration_since(first_day)
     .num_days() as usize;
 
-    let total_cells = ((offset + days_in_month + 6) / 7) * 7;
+    let total_cells = (offset + days_in_month).div_ceil(7) * 7;
     let mut cells: Vec<Option<NaiveDate>> = Vec::with_capacity(total_cells);
 
     // leading padding
@@ -53,7 +55,7 @@ pub fn weeks(
     }
 
     // trailing padding
-    while cells.len() % 7 != 0 {
+    while !cells.len().is_multiple_of(7) {
         cells.push(None);
     }
 
@@ -68,13 +70,13 @@ pub fn move_selection(
     state: &mut CalendarState,
     dx_days: i64,
     dy_weeks: i64,
-    _week_start: WeekStart,
 ) {
     let delta = dx_days + dy_weeks * 7;
     state.selected += chrono::Duration::days(delta);
     state.visible_month = (state.selected.year(), state.selected.month());
 }
 
+/// Convenience wrapper for checking if a date is in a set.
 pub fn marked(date: NaiveDate, dates: &BTreeSet<NaiveDate>) -> bool {
     dates.contains(&date)
 }
@@ -131,7 +133,7 @@ mod tests {
         let june_1 = NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
         let mut state = CalendarState::new(june_1);
 
-        move_selection(&mut state, -1, 0, WeekStart::Sunday);
+        move_selection(&mut state, -1, 0);
 
         let may_31 = NaiveDate::from_ymd_opt(2026, 5, 31).unwrap();
         assert_eq!(state.selected, may_31);
