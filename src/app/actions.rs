@@ -80,7 +80,9 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
         Command::Todo(text) => {
             let meeting_name = match &state.context {
                 Context::Meeting(ord) => state.doc.meetings().get(*ord).map(|m| m.name.clone()),
-                Context::NoteBlock(ord) => state.doc.note_headings().get(*ord).map(|n| n.name.clone()),
+                Context::NoteBlock(ord) => {
+                    state.doc.note_headings().get(*ord).map(|n| n.name.clone())
+                }
                 _ => None,
             };
             state.doc.add_todo(&text, meeting_name.as_deref());
@@ -715,7 +717,10 @@ mod tests {
         let text = state.doc.to_text();
         let heading_pos = text.find("### Idea Bucket").unwrap();
         let entry_pos = text.find("- point").unwrap();
-        assert!(entry_pos > heading_pos, "entry should be after note heading");
+        assert!(
+            entry_pos > heading_pos,
+            "entry should be after note heading"
+        );
         assert_eq!(state.context, Context::NoteBlock(0));
     }
 

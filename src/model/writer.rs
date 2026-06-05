@@ -271,9 +271,7 @@ impl Document {
                 if in_notes {
                     result.push(Selectable {
                         lines: i..i + 1,
-                        kind: SelectableKind::NoteHeading {
-                            ordinal: note_ord,
-                        },
+                        kind: SelectableKind::NoteHeading { ordinal: note_ord },
                         text: line.clone(),
                     });
                     note_ord += 1;
@@ -433,12 +431,17 @@ mod tests {
 
     #[test]
     fn add_entry_to_note_block() {
-        let mut doc = Document::from_text("# 2026-06-04\n\n## Meetings\n\n## Notes\n\n### Idea Bucket\n\n## To-dos\n");
+        let mut doc = Document::from_text(
+            "# 2026-06-04\n\n## Meetings\n\n## Notes\n\n### Idea Bucket\n\n## To-dos\n",
+        );
         doc.add_entry(&EntryTarget::NoteBlock(0), "point", None);
         let text = doc.to_text();
         let heading_pos = text.find("### Idea Bucket").unwrap();
         let entry_pos = text.find("- point").unwrap();
-        assert!(entry_pos > heading_pos, "entry should be after note heading");
+        assert!(
+            entry_pos > heading_pos,
+            "entry should be after note heading"
+        );
     }
 
     #[test]

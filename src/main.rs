@@ -55,12 +55,9 @@ fn run() -> Result<()> {
     // Load config and open today's note
     let (config, notes_dir) = buff::config::load(cli_notes_dir).context("Config error")?;
 
-    let mut app = buff::app::state::AppState::open_day(
-        notes_dir,
-        config,
-        chrono::Local::now().date_naive(),
-    )
-    .context("Failed to open day")?;
+    let mut app =
+        buff::app::state::AppState::open_day(notes_dir, config, chrono::Local::now().date_naive())
+            .context("Failed to open day")?;
 
     // Initialize terminal
     let mut terminal = ratatui::init();
@@ -204,9 +201,7 @@ fn run() -> Result<()> {
                                 app.input.clear();
                             }
                         }
-                        KeyCode::Char('j')
-                            if key.modifiers.contains(KeyModifiers::CONTROL) =>
-                        {
+                        KeyCode::Char('j') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             app.input.push('\n');
                         }
                         KeyCode::Up | KeyCode::Down => {

@@ -18,6 +18,7 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect) {
 
 Commands:
   /meeting "Name"  start meeting context
+  /note "Name"     start note context
   /note            switch to Notes context
   /todo text       add todo
   /leave           exit meeting context

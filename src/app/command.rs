@@ -2,7 +2,7 @@
 pub enum Command {
     Entry(String),
     Meeting(String),
-    Note,
+    Note(Option<String>),
     Todo(String),
     Leave,
     Goto(Option<chrono::NaiveDate>),
@@ -25,7 +25,14 @@ pub fn parse(input: &str) -> Command {
     let rest = parts.next().unwrap_or("").trim();
 
     match cmd {
-        "/note" => Command::Note,
+        "/note" => {
+            let name = rest.trim_matches('"').trim();
+            if name.is_empty() {
+                Command::Note(None)
+            } else {
+                Command::Note(Some(name.to_string()))
+            }
+        }
         "/leave" => Command::Leave,
         "/today" => Command::Today,
         "/help" => Command::Help,
@@ -102,7 +109,23 @@ mod tests {
 
     #[test]
     fn parse_note() {
-        assert_eq!(parse("/note"), Command::Note);
+        assert_eq!(parse("/note"), Command::Note(None));
+    }
+
+    #[test]
+    fn parse_note_quoted() {
+        assert_eq!(
+            parse("/note \"Idea Bucket\""),
+            Command::Note(Some("Idea Bucket".to_string()))
+        );
+    }
+
+    #[test]
+    fn parse_note_unquoted() {
+        assert_eq!(
+            parse("/note Idea Bucket"),
+            Command::Note(Some("Idea Bucket".to_string()))
+        );
     }
 
     #[test]
