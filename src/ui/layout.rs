@@ -152,4 +152,21 @@ mod tests {
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
         assert!(content.contains("June 2026"), "Expected 'June 2026' in buffer, got: {}", content);
     }
+
+    #[test]
+    fn render_help_overlay() {
+        let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let mut app = test_app(doc, Focus::Navigate, 0);
+        app.overlay = Overlay::Help;
+
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| {
+            render(frame, &app);
+        }).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        assert!(content.contains("/meeting"), "Expected '/meeting' in buffer, got: {}", content);
+    }
 }

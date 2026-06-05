@@ -110,6 +110,7 @@ fn run() -> Result<()> {
                         KeyCode::Enter => {
                             if let Some(cal) = app.calendar.take() {
                                 kua_tin::app::actions::go_to_date(&mut app, cal.selected)?;
+                                app.status.clear();
                                 app.overlay = Overlay::None;
                             }
                         }
@@ -135,6 +136,7 @@ fn run() -> Result<()> {
                 && key.code == KeyCode::Char('t')
             {
                 kua_tin::app::actions::go_today(&mut app)?;
+                app.status.clear();
                 continue;
             }
             if key.modifiers.contains(KeyModifiers::CONTROL)
@@ -207,7 +209,6 @@ fn run() -> Result<()> {
                                     app.pending_delete = false;
                                 }
                                 app.input.clear();
-                                app.status.clear();
                             }
                         }
                         KeyCode::Up | KeyCode::Down => {

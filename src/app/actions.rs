@@ -547,4 +547,24 @@ mod tests {
         dispatch(&mut state, Command::Help).unwrap();
         assert_eq!(state.status, "Press ? for help, /quit to exit");
     }
+
+    #[test]
+    fn invalid_args_sets_status() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        let before = state.doc.to_text();
+        dispatch(&mut state, Command::InvalidArgs("bad args".to_string())).unwrap();
+        assert_eq!(state.status, "bad args");
+        assert_eq!(state.doc.to_text(), before);
+    }
+
+    #[test]
+    fn status_cleared_after_successful_todo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Unknown("bogus".to_string())).unwrap();
+        assert_eq!(state.status, "Unknown command: /bogus");
+        dispatch(&mut state, Command::Todo("buy milk".to_string())).unwrap();
+        assert!(state.status.is_empty());
+    }
 }
