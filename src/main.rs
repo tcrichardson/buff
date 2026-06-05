@@ -24,8 +24,7 @@ fn run() -> Result<()> {
             "--notes-dir" => match args.next() {
                 Some(v) => cli_notes_dir = Some(v),
                 None => {
-                    eprintln!("Error: --notes-dir requires a value");
-                    std::process::exit(1);
+                    return Err(anyhow::anyhow!("--notes-dir requires a value"));
                 }
             },
             "--help" => {
@@ -37,8 +36,7 @@ fn run() -> Result<()> {
                 return Ok(());
             }
             _ => {
-                eprintln!("Unknown flag: {}", arg);
-                std::process::exit(1);
+                return Err(anyhow::anyhow!("Unknown flag: {}", arg));
             }
         }
     }
