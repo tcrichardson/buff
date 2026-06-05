@@ -27,6 +27,27 @@ Type at the bottom bar and press **Enter**. Plain text becomes a note entry. Use
 | `/help` | Show the help overlay. |
 | `/quit` | Exit. |
 
+### Markdown notes
+
+Plain text becomes a bullet. If what you type already looks like Markdown, it is
+stored verbatim:
+
+- `# Heading`, `## Subheading` — headings
+- `> quoted text` — blockquote
+- `1. first`, `2. second` — numbered list
+- `- item`, `* item`, `+ item` — bullet
+- ```` ``` ```` fenced code blocks
+
+### Multi-line notes
+
+Press **Alt+Enter** (Option+Enter on macOS) to add a line break while composing;
+**Enter** commits the whole entry. Plain multi-line text is stored as a single
+bullet with the following lines indented; code fences and quotes are stored
+verbatim.
+
+> macOS note: enable "Use Option as Meta key" in Terminal.app/iTerm2 settings so
+> Option+Enter reaches the app.
+
 ### Navigate mode
 
 Press **Esc** to move focus into the document. Use these keys to act on entries:
@@ -38,8 +59,11 @@ Press **Esc** to move focus into the document. Use these keys to act on entries:
 | `Space` or `x` | Toggle a to-do done / not done |
 | `e` | Edit the selected entry |
 | `d` then `d` | Delete the selected entry (two-step confirm) |
+| `Enter` | Re-enter the selected meeting (when a `### HH:MM Name` heading is selected) |
 | `?` | Open help overlay |
 | `i` or `Esc` | Return to capture mode |
+
+All entry types — bullets (including multi-line), to-dos, meeting headings, and Markdown blocks — are selectable, editable (`e`), and deletable (`dd`).
 
 ### Global shortcuts
 
