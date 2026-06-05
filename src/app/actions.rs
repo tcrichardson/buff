@@ -2,6 +2,27 @@ use crate::app::command::Command;
 use crate::app::state::{AppState, Context};
 use crate::model::day::EntryTarget;
 
+pub fn go_to_date(state: &mut AppState, date: chrono::NaiveDate) -> anyhow::Result<()> {
+    state.save()?;
+    let notes_dir = state.notes_dir.clone();
+    let config = state.config.clone();
+    *state = AppState::open_day(notes_dir, config, date)?;
+    state.save()?;
+    Ok(())
+}
+
+pub fn go_today(state: &mut AppState) -> anyhow::Result<()> {
+    go_to_date(state, chrono::Local::now().date_naive())
+}
+
+pub fn go_prev_day(state: &mut AppState) -> anyhow::Result<()> {
+    go_to_date(state, state.date - chrono::Duration::days(1))
+}
+
+pub fn go_next_day(state: &mut AppState) -> anyhow::Result<()> {
+    go_to_date(state, state.date + chrono::Duration::days(1))
+}
+
 pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
     match cmd {
         Command::Entry(text) => {
@@ -61,8 +82,15 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
         Command::InvalidArgs(msg) => {
             state.status = msg;
         }
-        Command::Today | Command::Goto(_) => {
-            state.status = "navigation handled separately".to_string();
+        Command::Today => {
+            go_today(state)?;
+        }
+        Command::Goto(Some(date)) => {
+            go_to_date(state, date)?;
+        }
+        Command::Goto(None) => {
+            state.overlay = crate::app::state::Overlay::Calendar;
+            // Calendar state initialization will be in Task 17
         }
     }
     Ok(())
@@ -424,5 +452,46 @@ mod tests {
         let path = tmp.path().join("2026-06-04-Thu.md");
         let saved = std::fs::read_to_string(&path).unwrap();
         assert!(saved.contains("- new idea\n"), "saved: {}", saved);
+    }
+
+    #[test]
+    fn go_prev_day_switches_date() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        go_prev_day(&mut state).unwrap();
+        assert_eq!(state.date, NaiveDate::from_ymd_opt(2026, 6, 3).unwrap());
+        let path = tmp.path().join("2026-06-03-Wed.md");
+        assert!(path.exists(), "previous day file should be created");
+    }
+
+    #[test]
+    fn go_next_day_switches_date() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        go_next_day(&mut state).unwrap();
+        assert_eq!(state.date, NaiveDate::from_ymd_opt(2026, 6, 5).unwrap());
+        let path = tmp.path().join("2026-06-05-Fri.md");
+        assert!(path.exists(), "next day file should be created");
+    }
+
+    #[test]
+    fn go_to_date_persists_current() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Entry("hello".to_string())).unwrap();
+        go_to_date(&mut state, NaiveDate::from_ymd_opt(2026, 6, 5).unwrap()).unwrap();
+        let path = tmp.path().join("2026-06-04-Thu.md");
+        let saved = std::fs::read_to_string(&path).unwrap();
+        assert!(saved.contains("- hello\n"), "original day should be persisted: {}", saved);
+    }
+
+    #[test]
+    fn go_to_date_loads_existing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("2026-06-05-Fri.md");
+        std::fs::write(&path, "# Custom Day\n\n## Meetings\n\n## Notes\n\n## To-dos\n").unwrap();
+        let mut state = test_state(&tmp);
+        go_to_date(&mut state, NaiveDate::from_ymd_opt(2026, 6, 5).unwrap()).unwrap();
+        assert_eq!(state.doc.to_text(), "# Custom Day\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
     }
 }
