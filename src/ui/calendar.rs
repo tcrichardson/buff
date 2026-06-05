@@ -22,9 +22,11 @@ impl CalendarState {
 }
 
 pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
-    let calendar = app.calendar.as_ref().unwrap();
+    let Some(calendar) = &app.calendar else {
+        return;
+    };
     let weeks_grid = weeks(calendar.visible_month, app.config.week_starts_on);
-    let dates_with_notes = crate::storage::dates_with_notes(&app.notes_dir, &app.config.date_format);
+    let dates_with_notes = &app.dates_with_notes;
 
     let popup_width = 32;
     let popup_height = 14;
@@ -63,7 +65,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
             match day {
                 Some(date) => {
                     let is_selected = date == calendar.selected;
-                    let has_note = marked(date, &dates_with_notes);
+                    let has_note = marked(date, dates_with_notes);
                     let mut text = format!("{:>2}", date.day());
                     if has_note {
                         text.push('·');
@@ -78,7 +80,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
                     cells.push(Cell::from(text).style(style));
                 }
                 None => {
-                    cells.push(Cell::from("   "));
+                    cells.push(Cell::from("    "));
                 }
             }
         }

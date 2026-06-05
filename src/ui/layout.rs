@@ -68,6 +68,7 @@ mod tests {
             context_display: "context: Notes".to_string(),
             pending_delete: false,
             calendar: None,
+            dates_with_notes: std::collections::BTreeSet::new(),
         }
     }
 

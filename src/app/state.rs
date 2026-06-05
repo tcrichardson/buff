@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::model::day::{Document, Selectable};
 use crate::storage;
 use chrono::NaiveDate;
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -40,6 +41,7 @@ pub struct AppState {
     pub context_display: String,
     pub pending_delete: bool,
     pub calendar: Option<crate::ui::calendar::CalendarState>,
+    pub dates_with_notes: BTreeSet<NaiveDate>,
 }
 
 impl AppState {
@@ -53,6 +55,7 @@ impl AppState {
         };
         let selectables = doc.selectables();
         let context_display = "context: Notes".to_string();
+        let dates_with_notes = storage::dates_with_notes(&notes_dir, &config.date_format);
         Ok(Self {
             doc,
             date,
@@ -70,6 +73,7 @@ impl AppState {
             context_display,
             pending_delete: false,
             calendar: None,
+            dates_with_notes,
         })
     }
 

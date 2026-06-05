@@ -8,6 +8,7 @@ pub fn go_to_date(state: &mut AppState, date: chrono::NaiveDate) -> anyhow::Resu
     let config = state.config.clone();
     *state = AppState::open_day(notes_dir, config, date)?;
     state.save()?;
+    state.dates_with_notes = crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
     Ok(())
 }
 
@@ -46,6 +47,7 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
             }
             state.selectables = state.doc.selectables();
             state.save()?;
+            state.dates_with_notes = crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
         }
         Command::Meeting(name) => {
             let ord = state.doc.add_meeting(&state.current_time_hhmm(), &name);
@@ -53,6 +55,7 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
             state.selectables = state.doc.selectables();
             state.update_context_display();
             state.save()?;
+            state.dates_with_notes = crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
         }
         Command::Note => {
             state.context = Context::Notes;
@@ -68,6 +71,7 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
             state.doc.add_todo(&text, meeting_name.as_deref());
             state.selectables = state.doc.selectables();
             state.save()?;
+            state.dates_with_notes = crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
         }
         Command::Leave => {
             state.context = Context::Notes;
@@ -134,6 +138,7 @@ pub fn toggle_selected(state: &mut AppState) {
         Ok(()) => {
             state.selectables = state.doc.selectables();
             let _ = state.save();
+            state.dates_with_notes = crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
         }
         Err(e) => {
             state.status = e.to_string();
@@ -151,6 +156,7 @@ pub fn delete_selected(state: &mut AppState) -> anyhow::Result<()> {
         state.selected = 0;
     }
     state.save()?;
+    state.dates_with_notes = crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
     Ok(())
 }
 
@@ -172,6 +178,7 @@ pub fn commit_edit(state: &mut AppState) -> anyhow::Result<()> {
         state.input.clear();
         state.focus = crate::app::state::Focus::Navigate;
         state.save()?;
+        state.dates_with_notes = crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
     }
     Ok(())
 }
