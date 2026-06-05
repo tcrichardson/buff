@@ -5,10 +5,11 @@ use ratatui::widgets::Paragraph;
 pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
     let input_line_count = app.input.split('\n').count().max(1) as u16;
     let input_height = (input_line_count + 2).clamp(3, 12);
+    let title_height = 5u16;
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),
+            Constraint::Length(title_height),
             Constraint::Min(0),
             Constraint::Length(1),
             Constraint::Length(input_height),
@@ -20,9 +21,27 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
     let status_area = chunks[2];
     let input_area = chunks[3];
 
-    let title = format!("buff — {}", app.date.format("%Y-%m-%d (%a)"));
-    let title_widget = Paragraph::new(title);
-    frame.render_widget(title_widget, title_area);
+    // Split title area into left (ASCII art) and right (date + context)
+    let title_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(0), Constraint::Length(30)])
+        .split(title_area);
+
+    let ascii_art = r#"_             __  __
+| |__  _   _  / _|/ _|
+| '_ \| | | || |_ | |_
+| |_) | |_| ||  _||  _|
+|_.__/ \__,_||_|  |_|"#;
+    let art_widget = Paragraph::new(ascii_art);
+    frame.render_widget(art_widget, title_chunks[0]);
+
+    let meta = format!(
+        "{}\n{}",
+        app.date.format("%Y-%m-%d (%a)"),
+        app.context_display
+    );
+    let meta_widget = Paragraph::new(meta);
+    frame.render_widget(meta_widget, title_chunks[1]);
 
     super::document::render(frame, app, document_area);
     super::capture::render_status(frame, app, status_area);
@@ -89,7 +108,7 @@ mod tests {
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("buff"), "Expected 'buff' in buffer");
+        assert!(content.contains("| |__"), "Expected ASCII art in buffer");
         assert!(content.contains("2026-06-04"), "Expected date in buffer");
         assert!(
             content.contains("context: Notes"),
