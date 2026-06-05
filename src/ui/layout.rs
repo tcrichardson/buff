@@ -226,4 +226,22 @@ mod tests {
             content
         );
     }
+
+    #[test]
+    fn render_quote_and_code_and_numbered() {
+        let doc = Document::from_text(
+            "# Day\n\n## Notes\n\n> a quote\n1. first item\n```\ncode line\n```\n\n## To-dos\n",
+        );
+        let app = test_app(doc, Focus::Capture, 0);
+
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app)).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        assert!(content.contains("a quote"), "quote text missing: {}", content);
+        assert!(content.contains("first item"), "numbered text missing: {}", content);
+        assert!(content.contains("code line"), "code text missing: {}", content);
+    }
 }

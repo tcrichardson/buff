@@ -11,6 +11,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
         None
     };
 
+    let mut in_code = false;
     let text_lines: Vec<Line> = app
         .doc
         .lines
@@ -19,60 +20,43 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
         .map(|(i, line)| {
             let is_selected = selected_range
                 .as_ref()
-                .is_some_and(|r| r.contains(&i));
+                .map(|r| r.contains(&i))
+                .unwrap_or(false);
             let highlight = if is_selected {
                 Style::default().add_modifier(Modifier::REVERSED)
             } else {
                 Style::default()
             };
 
+            let fence = line.trim_start().starts_with("```");
+            if in_code || fence {
+                if fence {
+                    in_code = !in_code;
+                }
+                return Line::from(Span::styled(
+                    line.as_str(),
+                    Style::default().fg(Color::DarkGray),
+                ))
+                .style(highlight);
+            }
+
             if let Some(rest) = line.strip_prefix("# ") {
-                Line::from(vec![
-                    Span::styled(
-                        "# ",
-                        Style::default()
-                            .fg(Color::White)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(
-                        rest,
-                        Style::default()
-                            .fg(Color::White)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                ])
+                Line::from(vec![Span::styled(
+                    format!("# {}", rest),
+                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                )])
                 .style(highlight)
             } else if let Some(rest) = line.strip_prefix("## ") {
-                Line::from(vec![
-                    Span::styled(
-                        "## ",
-                        Style::default()
-                            .fg(Color::Cyan)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(
-                        rest,
-                        Style::default()
-                            .fg(Color::Cyan)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                ])
+                Line::from(vec![Span::styled(
+                    format!("## {}", rest),
+                    Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                )])
                 .style(highlight)
             } else if let Some(rest) = line.strip_prefix("### ") {
-                Line::from(vec![
-                    Span::styled(
-                        "### ",
-                        Style::default()
-                            .fg(Color::Yellow)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::styled(
-                        rest,
-                        Style::default()
-                            .fg(Color::Yellow)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                ])
+                Line::from(vec![Span::styled(
+                    format!("### {}", rest),
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                )])
                 .style(highlight)
             } else if let Some(rest) = line.strip_prefix("- [ ] ") {
                 Line::from(vec![Span::raw("☐ "), Span::raw(rest)]).style(highlight)
@@ -84,14 +68,27 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
                     Span::styled("☑ ", Style::default().fg(Color::Green)),
                     Span::styled(
                         rest,
-                        Style::default()
-                            .fg(Color::Green)
-                            .add_modifier(Modifier::CROSSED_OUT),
+                        Style::default().fg(Color::Green).add_modifier(Modifier::CROSSED_OUT),
                     ),
                 ])
                 .style(highlight)
-            } else if let Some(rest) = line.strip_prefix("- ") {
+            } else if let Some(rest) = line
+                .strip_prefix("> ")
+                .or_else(|| if line == ">" { Some("") } else { None })
+            {
+                Line::from(vec![
+                    Span::styled("│ ", Style::default().fg(Color::Magenta)),
+                    Span::styled(rest, Style::default().add_modifier(Modifier::ITALIC)),
+                ])
+                .style(highlight)
+            } else if let Some(rest) = line
+                .strip_prefix("- ")
+                .or_else(|| line.strip_prefix("* "))
+                .or_else(|| line.strip_prefix("+ "))
+            {
                 Line::from(vec![Span::raw("• "), Span::raw(rest)]).style(highlight)
+            } else if crate::model::parser::is_ordered(line) {
+                Line::from(Span::raw(line.as_str())).style(highlight)
             } else {
                 Line::from(line.as_str()).style(highlight)
             }
