@@ -152,6 +152,34 @@ impl Document {
             SelectableKind::Entry => Err(anyhow::anyhow!("not a to-do")),
         }
     }
+
+    pub fn edit_selectable(&mut self, sel_index: usize, new_text: &str) -> anyhow::Result<()> {
+        let selectables = self.selectables();
+        let sel = selectables
+            .get(sel_index)
+            .ok_or_else(|| anyhow::anyhow!("index out of bounds"))?;
+        let new_line = match sel.kind {
+            SelectableKind::Entry => format!("- {}", new_text),
+            SelectableKind::Todo { done } => {
+                if done {
+                    format!("- [x] {}", new_text)
+                } else {
+                    format!("- [ ] {}", new_text)
+                }
+            }
+        };
+        self.lines[sel.line] = new_line;
+        Ok(())
+    }
+
+    pub fn delete_selectable(&mut self, sel_index: usize) -> anyhow::Result<()> {
+        let selectables = self.selectables();
+        let sel = selectables
+            .get(sel_index)
+            .ok_or_else(|| anyhow::anyhow!("index out of bounds"))?;
+        self.lines.remove(sel.line);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -399,5 +427,65 @@ mod tests {
         assert!(text.contains("- idea\n"), "notes entry should be unchanged");
         assert!(text.contains("- [ ] todo1\n"), "unchecked todo should be unchanged");
         assert!(text.contains("- [ ] todo2\n"), "checked todo should become unchecked");
+    }
+
+    #[test]
+    fn edit_entry_keeps_marker_and_swaps_text() {
+        let mut doc = Document::from_text("# 2026-06-04\n\n## Notes\n\n- idea\n");
+        doc.edit_selectable(0, "new idea").unwrap();
+        let text = doc.to_text();
+        assert!(text.contains("- new idea\n"), "got: {}", text);
+        assert!(!text.contains("- idea\n"), "old text should be gone");
+    }
+
+    #[test]
+    fn edit_checked_todo_keeps_marker_and_swaps_text() {
+        let mut doc = Document::from_text("# 2026-06-04\n\n## To-dos\n\n- [x] checked\n");
+        doc.edit_selectable(0, "done").unwrap();
+        let text = doc.to_text();
+        assert!(text.contains("- [x] done\n"), "got: {}", text);
+        assert!(!text.contains("- [x] checked\n"), "old text should be gone");
+    }
+
+    #[test]
+    fn delete_middle_selectable_removes_line() {
+        let mut doc = Document::from_text(
+            "# 2026-06-04\n\n## Notes\n\n- first\n- second\n- third\n",
+        );
+        doc.delete_selectable(1).unwrap();
+        let text = doc.to_text();
+        assert!(text.contains("- first\n"), "first should remain");
+        assert!(!text.contains("- second\n"), "second should be removed");
+        assert!(text.contains("- third\n"), "third should remain");
+    }
+
+    #[test]
+    fn delete_updates_selectable_indices() {
+        let mut doc = Document::from_text(
+            "# 2026-06-04\n\n## Notes\n\n- first\n- second\n- third\n",
+        );
+        doc.delete_selectable(1).unwrap();
+        let sel = doc.selectables();
+        assert_eq!(sel.len(), 2);
+        assert_eq!(sel[0].line, 4);
+        assert_eq!(sel[0].text, "first");
+        assert_eq!(sel[1].line, 5);
+        assert_eq!(sel[1].text, "third");
+    }
+
+    #[test]
+    fn edit_out_of_bounds_returns_err() {
+        let mut doc = Document::from_text("# 2026-06-04\n\n## Notes\n\n- idea\n");
+        let result = doc.edit_selectable(99, "x");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().to_string(), "index out of bounds");
+    }
+
+    #[test]
+    fn delete_out_of_bounds_returns_err() {
+        let mut doc = Document::from_text("# 2026-06-04\n\n## Notes\n\n- idea\n");
+        let result = doc.delete_selectable(99);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().to_string(), "index out of bounds");
     }
 }
