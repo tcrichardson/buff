@@ -25,6 +25,15 @@ pub fn go_next_day(state: &mut AppState) -> anyhow::Result<()> {
     go_to_date(state, state.date + chrono::Duration::days(1))
 }
 
+fn after_doc_mutation(state: &mut AppState) -> anyhow::Result<()> {
+    state.selectables = state.doc.selectables();
+    state.save()?;
+    state.dates_with_notes =
+        crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
+    state.status.clear();
+    Ok(())
+}
+
 pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
     match cmd {
         Command::Entry(text) => {
@@ -45,32 +54,20 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
                 Context::NoteBlock(ord) => EntryTarget::NoteBlock(*ord),
             };
             state.doc.add_block(&target, &block);
-            state.selectables = state.doc.selectables();
-            state.save()?;
-            state.dates_with_notes =
-                crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
-            state.status.clear();
+            after_doc_mutation(state)?;
         }
         Command::Meeting(name) => {
             let ord = state.doc.add_meeting(&state.current_time_hhmm(), &name);
             state.context = Context::Meeting(ord);
-            state.selectables = state.doc.selectables();
             state.update_context_display();
-            state.save()?;
-            state.dates_with_notes =
-                crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
-            state.status.clear();
+            after_doc_mutation(state)?;
         }
         Command::Note(name) => {
             if let Some(n) = name {
                 let ord = state.doc.add_note_heading(&n);
                 state.context = Context::NoteBlock(ord);
-                state.selectables = state.doc.selectables();
                 state.update_context_display();
-                state.save()?;
-                state.dates_with_notes =
-                    crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
-                state.status.clear();
+                after_doc_mutation(state)?;
             } else {
                 state.context = Context::Notes;
                 state.update_context_display();
@@ -86,11 +83,7 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
                 _ => None,
             };
             state.doc.add_todo(&text, meeting_name.as_deref());
-            state.selectables = state.doc.selectables();
-            state.save()?;
-            state.dates_with_notes =
-                crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
-            state.status.clear();
+            after_doc_mutation(state)?;
         }
         Command::Leave => {
             state.context = Context::Notes;
