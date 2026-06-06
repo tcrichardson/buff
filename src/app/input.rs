@@ -30,6 +30,8 @@ pub enum UiAction {
     TypeChar(char),
     DeleteChar,
     TypeNewline,
+    TypeIndent,
+    PrependIndent,
     SubmitInput,
     CommitEdit,
 
@@ -107,9 +109,10 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
         }
     }
 
-    // 4. Tab — focus cycle
+    // 4. Tab — focus cycle (or indent in capture mode)
     if key.code == KeyCode::Tab {
         return match state.focus {
+            Focus::Capture => Some(UiAction::TypeIndent),
             Focus::RightPanel => Some(UiAction::RightPanelBlur),
             _ => Some(UiAction::FocusRightPanel),
         };
@@ -169,6 +172,9 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
             }
             KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 Some(UiAction::MoveCursorLineEnd)
+            }
+            KeyCode::Char('.') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Some(UiAction::PrependIndent)
             }
             KeyCode::Up | KeyCode::Down => None, // ignored in capture mode
             _ => None,
@@ -257,6 +263,18 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         UiAction::TypeNewline => {
             state.input.insert(state.cursor_pos, '\n');
             state.cursor_pos += 1;
+        }
+        UiAction::TypeIndent => {
+            state.input.insert_str(state.cursor_pos, "  ");
+            state.cursor_pos += 2;
+        }
+        UiAction::PrependIndent => {
+            let line_start = match state.input[..state.cursor_pos].rfind('\n') {
+                Some(nl) => nl + 1,
+                None => 0,
+            };
+            state.input.insert_str(line_start, "->");
+            state.cursor_pos += 2;
         }
         UiAction::SubmitInput => {
             let cmd = crate::app::command::parse(&state.input);
@@ -662,6 +680,26 @@ mod tests {
     }
 
     #[test]
+    fn type_indent_inserts_two_spaces() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        execute_action(&mut state, UiAction::TypeIndent).unwrap();
+        assert_eq!(state.input, "  ");
+        assert_eq!(state.cursor_pos, 2);
+    }
+
+    #[test]
+    fn type_indent_inserts_at_cursor_pos() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "ab".to_string();
+        state.cursor_pos = 1; // between 'a' and 'b'
+        execute_action(&mut state, UiAction::TypeIndent).unwrap();
+        assert_eq!(state.input, "a  b");
+        assert_eq!(state.cursor_pos, 3);
+    }
+
+    #[test]
     fn initiate_delete_sets_pending_delete() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
@@ -763,13 +801,13 @@ mod tests {
     }
 
     #[test]
-    fn tab_in_capture_focuses_right_panel() {
+    fn tab_in_capture_inserts_indent() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::Capture;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Tab)),
-            Some(UiAction::FocusRightPanel)
+            Some(UiAction::TypeIndent)
         );
     }
 
@@ -1167,6 +1205,53 @@ mod tests {
         state.cursor_pos = 3; // already at position of '\n' on first line
         execute_action(&mut state, UiAction::MoveCursorLineEnd).unwrap();
         assert_eq!(state.cursor_pos, 3);
+    }
+
+    #[test]
+    fn ctrl_dot_in_capture_emits_prepend_indent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Capture;
+        let key = KeyEvent {
+            code: KeyCode::Char('.'),
+            modifiers: KeyModifiers::CONTROL,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        };
+        assert_eq!(key_to_action(&state, key), Some(UiAction::PrependIndent));
+    }
+
+    #[test]
+    fn prepend_indent_on_first_line_inserts_at_start() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "- item".to_string();
+        state.cursor_pos = 3; // mid-line
+        execute_action(&mut state, UiAction::PrependIndent).unwrap();
+        assert_eq!(state.input, "->- item");
+        assert_eq!(state.cursor_pos, 5); // 3 + 2
+    }
+
+    #[test]
+    fn prepend_indent_on_second_line_inserts_at_line_start() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "- parent\n- child".to_string();
+        state.cursor_pos = 12; // somewhere on second line ("- ch|ild")
+        execute_action(&mut state, UiAction::PrependIndent).unwrap();
+        assert_eq!(state.input, "- parent\n->- child");
+        assert_eq!(state.cursor_pos, 14); // 12 + 2
+    }
+
+    #[test]
+    fn prepend_indent_twice_stacks_markers() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "- item".to_string();
+        state.cursor_pos = 0;
+        execute_action(&mut state, UiAction::PrependIndent).unwrap();
+        execute_action(&mut state, UiAction::PrependIndent).unwrap();
+        assert_eq!(state.input, "->->- item");
     }
 
 }
