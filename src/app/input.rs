@@ -247,7 +247,11 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
             state.cursor_pos += c.len_utf8();
         }
         UiAction::DeleteChar => {
-            state.input.pop();
+            if state.cursor_pos > 0 {
+                let prev = prev_char_boundary(&state.input, state.cursor_pos);
+                state.input.remove(prev);
+                state.cursor_pos = prev;
+            }
         }
         UiAction::TypeNewline => {
             state.input.push('\n');
@@ -583,8 +587,32 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.input = "ab".to_string();
+        state.cursor_pos = 2; // cursor at end
         execute_action(&mut state, UiAction::DeleteChar).unwrap();
         assert_eq!(state.input, "a");
+        assert_eq!(state.cursor_pos, 1);
+    }
+
+    #[test]
+    fn delete_char_removes_char_before_cursor() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "abc".to_string();
+        state.cursor_pos = 2; // between 'b' and 'c'
+        execute_action(&mut state, UiAction::DeleteChar).unwrap();
+        assert_eq!(state.input, "ac");
+        assert_eq!(state.cursor_pos, 1);
+    }
+
+    #[test]
+    fn delete_char_at_start_is_noop() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "abc".to_string();
+        state.cursor_pos = 0;
+        execute_action(&mut state, UiAction::DeleteChar).unwrap();
+        assert_eq!(state.input, "abc");
+        assert_eq!(state.cursor_pos, 0);
     }
 
     #[test]
