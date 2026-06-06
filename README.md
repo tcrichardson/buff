@@ -45,6 +45,18 @@ Press **Enter** to commit. To insert a line break within a note, press
 is stored as a single bullet with the following lines indented; code fences
 and quotes are stored verbatim.
 
+### Editing in the capture box
+
+You can move the cursor within the capture box to fix typos or edit text
+before committing.
+
+| Key | Action |
+|---|---|
+| `←` / `→` | Move cursor one character left / right |
+| `Home` / `Ctrl+A` | Jump to start of current line |
+| `End` / `Ctrl+E` | Jump to end of current line |
+| `Backspace` | Delete character before cursor |
+
 ### Navigate mode
 
 Press **Esc** to move focus into the document. Use these keys to act on entries:
