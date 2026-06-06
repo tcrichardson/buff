@@ -616,6 +616,14 @@ mod tests {
     }
 
     #[test]
+    fn goto_none_sets_usage_status() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Goto(None)).unwrap();
+        assert_eq!(state.status, "usage: /goto YYYY-MM-DD");
+    }
+
+    #[test]
     fn invalid_args_sets_status() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);

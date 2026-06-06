@@ -22,7 +22,7 @@ Commands:
   /note            switch to Notes context
   /todo text       add todo
   /leave           exit meeting context
-  /goto, Ctrl-G    open calendar
+  /goto YYYY-MM-DD  jump to date
   /today, Ctrl-T   jump to today
 
 Navigation:

@@ -1,4 +1,4 @@
-pub mod calendar;
+mod calendar;
 mod capture;
 mod document;
 pub mod help;
