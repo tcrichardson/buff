@@ -14,7 +14,7 @@ The app opens today's note, creating it from a template if it doesn't exist yet.
 
 ### Capture mode (default)
 
-Type at the bottom bar and press **Enter**. Plain text becomes a note entry. Use slash commands to route entries into the right section.
+Type at the bottom bar and press **Enter**. Plain text is stored as-is. Use slash commands to route entries into the right section.
 
 | Command | What it does |
 |---|---|
@@ -29,8 +29,14 @@ Type at the bottom bar and press **Enter**. Plain text becomes a note entry. Use
 
 ### Markdown notes
 
-Plain text becomes a bullet. If what you type already looks like Markdown, it is
-stored verbatim:
+Plain text is stored as-is. If you want a bullet, type it explicitly:
+
+To create nested bullets or indented content, prefix the line with `->` (one level = 2 spaces). Stack for deeper nesting: `->->- item`. Use `Ctrl+.` to prepend `->` at the line start, or `Tab` to insert it at the cursor.
+
+```markdown
+->- Sub bullet          stored as:   - Sub bullet
+->->- Deep bullet       stored as:     - Deep bullet
+```
 
 - `# Heading`, `## Subheading` — headings
 - `> quoted text` — blockquote
@@ -41,9 +47,8 @@ stored verbatim:
 ### Multi-line notes
 
 Press **Enter** to commit. To insert a line break within a note, press
-**Ctrl+J** (the standard terminal key for a newline). Plain multi-line text
-is stored as a single bullet with the following lines indented; code fences
-and quotes are stored verbatim.
+**Ctrl+J** (the standard terminal key for a newline). Multi-line text is stored
+as-is; code fences and quotes are also stored verbatim.
 
 ### Editing in the capture box
 
@@ -56,6 +61,8 @@ before committing.
 | `Home` / `Ctrl+A` | Jump to start of current line |
 | `End` / `Ctrl+E` | Jump to end of current line |
 | `Backspace` | Delete character before cursor |
+| `Tab` | Insert indent marker (`->`) at cursor |
+| `Ctrl+.` | Prepend indent marker (`->`) at start of current line |
 
 ### Navigate mode
 
@@ -72,7 +79,7 @@ Press **Esc** to move focus into the document. Use these keys to act on entries:
 | `?` | Open help overlay |
 | `i` or `Esc` | Return to capture mode |
 
-All entry types — bullets (including multi-line), to-dos, meeting headings, and Markdown blocks — are selectable, editable (`e`), and deletable (`dd`).
+All entry types — plain text, bullets, to-dos, meeting headings, and Markdown blocks — are selectable, editable (`e`), and deletable (`dd`).
 
 ### Right panel
 
@@ -80,7 +87,7 @@ A persistent panel on the right side of the terminal always shows the current mo
 
 | Key | Action |
 |---|---|
-| `Tab` | Move focus into the right panel |
+| `Tab` (in navigate mode) | Move focus into the right panel |
 | `j` / `k` or `↑` / `↓` | Navigate between to-dos in the panel |
 | `Space` or `x` | Toggle the selected to-do done |
 | `Esc` or `Tab` | Return focus to the document |
@@ -101,7 +108,7 @@ Create `~/.config/buff/config.toml`:
 
 ```toml
 notes_dir = "~/Documents/buff"   # where daily files are stored
-timestamp_entries = false          # prefix every bullet with HH:MM
+timestamp_entries = false          # prefix every entry with HH:MM
 week_starts_on = "sunday"          # calendar layout: sunday or monday
 date_format = "%Y-%m-%d-%a"       # day-file naming pattern
 panel_width = 30                   # right panel width in terminal columns
@@ -120,11 +127,11 @@ Each day is a Markdown file named `YYYY-MM-DD-DOW.md`, e.g. `2026-06-04-Thu.md`:
 ## Meetings
 
 ### 09:15 Standup
-- Shipped the parser refactor
+Shipped the parser refactor
 - Alice is blocked on API keys
 
 ## Notes
-- Coffee machine is fixed
+Coffee machine is fixed
 
 ## To-dos
 - [ ] Follow up with Alice _(Standup)_

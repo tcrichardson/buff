@@ -15,6 +15,8 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect) {
 
     let help_text = r#"Capture mode:
   type to enter notes, Enter to submit, Esc to navigate
+  Tab        insert indent (->)
+  Ctrl+.     prepend indent at line start
 
 Commands:
   /meeting "Name"  start meeting context
