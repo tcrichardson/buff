@@ -1,8 +1,19 @@
 use crate::app::state::{AppState, Overlay};
-use ratatui::layout::{Constraint, Direction, Layout};
-use ratatui::widgets::Paragraph;
 
 pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
+    use ratatui::layout::{Constraint, Direction, Layout};
+
+    // Outer horizontal split: left = doc+chrome, right = panel
+    let panel_width = app.config.panel_width;
+    let outer = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(0), Constraint::Length(panel_width)])
+        .split(frame.area());
+
+    let left_area = outer[0];
+    let panel_area = outer[1];
+
+    // Left column: existing vertical stack
     let input_line_count = app.input.split('\n').count().max(1) as u16;
     let input_height = (input_line_count + 2).clamp(3, 12);
     let title_height = 5u16;
@@ -14,7 +25,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
             Constraint::Length(1),
             Constraint::Length(input_height),
         ])
-        .split(frame.area());
+        .split(left_area);
 
     let title_area = chunks[0];
     let document_area = chunks[1];
@@ -32,7 +43,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
 | '_ \| | | || |_ | |_
 | |_) | |_| ||  _||  _|
 |_.__/ \__,_||_|  |_|"#;
-    let art_widget = Paragraph::new(ascii_art);
+    let art_widget = ratatui::widgets::Paragraph::new(ascii_art);
     frame.render_widget(art_widget, title_chunks[0]);
 
     let meta = format!(
@@ -40,13 +51,17 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
         app.date.format("%Y-%m-%d (%a)"),
         app.context_display
     );
-    let meta_widget = Paragraph::new(meta);
+    let meta_widget = ratatui::widgets::Paragraph::new(meta);
     frame.render_widget(meta_widget, title_chunks[1]);
 
     super::document::render(frame, app, document_area);
     super::capture::render_status(frame, app, status_area);
     super::capture::render_input(frame, app, input_area);
 
+    // Right panel (stub — filled in Tasks 7 and 8)
+    super::right_panel::render(frame, panel_area, app);
+
+    // Overlays — keep the existing match unchanged for now; Calendar removed in Task 6
     match app.overlay {
         Overlay::Calendar => {
             super::calendar::render(frame, app, frame.area());
@@ -262,6 +277,15 @@ mod tests {
             "Expected '/meeting' in buffer, got: {}",
             content
         );
+    }
+
+    #[test]
+    fn right_panel_column_present_in_layout() {
+        let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let app = test_app(doc, Focus::Capture, 0);
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app)).unwrap();
     }
 
     #[test]
