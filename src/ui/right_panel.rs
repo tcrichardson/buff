@@ -17,6 +17,7 @@ fn display_text(raw: &str) -> String {
     let stripped = raw
         .strip_prefix("- [ ] ")
         .or_else(|| raw.strip_prefix("- [x] "))
+        .or_else(|| raw.strip_prefix("- [X] "))
         .unwrap_or(raw);
     let first_line = stripped.lines().next().unwrap_or(stripped);
     // Strip trailing " _(Tag)_"
@@ -182,6 +183,12 @@ mod tests {
         let todos = collect_panel_todos(tmp.path(), jun5(), &config);
         assert_eq!(todos.len(), 1);
         assert_eq!(todos[0].text, "follow up");
+    }
+
+    #[test]
+    fn uppercase_x_done_prefix_stripped() {
+        let result = display_text("- [X] some task");
+        assert_eq!(result, "some task");
     }
 
     #[test]
