@@ -58,11 +58,12 @@ pub fn heading_level(line: &str) -> Option<usize> {
 
 /// True if the line starts an ordered-list item: digits then `. ` or `) `.
 pub fn is_ordered(line: &str) -> bool {
-    let digits = line.chars().take_while(|c| c.is_ascii_digit()).count();
+    let t = line.trim_start();
+    let digits = t.chars().take_while(|c| c.is_ascii_digit()).count();
     if digits == 0 {
         return false;
     }
-    let rest = &line[digits..];
+    let rest = &t[digits..];
     rest.starts_with(". ") || rest.starts_with(") ")
 }
 
@@ -80,14 +81,18 @@ pub fn is_quote(line: &str) -> bool {
 }
 
 pub fn is_bullet(line: &str) -> bool {
-    line.starts_with("- ") || line.starts_with("* ") || line.starts_with("+ ")
+    let t = line.trim_start();
+    (t.starts_with("- ") && !t.starts_with("- ["))
+        || t.starts_with("* ")
+        || t.starts_with("+ ")
 }
 
 /// `Some(false)` for `- [ ]`, `Some(true)` for `- [x]`/`- [X]`, else `None`.
 pub fn todo_state(line: &str) -> Option<bool> {
-    if line.starts_with("- [ ] ") {
+    let t = line.trim_start();
+    if t.starts_with("- [ ] ") {
         Some(false)
-    } else if line.starts_with("- [x] ") || line.starts_with("- [X] ") {
+    } else if t.starts_with("- [x] ") || t.starts_with("- [X] ") {
         Some(true)
     } else {
         None
@@ -96,6 +101,8 @@ pub fn todo_state(line: &str) -> Option<bool> {
 
 /// Index after the last continuation line starting at `from`. A continuation
 /// line is non-blank and indented by at least two spaces (or a tab).
+/// Indented lines that look like new structural elements (bullet, todo,
+/// ordered list, heading, quote, or code fence) are not continuations.
 pub fn continuation_end(lines: &[String], from: usize) -> usize {
     let mut j = from;
     while j < lines.len() {
@@ -105,6 +112,16 @@ pub fn continuation_end(lines: &[String], from: usize) -> usize {
         }
         let indent = l.len() - l.trim_start().len();
         if indent >= 2 || l.starts_with('\t') {
+            if is_bullet(l)
+                || todo_state(l).is_some()
+                || is_ordered(l)
+                || heading_level(l).is_some()
+                || is_quote(l)
+                || is_fence(l)
+                || is_section_heading(l)
+            {
+                break;
+            }
             j += 1;
         } else {
             break;
@@ -193,5 +210,58 @@ mod tests {
         let start = heading_line(&lines, SectionKind::Meetings).unwrap();
         let end = section_end(&lines, start);
         assert_eq!(block_insert_index(&lines, start, end), 4);
+    }
+
+    #[test]
+    fn is_bullet_recognizes_indented() {
+        assert!(is_bullet("  - item"));
+        assert!(is_bullet("    * item"));
+        assert!(is_bullet("\t+ item"));
+        assert!(!is_bullet("  - [ ] todo"));
+        assert!(!is_bullet("plain"));
+    }
+
+    #[test]
+    fn todo_state_recognizes_indented() {
+        assert_eq!(todo_state("  - [ ] task"), Some(false));
+        assert_eq!(todo_state("    - [x] done"), Some(true));
+        assert_eq!(todo_state("  plain"), None);
+    }
+
+    #[test]
+    fn is_ordered_recognizes_indented() {
+        assert!(is_ordered("  1. first"));
+        assert!(is_ordered("    2) second"));
+        assert!(!is_ordered("  plain"));
+    }
+
+    #[test]
+    fn continuation_end_stops_at_indented_bullet() {
+        let lines = make_lines("- parent\n  - child\n");
+        assert_eq!(continuation_end(&lines, 1), 1);
+    }
+
+    #[test]
+    fn continuation_end_stops_at_indented_todo() {
+        let lines = make_lines("- parent\n  - [ ] child\n");
+        assert_eq!(continuation_end(&lines, 1), 1);
+    }
+
+    #[test]
+    fn continuation_end_stops_at_indented_ordered() {
+        let lines = make_lines("- parent\n  1. child\n");
+        assert_eq!(continuation_end(&lines, 1), 1);
+    }
+
+    #[test]
+    fn continuation_end_includes_plain_indented_text() {
+        let lines = make_lines("- parent\n  cont\n  more\n");
+        assert_eq!(continuation_end(&lines, 1), 3);
+    }
+
+    #[test]
+    fn continuation_end_mixed_parent_then_sub_bullet() {
+        let lines = make_lines("- parent\n  cont\n  - child\n");
+        assert_eq!(continuation_end(&lines, 1), 2);
     }
 }
