@@ -55,6 +55,30 @@ pub enum UiAction {
     RightPanelBlur,
 }
 
+/// Step back one Unicode scalar from `pos`. Returns 0 if already at start.
+fn prev_char_boundary(s: &str, pos: usize) -> usize {
+    if pos == 0 {
+        return 0;
+    }
+    let mut p = pos - 1;
+    while !s.is_char_boundary(p) {
+        p -= 1;
+    }
+    p
+}
+
+/// Step forward one Unicode scalar from `pos`. Returns `s.len()` if already at end.
+fn next_char_boundary(s: &str, pos: usize) -> usize {
+    if pos >= s.len() {
+        return s.len();
+    }
+    let mut p = pos + 1;
+    while p < s.len() && !s.is_char_boundary(p) {
+        p += 1;
+    }
+    p
+}
+
 pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     // 1. Ctrl-C always quits regardless of mode
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
@@ -808,6 +832,42 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let state = test_state(&tmp);
         assert_eq!(state.cursor_pos, 0);
+    }
+
+    #[test]
+    fn prev_char_boundary_steps_back_one_ascii() {
+        assert_eq!(super::prev_char_boundary("hello", 3), 2);
+    }
+
+    #[test]
+    fn prev_char_boundary_at_zero_stays_zero() {
+        assert_eq!(super::prev_char_boundary("hello", 0), 0);
+    }
+
+    #[test]
+    fn prev_char_boundary_steps_back_multibyte() {
+        // "é" is U+00E9, encoded as 2 bytes: 0xC3 0xA9
+        let s = "aé"; // bytes: [0x61, 0xC3, 0xA9]
+        assert_eq!(super::prev_char_boundary(s, 3), 1); // from end back to start of 'é'
+        assert_eq!(super::prev_char_boundary(s, 1), 0); // from 'é' back to 'a'
+    }
+
+    #[test]
+    fn next_char_boundary_steps_forward_one_ascii() {
+        assert_eq!(super::next_char_boundary("hello", 1), 2);
+    }
+
+    #[test]
+    fn next_char_boundary_at_end_stays_end() {
+        assert_eq!(super::next_char_boundary("hello", 5), 5);
+    }
+
+    #[test]
+    fn next_char_boundary_steps_forward_multibyte() {
+        // "aé" bytes: [0x61, 0xC3, 0xA9]
+        let s = "aé";
+        assert_eq!(super::next_char_boundary(s, 0), 1); // 'a' → start of 'é'
+        assert_eq!(super::next_char_boundary(s, 1), 3); // start of 'é' → past 'é' = end
     }
 
 }
