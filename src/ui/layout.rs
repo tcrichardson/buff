@@ -90,6 +90,9 @@ mod tests {
             pending_delete: false,
             calendar: None,
             dates_with_notes: std::collections::BTreeSet::new(),
+            right_panel_selected: 0,
+            right_panel_scroll: 0,
+            panel_todos: Vec::new(),
         }
     }
 

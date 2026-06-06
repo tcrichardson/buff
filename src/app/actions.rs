@@ -755,6 +755,24 @@ mod tests {
     }
 
     #[test]
+    fn open_day_populates_panel_todos_from_past_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let date = NaiveDate::from_ymd_opt(2026, 6, 5).unwrap();
+        let past = date - chrono::Duration::days(2);
+        let config = Config::default();
+        let past_path = crate::storage::path_for(tmp.path(), past, &config.date_format);
+        std::fs::write(
+            &past_path,
+            "# 2026-06-03 (Wed)\n\n## Meetings\n\n## Notes\n\n## To-dos\n- [ ] past task\n",
+        )
+        .unwrap();
+
+        let state = AppState::open_day(tmp.path().to_path_buf(), config, date).unwrap();
+        assert_eq!(state.panel_todos.len(), 1);
+        assert_eq!(state.panel_todos[0].text, "past task");
+    }
+
+    #[test]
     fn todo_in_note_gets_tag() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);

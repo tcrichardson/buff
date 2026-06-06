@@ -1,6 +1,7 @@
 use crate::config::Config;
 use crate::model::day::{Document, Selectable};
 use crate::storage;
+use crate::ui::right_panel::{self, PanelTodo};
 use chrono::NaiveDate;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -44,6 +45,9 @@ pub struct AppState {
     pub pending_delete: bool,
     pub calendar: Option<crate::ui::calendar::CalendarState>,
     pub dates_with_notes: BTreeSet<NaiveDate>,
+    pub right_panel_selected: usize,
+    pub right_panel_scroll: usize,
+    pub panel_todos: Vec<PanelTodo>,
 }
 
 impl AppState {
@@ -58,6 +62,7 @@ impl AppState {
         let selectables = doc.selectables();
         let context_display = "context: Notes".to_string();
         let dates_with_notes = storage::dates_with_notes(&notes_dir, &config.date_format);
+        let panel_todos = right_panel::collect_panel_todos(&notes_dir, date, &config);
         Ok(Self {
             doc,
             date,
@@ -76,6 +81,9 @@ impl AppState {
             pending_delete: false,
             calendar: None,
             dates_with_notes,
+            right_panel_selected: 0,
+            right_panel_scroll: 0,
+            panel_todos,
         })
     }
 
