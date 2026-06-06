@@ -164,8 +164,133 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     }
 }
 
-pub fn execute_action(_state: &mut AppState, _action: UiAction) -> Result<EventOutcome> {
-    todo!()
+pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOutcome> {
+    match action {
+        UiAction::Quit => return Ok(EventOutcome::Quit),
+
+        // Calendar overlay
+        UiAction::MoveCalendar { dx, dy } => {
+            if let Some(cal) = state.calendar.as_mut() {
+                crate::ui::calendar::move_selection(cal, dx as i64, dy as i64);
+            }
+        }
+        UiAction::ConfirmCalendar => {
+            if let Some(cal) = state.calendar.take() {
+                crate::app::actions::go_to_date(state, cal.selected)?;
+                state.status.clear();
+                state.overlay = Overlay::None;
+            }
+        }
+        UiAction::CloseCalendar => {
+            state.overlay = Overlay::None;
+            state.calendar = None;
+        }
+
+        // Help overlay
+        UiAction::CloseHelp => {
+            state.overlay = Overlay::None;
+        }
+
+        // Global hotkeys
+        UiAction::GoToday => {
+            crate::app::actions::go_today(state)?;
+            state.status.clear();
+        }
+        UiAction::OpenCalendar => {
+            state.pending_delete = false;
+            state.calendar = Some(crate::ui::calendar::CalendarState::new(state.date));
+            state.overlay = Overlay::Calendar;
+        }
+        UiAction::PrevDay => {
+            crate::app::actions::go_prev_day(state)?;
+        }
+        UiAction::NextDay => {
+            crate::app::actions::go_next_day(state)?;
+        }
+
+        // Escape handling
+        UiAction::CancelEdit => {
+            state.editing = None;
+            state.input.clear();
+        }
+        UiAction::ExitCaptureMode => {
+            state.focus = Focus::Navigate;
+        }
+        UiAction::ExitNavigateMode => {
+            state.pending_delete = false;
+            state.focus = Focus::Capture;
+        }
+
+        // Capture mode
+        UiAction::TypeChar(c) => {
+            state.input.push(c);
+        }
+        UiAction::DeleteChar => {
+            state.input.pop();
+        }
+        UiAction::TypeNewline => {
+            state.input.push('\n');
+        }
+        UiAction::SubmitInput => {
+            let cmd = crate::app::command::parse(&state.input);
+            crate::app::actions::dispatch(state, cmd)?;
+            if state.overlay != Overlay::None {
+                state.pending_delete = false;
+            }
+            state.input.clear();
+        }
+        UiAction::CommitEdit => {
+            crate::app::actions::commit_edit(state)?;
+        }
+
+        // Navigate mode
+        UiAction::SelectNext => {
+            crate::app::actions::select_next(state);
+        }
+        UiAction::SelectPrev => {
+            crate::app::actions::select_prev(state);
+        }
+        UiAction::SelectFirst => {
+            crate::app::actions::select_first(state);
+        }
+        UiAction::SelectLast => {
+            crate::app::actions::select_last(state);
+        }
+        UiAction::ToggleSelected => {
+            crate::app::actions::toggle_selected(state);
+        }
+        UiAction::BeginEdit => {
+            crate::app::actions::begin_edit_selected(state);
+        }
+        UiAction::InitiateDelete => {
+            state.pending_delete = true;
+        }
+        UiAction::ConfirmDelete => {
+            if let Err(e) = crate::app::actions::delete_selected(state) {
+                state.status = e.to_string();
+            }
+            state.pending_delete = false;
+        }
+        UiAction::CancelDelete => {
+            state.pending_delete = false;
+        }
+        UiAction::ResumeHeading => {
+            crate::app::actions::resume_selected_heading(state);
+        }
+        UiAction::OpenHelp => {
+            state.pending_delete = false;
+            state.overlay = Overlay::Help;
+        }
+        UiAction::SwitchToCapture => {
+            state.pending_delete = false;
+            state.focus = Focus::Capture;
+        }
+    }
+
+    if state.should_quit {
+        return Ok(EventOutcome::Quit);
+    }
+    Ok(EventOutcome::Continue)
 }
 
 #[cfg(test)]
@@ -378,5 +503,159 @@ mod tests {
         state.focus = Focus::Navigate;
         // Ctrl-X is not a recognized combo — should be None in navigate mode
         assert_eq!(key_to_action(&state, ctrl(KeyCode::Char('x'))), None);
+    }
+
+    // --- execute_action tests (simple state mutations only) ---
+
+    #[test]
+    fn quit_returns_quit_outcome() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        let outcome = execute_action(&mut state, UiAction::Quit).unwrap();
+        assert_eq!(outcome, EventOutcome::Quit);
+    }
+
+    #[test]
+    fn type_char_appends_to_input() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        execute_action(&mut state, UiAction::TypeChar('a')).unwrap();
+        assert_eq!(state.input, "a");
+    }
+
+    #[test]
+    fn type_char_multiple_appends_in_order() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        execute_action(&mut state, UiAction::TypeChar('h')).unwrap();
+        execute_action(&mut state, UiAction::TypeChar('i')).unwrap();
+        assert_eq!(state.input, "hi");
+    }
+
+    #[test]
+    fn delete_char_pops_last_char() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "ab".to_string();
+        execute_action(&mut state, UiAction::DeleteChar).unwrap();
+        assert_eq!(state.input, "a");
+    }
+
+    #[test]
+    fn delete_char_on_empty_input_is_noop() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        execute_action(&mut state, UiAction::DeleteChar).unwrap();
+        assert_eq!(state.input, "");
+    }
+
+    #[test]
+    fn type_newline_pushes_newline_char() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        execute_action(&mut state, UiAction::TypeNewline).unwrap();
+        assert_eq!(state.input, "\n");
+    }
+
+    #[test]
+    fn initiate_delete_sets_pending_delete() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        assert!(!state.pending_delete);
+        execute_action(&mut state, UiAction::InitiateDelete).unwrap();
+        assert!(state.pending_delete);
+    }
+
+    #[test]
+    fn cancel_delete_clears_pending_delete() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.pending_delete = true;
+        execute_action(&mut state, UiAction::CancelDelete).unwrap();
+        assert!(!state.pending_delete);
+    }
+
+    #[test]
+    fn cancel_edit_clears_editing_and_input() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.editing = Some(0);
+        state.input = "hello".to_string();
+        execute_action(&mut state, UiAction::CancelEdit).unwrap();
+        assert!(state.editing.is_none());
+        assert!(state.input.is_empty());
+    }
+
+    #[test]
+    fn exit_capture_mode_switches_focus_to_navigate() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        assert_eq!(state.focus, Focus::Capture); // default focus
+        execute_action(&mut state, UiAction::ExitCaptureMode).unwrap();
+        assert_eq!(state.focus, Focus::Navigate);
+    }
+
+    #[test]
+    fn exit_navigate_mode_switches_focus_to_capture_and_clears_pending() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Navigate;
+        state.pending_delete = true;
+        execute_action(&mut state, UiAction::ExitNavigateMode).unwrap();
+        assert_eq!(state.focus, Focus::Capture);
+        assert!(!state.pending_delete);
+    }
+
+    #[test]
+    fn open_help_sets_overlay_and_clears_pending() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Navigate;
+        state.pending_delete = true;
+        execute_action(&mut state, UiAction::OpenHelp).unwrap();
+        assert_eq!(state.overlay, Overlay::Help);
+        assert!(!state.pending_delete);
+    }
+
+    #[test]
+    fn close_help_clears_overlay() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.overlay = Overlay::Help;
+        execute_action(&mut state, UiAction::CloseHelp).unwrap();
+        assert_eq!(state.overlay, Overlay::None);
+    }
+
+    #[test]
+    fn switch_to_capture_sets_focus_and_clears_pending() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Navigate;
+        state.pending_delete = true;
+        execute_action(&mut state, UiAction::SwitchToCapture).unwrap();
+        assert_eq!(state.focus, Focus::Capture);
+        assert!(!state.pending_delete);
+    }
+
+    #[test]
+    fn open_calendar_sets_overlay_and_clears_pending() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.pending_delete = true;
+        execute_action(&mut state, UiAction::OpenCalendar).unwrap();
+        assert_eq!(state.overlay, Overlay::Calendar);
+        assert!(state.calendar.is_some());
+        assert!(!state.pending_delete);
+    }
+
+    #[test]
+    fn close_calendar_clears_overlay_and_calendar() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.overlay = Overlay::Calendar;
+        state.calendar = Some(crate::ui::calendar::CalendarState::new(state.date));
+        execute_action(&mut state, UiAction::CloseCalendar).unwrap();
+        assert_eq!(state.overlay, Overlay::None);
+        assert!(state.calendar.is_none());
     }
 }
