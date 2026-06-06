@@ -215,9 +215,21 @@ pub fn toggle_panel_todo(state: &mut AppState) -> anyhow::Result<()> {
     };
 
     let path = crate::storage::path_for(&state.notes_dir, todo.date, &state.config.date_format);
-    let text = std::fs::read_to_string(&path)?;
+    let text = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            // File was removed since panel was loaded — refresh and return
+            state.panel_todos =
+                crate::ui::right_panel::collect_panel_todos(&state.notes_dir, state.date, &state.config);
+            return Ok(());
+        }
+        Err(e) => return Err(e.into()),
+    };
     let mut doc = crate::model::day::Document::from_text(&text);
-    doc.toggle_todo(todo.todo_index)?;
+    if let Err(e) = doc.toggle_todo(todo.todo_index) {
+        state.status = e.to_string();
+        return Ok(());
+    }
 
     // Write back to disk atomically
     let tmp_path = path.with_extension("tmp");
@@ -233,6 +245,10 @@ pub fn toggle_panel_todo(state: &mut AppState) -> anyhow::Result<()> {
     // Rebuild panel_todos (the toggled item is now done, drops off the list)
     state.panel_todos =
         crate::ui::right_panel::collect_panel_todos(&state.notes_dir, state.date, &state.config);
+
+    // Refresh dates_with_notes after writing the file
+    state.dates_with_notes =
+        crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
 
     // Clamp selection to new list length
     let new_len = state.panel_todos.len();
@@ -868,6 +884,35 @@ mod tests {
         state.focus = crate::app::state::Focus::RightPanel;
         state.right_panel_selected = 0;
         assert!(toggle_panel_todo(&mut state).is_ok());
+    }
+
+    #[test]
+    fn toggle_panel_todo_refreshes_dates_with_notes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = Config::default();
+        let today = NaiveDate::from_ymd_opt(2026, 6, 5).unwrap();
+        let past = today - chrono::Duration::days(1);
+
+        let past_path = crate::storage::path_for(tmp.path(), past, &config.date_format);
+        std::fs::write(
+            &past_path,
+            "# 2026-06-04 (Thu)\n\n## Meetings\n\n## Notes\n\n## To-dos\n- [ ] past task\n",
+        )
+        .unwrap();
+
+        let mut state =
+            AppState::open_day(tmp.path().to_path_buf(), config.clone(), today).unwrap();
+        state.focus = crate::app::state::Focus::RightPanel;
+        state.right_panel_selected = 0;
+
+        // dates_with_notes should include the past date before toggle
+        assert!(state.dates_with_notes.contains(&past));
+
+        toggle_panel_todo(&mut state).unwrap();
+
+        // dates_with_notes should still be consistent after toggle
+        // (the file still exists even though the todo is done)
+        assert!(state.dates_with_notes.contains(&past));
     }
 
     #[test]
