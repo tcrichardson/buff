@@ -254,7 +254,8 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
             }
         }
         UiAction::TypeNewline => {
-            state.input.push('\n');
+            state.input.insert(state.cursor_pos, '\n');
+            state.cursor_pos += 1;
         }
         UiAction::SubmitInput => {
             let cmd = crate::app::command::parse(&state.input);
@@ -629,6 +630,17 @@ mod tests {
         let mut state = test_state(&tmp);
         execute_action(&mut state, UiAction::TypeNewline).unwrap();
         assert_eq!(state.input, "\n");
+    }
+
+    #[test]
+    fn type_newline_inserts_at_cursor_pos() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "ab".to_string();
+        state.cursor_pos = 1; // between 'a' and 'b'
+        execute_action(&mut state, UiAction::TypeNewline).unwrap();
+        assert_eq!(state.input, "a\nb");
+        assert_eq!(state.cursor_pos, 2);
     }
 
     #[test]
