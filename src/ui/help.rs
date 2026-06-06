@@ -34,7 +34,13 @@ Navigation:
   d d        delete
   i/Esc      capture mode
   ?          help
-  Ctrl-C     quit"#;
+  Ctrl-C     quit
+
+Right panel:
+  Tab        focus right panel
+  j/k or ↑/↓  navigate panel todos
+  Space/x    toggle selected todo
+  Esc        return to document"#;
 
     let block = Block::default().title("Help").borders(Borders::ALL);
     let paragraph = Paragraph::new(help_text).block(block);

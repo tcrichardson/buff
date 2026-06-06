@@ -30,6 +30,8 @@ fn after_doc_mutation(state: &mut AppState) -> anyhow::Result<()> {
     state.save()?;
     state.dates_with_notes =
         crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
+    state.panel_todos =
+        crate::ui::right_panel::collect_panel_todos(&state.notes_dir, state.date, &state.config);
     state.status.clear();
     Ok(())
 }
@@ -154,6 +156,8 @@ pub fn toggle_selected(state: &mut AppState) {
             let _ = state.save();
             state.dates_with_notes =
                 crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
+            state.panel_todos =
+                crate::ui::right_panel::collect_panel_todos(&state.notes_dir, state.date, &state.config);
         }
         Err(e) => {
             state.status = e.to_string();
@@ -959,6 +963,18 @@ mod tests {
         let state = AppState::open_day(tmp.path().to_path_buf(), config, date).unwrap();
         assert_eq!(state.panel_todos.len(), 1);
         assert_eq!(state.panel_todos[0].text, "past task");
+    }
+
+    #[test]
+    fn after_doc_mutation_refreshes_panel_todos() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        assert!(state.panel_todos.is_empty());
+
+        dispatch(&mut state, Command::Todo("new task".to_string())).unwrap();
+
+        assert_eq!(state.panel_todos.len(), 1, "panel_todos should refresh after adding todo");
+        assert_eq!(state.panel_todos[0].text, "new task");
     }
 
     #[test]

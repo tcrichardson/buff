@@ -44,7 +44,7 @@ pub struct AppState {
     pub pending_delete: bool,
     pub dates_with_notes: BTreeSet<NaiveDate>,
     pub right_panel_selected: usize,
-    pub right_panel_scroll: usize,
+    pub right_panel_scroll: usize, // scroll offset for todo list — scroll-follow not yet implemented
     pub panel_todos: Vec<PanelTodo>,
 }
 

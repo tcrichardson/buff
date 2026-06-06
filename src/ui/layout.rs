@@ -58,7 +58,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
     super::capture::render_status(frame, app, status_area);
     super::capture::render_input(frame, app, input_area);
 
-    // Right panel (stub — filled in Tasks 7 and 8)
+    // Right panel
     super::right_panel::render(frame, panel_area, app);
 
     // Overlays
