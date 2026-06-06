@@ -184,6 +184,7 @@ pub fn begin_edit_selected(state: &mut AppState) {
     if let Some(sel) = state.selectables.get(state.selected) {
         state.editing = Some(state.selected);
         state.input = sel.text.clone();
+        state.cursor_pos = state.input.len();
         state.focus = crate::app::state::Focus::Capture;
     } else {
         state.status = "nothing selected".to_string();
@@ -272,6 +273,7 @@ pub fn commit_edit(state: &mut AppState) -> anyhow::Result<()> {
         state.selectables = state.doc.selectables();
         state.editing = None;
         state.input.clear();
+        state.cursor_pos = 0;
         state.focus = crate::app::state::Focus::Navigate;
         state.save()?;
         state.dates_with_notes =
@@ -587,6 +589,30 @@ mod tests {
         let path = tmp.path().join("2026-06-04-Thu.md");
         let saved = std::fs::read_to_string(&path).unwrap();
         assert!(saved.contains("- new idea\n"), "saved: {}", saved);
+    }
+
+    #[test]
+    fn cursor_pos_set_to_end_on_begin_edit() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Entry("idea".to_string())).unwrap();
+        state.selected = 0;
+        begin_edit_selected(&mut state);
+        // "- idea" is 6 bytes
+        assert_eq!(state.cursor_pos, state.input.len());
+        assert_eq!(state.cursor_pos, 6);
+    }
+
+    #[test]
+    fn cursor_pos_reset_to_zero_on_commit_edit() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Entry("idea".to_string())).unwrap();
+        state.selected = 0;
+        begin_edit_selected(&mut state);
+        state.cursor_pos = 3;
+        commit_edit(&mut state).unwrap();
+        assert_eq!(state.cursor_pos, 0);
     }
 
     #[test]

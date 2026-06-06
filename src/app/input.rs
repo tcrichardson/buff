@@ -232,6 +232,7 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         UiAction::CancelEdit => {
             state.editing = None;
             state.input.clear();
+            state.cursor_pos = 0;
         }
         UiAction::ExitCaptureMode => {
             state.focus = Focus::Navigate;
@@ -264,6 +265,7 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
                 state.pending_delete = false;
             }
             state.input.clear();
+            state.cursor_pos = 0;
         }
         UiAction::CommitEdit => {
             crate::app::actions::commit_edit(state)?;
@@ -686,6 +688,27 @@ mod tests {
         execute_action(&mut state, UiAction::CancelEdit).unwrap();
         assert!(state.editing.is_none());
         assert!(state.input.is_empty());
+    }
+
+    #[test]
+    fn cursor_pos_reset_to_zero_on_submit() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "hello".to_string();
+        state.cursor_pos = 3;
+        execute_action(&mut state, UiAction::SubmitInput).unwrap();
+        assert_eq!(state.cursor_pos, 0);
+    }
+
+    #[test]
+    fn cursor_pos_reset_to_zero_on_cancel_edit() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.editing = Some(0);
+        state.input = "hello".to_string();
+        state.cursor_pos = 3;
+        execute_action(&mut state, UiAction::CancelEdit).unwrap();
+        assert_eq!(state.cursor_pos, 0);
     }
 
     #[test]
