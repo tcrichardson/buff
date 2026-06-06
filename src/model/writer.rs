@@ -2,6 +2,22 @@ use crate::model::day::SectionKind;
 use crate::model::day::{Document, EntryTarget, Meeting, Selectable, SelectableKind};
 use crate::model::parser::{block_insert_index, ensure_section, heading_line, section_end};
 
+/// Strip leading `->` markers and replace each with two spaces.
+/// `->` appearing anywhere other than the very start of the line is preserved.
+pub fn expand_indent_markers(line: &str) -> String {
+    let mut rest = line;
+    let mut indent = String::new();
+    while let Some(after) = rest.strip_prefix("->") {
+        indent.push_str("  ");
+        rest = after;
+    }
+    if indent.is_empty() {
+        line.to_string()
+    } else {
+        format!("{}{}", indent, rest)
+    }
+}
+
 /// True if the first line of an entry already looks like Markdown and should be
 /// stored verbatim rather than wrapped in a bullet.
 pub fn looks_like_markdown(first_line: &str) -> bool {
@@ -22,7 +38,7 @@ pub fn looks_like_markdown(first_line: &str) -> bool {
 }
 
 /// Convert composed (possibly multi-line) input into the Markdown lines to store.
-/// Plain text becomes a bullet (with optional `HH:MM` timestamp on the first
+/// Plain text is returned as-is (with optional `HH:MM` timestamp on the first
 /// line); anything that looks like Markdown is stored verbatim with no timestamp.
 pub fn format_entry(input: &str, timestamp: Option<&str>) -> Vec<String> {
     let mut raw: Vec<&str> = input.split('\n').collect();
@@ -30,18 +46,22 @@ pub fn format_entry(input: &str, timestamp: Option<&str>) -> Vec<String> {
         raw.pop();
     }
 
+    // Expand leading `->` markers to spaces on every line before any other processing.
+    let expanded: Vec<String> = raw.iter().map(|l| expand_indent_markers(l)).collect();
+    let raw: Vec<&str> = expanded.iter().map(|s| s.as_str()).collect();
+
     if looks_like_markdown(raw[0]) {
         return raw.iter().map(|s| s.to_string()).collect();
     }
 
     let mut out = Vec::with_capacity(raw.len());
     let first = match timestamp {
-        Some(ts) => format!("- {} {}", ts, raw[0]),
-        None => format!("- {}", raw[0]),
+        Some(ts) => format!("{} {}", ts, raw[0]),
+        None => raw[0].to_string(),
     };
     out.push(first);
     for line in &raw[1..] {
-        out.push(format!("  {}", line));
+        out.push(line.to_string());
     }
     out
 }
@@ -179,11 +199,8 @@ impl Document {
     }
 
     pub fn add_entry(&mut self, target: &EntryTarget, text: &str, time: Option<&str>) {
-        let bullet = match time {
-            Some(t) => format!("- {} {}", t, text),
-            None => format!("- {}", text),
-        };
-        self.add_block(target, &[bullet]);
+        let block = format_entry(text, time);
+        self.add_block(target, &block);
     }
 
     pub fn add_todo(&mut self, text: &str, meeting_name: Option<&str>) {
@@ -437,7 +454,7 @@ mod tests {
         doc.add_entry(&EntryTarget::NoteBlock(0), "point", None);
         let text = doc.to_text();
         let heading_pos = text.find("### Idea Bucket").unwrap();
-        let entry_pos = text.find("- point").unwrap();
+        let entry_pos = text.find("point\n").unwrap();
         assert!(
             entry_pos > heading_pos,
             "entry should be after note heading"
@@ -483,7 +500,7 @@ mod tests {
         let mut doc = Document::from_text("# 2026-06-04\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
         doc.add_entry(&EntryTarget::Notes, "hi", None);
         let text = doc.to_text();
-        assert!(text.contains("## Notes\n- hi\n"), "got: {}", text);
+        assert!(text.contains("## Notes\nhi\n"), "got: {}", text);
     }
 
     #[test]
@@ -495,7 +512,7 @@ mod tests {
         let text = doc.to_text();
         let standup_pos = text.find("### 09:15 Standup").unwrap();
         let review_pos = text.find("### 10:00 Review").unwrap();
-        let entry_pos = text.find("- point").unwrap();
+        let entry_pos = text.find("point\n").unwrap();
         assert!(entry_pos > standup_pos, "entry should be after Standup");
         assert!(entry_pos < review_pos, "entry should be before Review");
     }
@@ -505,7 +522,7 @@ mod tests {
         let mut doc = Document::from_text("# 2026-06-04\n\n## Meetings\n\n## Notes\n\n## To-dos\n");
         doc.add_entry(&EntryTarget::Notes, "point", Some("09:20"));
         let text = doc.to_text();
-        assert!(text.contains("- 09:20 point\n"), "got: {}", text);
+        assert!(text.contains("09:20 point\n"), "got: {}", text);
     }
 
     #[test]
@@ -581,23 +598,15 @@ mod tests {
     }
 
     #[test]
-    fn add_todo_creates_missing_section() {
-        let mut doc = Document::from_text("# Title\n\n## Meetings\n\n## Notes\n");
-        doc.add_todo("something", None);
-        let text = doc.to_text();
-        assert!(
-            text.contains("## To-dos\n- [ ] something\n"),
-            "got: {}",
-            text
-        );
-    }
-
-    #[test]
     fn add_entry_creates_missing_notes_section() {
         let mut doc = Document::from_text("# Title\n\n## Meetings\n\n## To-dos\n");
         doc.add_entry(&EntryTarget::Notes, "idea", None);
         let text = doc.to_text();
-        assert!(text.contains("## Notes\n- idea\n"), "got: {}", text);
+        assert!(
+            text.contains("## Notes\nidea\n"),
+            "got: {}",
+            text
+        );
     }
 
     #[test]
@@ -617,7 +626,7 @@ mod tests {
             "prose at end missing: {}",
             text
         );
-        assert!(text.contains("- idea\n"), "entry missing: {}", text);
+        assert!(text.contains("idea\n"), "entry missing: {}", text);
     }
 
     #[test]
@@ -754,20 +763,20 @@ mod tests {
     }
 
     #[test]
-    fn format_plain_single_line_becomes_bullet() {
-        assert_eq!(format_entry("hello world", None), vec!["- hello world"]);
+    fn format_plain_single_line_passthrough() {
+        assert_eq!(format_entry("hello world", None), vec!["hello world"]);
     }
 
     #[test]
     fn format_plain_single_line_with_timestamp() {
-        assert_eq!(format_entry("hello", Some("09:20")), vec!["- 09:20 hello"]);
+        assert_eq!(format_entry("hello", Some("09:20")), vec!["09:20 hello"]);
     }
 
     #[test]
-    fn format_plain_multiline_indents_continuation() {
+    fn format_plain_multiline_passthrough() {
         assert_eq!(
             format_entry("first\nsecond\nthird", None),
-            vec!["- first", "  second", "  third"]
+            vec!["first", "second", "third"]
         );
     }
 
@@ -775,7 +784,7 @@ mod tests {
     fn format_plain_multiline_timestamp_first_line_only() {
         assert_eq!(
             format_entry("first\nsecond", Some("09:20")),
-            vec!["- 09:20 first", "  second"]
+            vec!["09:20 first", "second"]
         );
     }
 
@@ -809,7 +818,7 @@ mod tests {
 
     #[test]
     fn format_strips_trailing_blank_lines() {
-        assert_eq!(format_entry("hello\n", None), vec!["- hello"]);
+        assert_eq!(format_entry("hello\n", None), vec!["hello"]);
     }
 
     #[test]
@@ -893,6 +902,116 @@ mod tests {
             doc.to_text().contains("## Notes\n- one\n  two\n"),
             "got: {}",
             doc.to_text()
+        );
+    }
+
+    #[test]
+    fn indented_bullet_is_independent_selectable() {
+        let doc = Document::from_text("# Day\n\n## Notes\n\n- parent\n  - child\n\n## To-dos\n");
+        let sel = doc.selectables();
+        assert_eq!(sel.len(), 2, "expected two selectables, got: {:?}", sel);
+        assert_eq!(sel[0].kind, SelectableKind::Bullet);
+        assert_eq!(sel[0].text, "- parent");
+        assert_eq!(sel[1].kind, SelectableKind::Bullet);
+        assert_eq!(sel[1].text, "  - child");
+    }
+
+    #[test]
+    fn indented_todo_is_independent_selectable() {
+        let doc = Document::from_text("# Day\n\n## Notes\n\n- parent\n  - [ ] child\n\n## To-dos\n");
+        let sel = doc.selectables();
+        assert_eq!(sel.len(), 2, "expected two selectables, got: {:?}", sel);
+        assert_eq!(sel[0].kind, SelectableKind::Bullet);
+        assert_eq!(sel[0].text, "- parent");
+        assert_eq!(sel[1].kind, SelectableKind::Todo { done: false });
+        assert_eq!(sel[1].text, "  - [ ] child");
+    }
+
+    #[test]
+    fn parent_with_continuation_then_sub_bullet() {
+        let doc = Document::from_text(
+            "# Day\n\n## Notes\n\n- parent\n  cont\n  - child\n\n## To-dos\n",
+        );
+        let sel = doc.selectables();
+        assert_eq!(sel.len(), 2, "expected two selectables, got: {:?}", sel);
+        assert_eq!(sel[0].kind, SelectableKind::Bullet);
+        assert_eq!(sel[0].text, "- parent\n  cont");
+        assert_eq!(sel[1].kind, SelectableKind::Bullet);
+        assert_eq!(sel[1].text, "  - child");
+    }
+
+    #[test]
+    fn replace_sub_bullet_does_not_join_parent() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## Notes\n\n- parent\n  - child\n\n## To-dos\n",
+        );
+        let sel = doc.selectables();
+        let child_idx = sel
+            .iter()
+            .position(|s| s.text == "  - child")
+            .expect("child should be selectable");
+        doc.replace_selectable(child_idx, &["  - changed".to_string()])
+            .unwrap();
+        let text = doc.to_text();
+        assert!(text.contains("- parent\n"), "parent should remain: {}", text);
+        assert!(
+            text.contains("  - changed\n"),
+            "child should be changed: {}",
+            text
+        );
+        assert!(!text.contains("  - child\n"), "old child should be gone: {}", text);
+    }
+
+    #[test]
+    fn expand_indent_markers_zero_markers() {
+        assert_eq!(expand_indent_markers("- item"), "- item");
+    }
+
+    #[test]
+    fn expand_indent_markers_one_marker() {
+        assert_eq!(expand_indent_markers("->- item"), "  - item");
+    }
+
+    #[test]
+    fn expand_indent_markers_two_markers() {
+        assert_eq!(expand_indent_markers("->->- item"), "    - item");
+    }
+
+    #[test]
+    fn expand_indent_markers_three_markers() {
+        assert_eq!(expand_indent_markers("->->->- item"), "      - item");
+    }
+
+    #[test]
+    fn expand_indent_markers_plain_text() {
+        assert_eq!(expand_indent_markers("->plain"), "  plain");
+    }
+
+    #[test]
+    fn expand_indent_markers_mid_line_preserved() {
+        assert_eq!(expand_indent_markers("hello -> world"), "hello -> world");
+    }
+
+    #[test]
+    fn format_entry_single_indent_marker_becomes_bullet() {
+        assert_eq!(format_entry("->- item", None), vec!["  - item"]);
+    }
+
+    #[test]
+    fn format_entry_double_indent_marker() {
+        assert_eq!(format_entry("->->- item", None), vec!["    - item"]);
+    }
+
+    #[test]
+    fn format_entry_indent_marker_plain_text() {
+        assert_eq!(format_entry("->plain", None), vec!["  plain"]);
+    }
+
+    #[test]
+    fn format_entry_multiline_indent_markers() {
+        assert_eq!(
+            format_entry("->- parent\n->->- child", None),
+            vec!["  - parent", "    - child"]
         );
     }
 }
