@@ -33,6 +33,12 @@ pub enum UiAction {
     SubmitInput,
     CommitEdit,
 
+    // Capture mode — cursor movement
+    MoveCursorLeft,
+    MoveCursorRight,
+    MoveCursorLineStart,
+    MoveCursorLineEnd,
+
     // Navigate mode
     SelectNext,
     SelectPrev,
@@ -154,6 +160,16 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
             {
                 Some(UiAction::TypeChar(c))
             }
+            KeyCode::Left => Some(UiAction::MoveCursorLeft),
+            KeyCode::Right => Some(UiAction::MoveCursorRight),
+            KeyCode::Home => Some(UiAction::MoveCursorLineStart),
+            KeyCode::End => Some(UiAction::MoveCursorLineEnd),
+            KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Some(UiAction::MoveCursorLineStart)
+            }
+            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                Some(UiAction::MoveCursorLineEnd)
+            }
             KeyCode::Up | KeyCode::Down => None, // ignored in capture mode
             _ => None,
         },
@@ -247,6 +263,12 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
             crate::app::actions::commit_edit(state)?;
             // Note: commit_edit clears state.input internally (see actions.rs)
         }
+
+        // Capture mode — cursor movement (implemented in a later task)
+        UiAction::MoveCursorLeft => {}
+        UiAction::MoveCursorRight => {}
+        UiAction::MoveCursorLineStart => {}
+        UiAction::MoveCursorLineEnd => {}
 
         // Navigate mode
         UiAction::SelectNext => {
@@ -825,6 +847,72 @@ mod tests {
         state.right_panel_selected = 0;
         execute_action(&mut state, UiAction::RightPanelUp).unwrap();
         assert_eq!(state.right_panel_selected, 0);
+    }
+
+    #[test]
+    fn capture_left_arrow_moves_cursor_left() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Capture;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Left)),
+            Some(UiAction::MoveCursorLeft)
+        );
+    }
+
+    #[test]
+    fn capture_right_arrow_moves_cursor_right() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Capture;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Right)),
+            Some(UiAction::MoveCursorRight)
+        );
+    }
+
+    #[test]
+    fn capture_home_moves_to_line_start() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Capture;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Home)),
+            Some(UiAction::MoveCursorLineStart)
+        );
+    }
+
+    #[test]
+    fn capture_end_moves_to_line_end() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Capture;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::End)),
+            Some(UiAction::MoveCursorLineEnd)
+        );
+    }
+
+    #[test]
+    fn capture_ctrl_a_moves_to_line_start() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Capture;
+        assert_eq!(
+            key_to_action(&state, ctrl(KeyCode::Char('a'))),
+            Some(UiAction::MoveCursorLineStart)
+        );
+    }
+
+    #[test]
+    fn capture_ctrl_e_moves_to_line_end() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Capture;
+        assert_eq!(
+            key_to_action(&state, ctrl(KeyCode::Char('e'))),
+            Some(UiAction::MoveCursorLineEnd)
+        );
     }
 
     #[test]
