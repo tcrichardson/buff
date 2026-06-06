@@ -277,8 +277,20 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         UiAction::MoveCursorRight => {
             state.cursor_pos = next_char_boundary(&state.input, state.cursor_pos);
         }
-        UiAction::MoveCursorLineStart => {}
-        UiAction::MoveCursorLineEnd => {}
+        UiAction::MoveCursorLineStart => {
+            let before = &state.input[..state.cursor_pos];
+            state.cursor_pos = match before.rfind('\n') {
+                Some(nl_pos) => nl_pos + 1,
+                None => 0,
+            };
+        }
+        UiAction::MoveCursorLineEnd => {
+            let after = &state.input[state.cursor_pos..];
+            state.cursor_pos = match after.find('\n') {
+                Some(nl_offset) => state.cursor_pos + nl_offset,
+                None => state.input.len(),
+            };
+        }
 
         // Navigate mode
         UiAction::SelectNext => {
@@ -1072,6 +1084,66 @@ mod tests {
         state.cursor_pos = 1; // at start of 'é'
         execute_action(&mut state, UiAction::MoveCursorRight).unwrap();
         assert_eq!(state.cursor_pos, 3); // past 'é'
+    }
+
+    #[test]
+    fn move_cursor_line_start_jumps_to_zero_when_no_newline() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "hello".to_string();
+        state.cursor_pos = 3;
+        execute_action(&mut state, UiAction::MoveCursorLineStart).unwrap();
+        assert_eq!(state.cursor_pos, 0);
+    }
+
+    #[test]
+    fn move_cursor_line_start_jumps_past_newline() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "abc\ndefg".to_string();
+        state.cursor_pos = 6; // at 'f' on second line
+        execute_action(&mut state, UiAction::MoveCursorLineStart).unwrap();
+        assert_eq!(state.cursor_pos, 4); // first char of second line ('d')
+    }
+
+    #[test]
+    fn move_cursor_line_start_at_bol_is_noop() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "abc\ndefg".to_string();
+        state.cursor_pos = 4; // already at start of second line
+        execute_action(&mut state, UiAction::MoveCursorLineStart).unwrap();
+        assert_eq!(state.cursor_pos, 4);
+    }
+
+    #[test]
+    fn move_cursor_line_end_jumps_to_end_when_no_newline() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "hello".to_string();
+        state.cursor_pos = 2;
+        execute_action(&mut state, UiAction::MoveCursorLineEnd).unwrap();
+        assert_eq!(state.cursor_pos, 5);
+    }
+
+    #[test]
+    fn move_cursor_line_end_jumps_to_newline_position() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "abc\ndefg".to_string();
+        state.cursor_pos = 1; // at 'b' on first line
+        execute_action(&mut state, UiAction::MoveCursorLineEnd).unwrap();
+        assert_eq!(state.cursor_pos, 3); // position of '\n' (= right after 'c')
+    }
+
+    #[test]
+    fn move_cursor_line_end_at_eol_is_noop() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "abc\ndefg".to_string();
+        state.cursor_pos = 3; // already at position of '\n' on first line
+        execute_action(&mut state, UiAction::MoveCursorLineEnd).unwrap();
+        assert_eq!(state.cursor_pos, 3);
     }
 
 }
