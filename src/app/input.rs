@@ -46,6 +46,13 @@ pub enum UiAction {
     ResumeHeading,
     OpenHelp,
     SwitchToCapture,
+
+    // Right panel
+    FocusRightPanel,
+    RightPanelUp,
+    RightPanelDown,
+    RightPanelToggle,
+    RightPanelBlur,
 }
 
 pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
@@ -70,6 +77,14 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
         }
     }
 
+    // 4. Tab — focus cycle
+    if key.code == KeyCode::Tab {
+        return match state.focus {
+            Focus::RightPanel => Some(UiAction::RightPanelBlur),
+            _ => Some(UiAction::FocusRightPanel),
+        };
+    }
+
     // 5. Esc handling (context-dependent)
     if key.code == KeyCode::Esc {
         return match state.focus {
@@ -81,7 +96,7 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
                 }
             }
             Focus::Navigate => Some(UiAction::ExitNavigateMode),
-            Focus::RightPanel => None, // replaced in Task 9
+            Focus::RightPanel => Some(UiAction::RightPanelBlur),
         };
     }
 
@@ -118,7 +133,12 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
             KeyCode::Up | KeyCode::Down => None, // ignored in capture mode
             _ => None,
         },
-        Focus::RightPanel => None, // replaced in Task 9
+        Focus::RightPanel => match key.code {
+            KeyCode::Down | KeyCode::Char('j') => Some(UiAction::RightPanelDown),
+            KeyCode::Up | KeyCode::Char('k') => Some(UiAction::RightPanelUp),
+            KeyCode::Char(' ') | KeyCode::Char('x') => Some(UiAction::RightPanelToggle),
+            _ => None,
+        },
         Focus::Navigate => {
             // Ignore all Ctrl combos in navigate mode (Ctrl-C/T already handled above)
             if key.modifiers.contains(KeyModifiers::CONTROL) {
@@ -248,6 +268,29 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         UiAction::SwitchToCapture => {
             state.pending_delete = false;
             state.focus = Focus::Capture;
+        }
+
+        // Right panel
+        UiAction::FocusRightPanel => {
+            state.right_panel_selected = 0;
+            state.focus = Focus::RightPanel;
+        }
+        UiAction::RightPanelBlur => {
+            state.focus = Focus::Capture;
+        }
+        UiAction::RightPanelUp => {
+            if state.right_panel_selected > 0 {
+                state.right_panel_selected -= 1;
+            }
+        }
+        UiAction::RightPanelDown => {
+            let max = state.panel_todos.len().saturating_sub(1);
+            if state.right_panel_selected < max {
+                state.right_panel_selected += 1;
+            }
+        }
+        UiAction::RightPanelToggle => {
+            // wired up in Task 10: crate::app::actions::toggle_panel_todo(state)?;
         }
     }
 
@@ -580,6 +623,184 @@ mod tests {
         execute_action(&mut state, UiAction::SwitchToCapture).unwrap();
         assert_eq!(state.focus, Focus::Capture);
         assert!(!state.pending_delete);
+    }
+
+    #[test]
+    fn tab_in_capture_focuses_right_panel() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Capture;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Tab)),
+            Some(UiAction::FocusRightPanel)
+        );
+    }
+
+    #[test]
+    fn tab_in_navigate_focuses_right_panel() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Navigate;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Tab)),
+            Some(UiAction::FocusRightPanel)
+        );
+    }
+
+    #[test]
+    fn tab_in_right_panel_blurs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::RightPanel;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Tab)),
+            Some(UiAction::RightPanelBlur)
+        );
+    }
+
+    #[test]
+    fn esc_in_right_panel_blurs() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::RightPanel;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Esc)),
+            Some(UiAction::RightPanelBlur)
+        );
+    }
+
+    #[test]
+    fn right_panel_down_moves_selection() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::RightPanel;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Down)),
+            Some(UiAction::RightPanelDown)
+        );
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Char('j'))),
+            Some(UiAction::RightPanelDown)
+        );
+    }
+
+    #[test]
+    fn right_panel_up_moves_selection() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::RightPanel;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Up)),
+            Some(UiAction::RightPanelUp)
+        );
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Char('k'))),
+            Some(UiAction::RightPanelUp)
+        );
+    }
+
+    #[test]
+    fn right_panel_space_triggers_toggle() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::RightPanel;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Char(' '))),
+            Some(UiAction::RightPanelToggle)
+        );
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Char('x'))),
+            Some(UiAction::RightPanelToggle)
+        );
+    }
+
+    #[test]
+    fn focus_right_panel_sets_focus_and_resets_selection() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Capture;
+        state.right_panel_selected = 3;
+        execute_action(&mut state, UiAction::FocusRightPanel).unwrap();
+        assert_eq!(state.focus, Focus::RightPanel);
+        assert_eq!(state.right_panel_selected, 0);
+    }
+
+    #[test]
+    fn right_panel_blur_returns_to_capture() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::RightPanel;
+        execute_action(&mut state, UiAction::RightPanelBlur).unwrap();
+        assert_eq!(state.focus, Focus::Capture);
+    }
+
+    #[test]
+    fn right_panel_down_increments_selected() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::RightPanel;
+        state.right_panel_selected = 0;
+        state.panel_todos = vec![
+            crate::ui::right_panel::PanelTodo {
+                date: chrono::NaiveDate::from_ymd_opt(2026, 6, 5).unwrap(),
+                text: "a".to_string(),
+                todo_index: 0,
+            },
+            crate::ui::right_panel::PanelTodo {
+                date: chrono::NaiveDate::from_ymd_opt(2026, 6, 5).unwrap(),
+                text: "b".to_string(),
+                todo_index: 1,
+            },
+        ];
+        execute_action(&mut state, UiAction::RightPanelDown).unwrap();
+        assert_eq!(state.right_panel_selected, 1);
+    }
+
+    #[test]
+    fn right_panel_down_clamps_at_last() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::RightPanel;
+        state.panel_todos = vec![crate::ui::right_panel::PanelTodo {
+            date: chrono::NaiveDate::from_ymd_opt(2026, 6, 5).unwrap(),
+            text: "only".to_string(),
+            todo_index: 0,
+        }];
+        state.right_panel_selected = 0;
+        execute_action(&mut state, UiAction::RightPanelDown).unwrap();
+        assert_eq!(state.right_panel_selected, 0);
+    }
+
+    #[test]
+    fn right_panel_up_decrements_selected() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::RightPanel;
+        state.right_panel_selected = 1;
+        state.panel_todos = vec![
+            crate::ui::right_panel::PanelTodo {
+                date: chrono::NaiveDate::from_ymd_opt(2026, 6, 5).unwrap(),
+                text: "a".to_string(),
+                todo_index: 0,
+            },
+            crate::ui::right_panel::PanelTodo {
+                date: chrono::NaiveDate::from_ymd_opt(2026, 6, 5).unwrap(),
+                text: "b".to_string(),
+                todo_index: 1,
+            },
+        ];
+        execute_action(&mut state, UiAction::RightPanelUp).unwrap();
+        assert_eq!(state.right_panel_selected, 0);
+    }
+
+    #[test]
+    fn right_panel_up_clamps_at_zero() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::RightPanel;
+        state.right_panel_selected = 0;
+        execute_action(&mut state, UiAction::RightPanelUp).unwrap();
+        assert_eq!(state.right_panel_selected, 0);
     }
 
 }
