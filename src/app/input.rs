@@ -265,7 +265,7 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
             state.cursor_pos += 1;
         }
         UiAction::TypeIndent => {
-            state.input.insert_str(state.cursor_pos, "  ");
+            state.input.insert_str(state.cursor_pos, "->");
             state.cursor_pos += 2;
         }
         UiAction::PrependIndent => {
@@ -684,7 +684,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         execute_action(&mut state, UiAction::TypeIndent).unwrap();
-        assert_eq!(state.input, "  ");
+        assert_eq!(state.input, "->");
         assert_eq!(state.cursor_pos, 2);
     }
 
@@ -695,7 +695,7 @@ mod tests {
         state.input = "ab".to_string();
         state.cursor_pos = 1; // between 'a' and 'b'
         execute_action(&mut state, UiAction::TypeIndent).unwrap();
-        assert_eq!(state.input, "a  b");
+        assert_eq!(state.input, "a->b");
         assert_eq!(state.cursor_pos, 3);
     }
 
