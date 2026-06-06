@@ -307,8 +307,8 @@ mod tests {
         dispatch(&mut state, Command::Entry("first".to_string())).unwrap();
         dispatch(&mut state, Command::Entry("second".to_string())).unwrap();
         let text = state.doc.to_text();
-        assert!(text.contains("- first\n"), "got: {}", text);
-        assert!(text.contains("- second\n"), "got: {}", text);
+        assert!(text.contains("first\n"), "got: {}", text);
+        assert!(text.contains("second\n"), "got: {}", text);
     }
 
     #[test]
@@ -319,7 +319,7 @@ mod tests {
         dispatch(&mut state, Command::Entry("point".to_string())).unwrap();
         let text = state.doc.to_text();
         let meeting_pos = text.find("### ").unwrap();
-        let entry_pos = text.find("- point").unwrap();
+        let entry_pos = text.find("point\n").unwrap();
         assert!(
             entry_pos > meeting_pos,
             "entry should be after meeting heading"
@@ -417,7 +417,7 @@ mod tests {
         dispatch(&mut state, Command::Entry("hello".to_string())).unwrap();
         let path = tmp.path().join("2026-06-04-Thu.md");
         let saved = std::fs::read_to_string(&path).unwrap();
-        assert!(saved.contains("- hello\n"), "saved: {}", saved);
+        assert!(saved.contains("hello\n"), "saved: {}", saved);
     }
 
     #[test]
@@ -559,9 +559,9 @@ mod tests {
         state.selected = 1;
         delete_selected(&mut state).unwrap();
         let text = state.doc.to_text();
-        assert!(text.contains("- first\n"), "first should remain");
-        assert!(!text.contains("- second\n"), "second should be removed");
-        assert!(text.contains("- third\n"), "third should remain");
+        assert!(text.contains("first\n"), "first should remain");
+        assert!(!text.contains("second\n"), "second should be removed");
+        assert!(text.contains("third\n"), "third should remain");
         assert_eq!(
             state.selected, 1,
             "selection should be clamped to last index"
@@ -576,19 +576,19 @@ mod tests {
         state.selected = 0;
         begin_edit_selected(&mut state);
         assert_eq!(state.editing, Some(0));
-        assert_eq!(state.input, "- idea");
+        assert_eq!(state.input, "idea");
         assert_eq!(state.focus, crate::app::state::Focus::Capture);
         state.input = "new idea".to_string();
         commit_edit(&mut state).unwrap();
         let text = state.doc.to_text();
-        assert!(text.contains("- new idea\n"), "got: {}", text);
-        assert!(!text.contains("- idea\n"), "old text should be gone");
+        assert!(text.contains("new idea\n"), "got: {}", text);
+        assert!(!text.contains("\nidea\n"), "old text should be gone");
         assert_eq!(state.editing, None);
         assert_eq!(state.focus, crate::app::state::Focus::Navigate);
         assert!(state.input.is_empty());
         let path = tmp.path().join("2026-06-04-Thu.md");
         let saved = std::fs::read_to_string(&path).unwrap();
-        assert!(saved.contains("- new idea\n"), "saved: {}", saved);
+        assert!(saved.contains("new idea\n"), "saved: {}", saved);
     }
 
     #[test]
@@ -598,9 +598,9 @@ mod tests {
         dispatch(&mut state, Command::Entry("idea".to_string())).unwrap();
         state.selected = 0;
         begin_edit_selected(&mut state);
-        // "- idea" is 6 bytes
+        // "idea" is 4 bytes
         assert_eq!(state.cursor_pos, state.input.len());
-        assert_eq!(state.cursor_pos, 6);
+        assert_eq!(state.cursor_pos, 4);
     }
 
     #[test]
@@ -644,7 +644,7 @@ mod tests {
         let path = tmp.path().join("2026-06-04-Thu.md");
         let saved = std::fs::read_to_string(&path).unwrap();
         assert!(
-            saved.contains("- hello\n"),
+            saved.contains("hello\n"),
             "original day should be persisted: {}",
             saved
         );
@@ -740,12 +740,12 @@ mod tests {
     }
 
     #[test]
-    fn entry_multiline_plain_becomes_indented_bullet() {
+    fn entry_multiline_plain_passthrough() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         dispatch(&mut state, Command::Entry("first\nsecond".to_string())).unwrap();
         assert!(
-            state.doc.to_text().contains("- first\n  second\n"),
+            state.doc.to_text().contains("first\nsecond\n"),
             "got: {}",
             state.doc.to_text()
         );
@@ -775,7 +775,7 @@ mod tests {
         dispatch(&mut state, Command::Entry("under meeting".to_string())).unwrap();
         let text = state.doc.to_text();
         let heading = text.find("### ").unwrap();
-        let entry = text.find("- under meeting").unwrap();
+        let entry = text.find("under meeting").unwrap();
         assert!(entry > heading, "entry should be under the meeting heading");
     }
 
@@ -798,7 +798,7 @@ mod tests {
         dispatch(&mut state, Command::Entry("point".to_string())).unwrap();
         let text = state.doc.to_text();
         let heading_pos = text.find("### Idea Bucket").unwrap();
-        let entry_pos = text.find("- point").unwrap();
+        let entry_pos = text.find("point\n").unwrap();
         assert!(
             entry_pos > heading_pos,
             "entry should be after note heading"
@@ -839,7 +839,7 @@ mod tests {
         dispatch(&mut state, Command::Entry("under note".to_string())).unwrap();
         let text = state.doc.to_text();
         let heading = text.find("### Idea Bucket").unwrap();
-        let entry = text.find("- under note").unwrap();
+        let entry = text.find("under note").unwrap();
         assert!(entry > heading, "entry should be under the note heading");
     }
 
@@ -1016,5 +1016,39 @@ mod tests {
             text
         );
         assert_eq!(state.context, Context::NoteBlock(0));
+    }
+
+    #[test]
+    fn dispatch_single_indent_marker_stores_indented_bullet() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Entry("->- sub".to_string())).unwrap();
+        let text = state.doc.to_text();
+        assert!(text.contains("  - sub\n"), "got: {}", text);
+    }
+
+    #[test]
+    fn dispatch_double_indent_marker_stores_deeply_indented_bullet() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Entry("->->- deep".to_string())).unwrap();
+        let text = state.doc.to_text();
+        assert!(text.contains("    - deep\n"), "got: {}", text);
+    }
+
+    #[test]
+    fn dispatch_parent_then_sub_bullet_are_independent_selectables() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Entry("- parent".to_string())).unwrap();
+        dispatch(&mut state, Command::Entry("->- child".to_string())).unwrap();
+        assert_eq!(
+            state.selectables.len(),
+            2,
+            "expected 2 selectables, got: {:?}",
+            state.selectables
+        );
+        assert_eq!(state.selectables[0].text, "- parent");
+        assert_eq!(state.selectables[1].text, "  - child");
     }
 }
