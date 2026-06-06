@@ -52,17 +52,33 @@ pub fn render_input(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
         .scroll((overflow as u16, 0));
     frame.render_widget(paragraph, area);
 
-    let last = input_lines.len().saturating_sub(1);
-    let last_len = input_lines[last].chars().count();
-    let col = if last == 0 {
-        prefix.chars().count() + last_len
+    // Compute cursor (row, col) from cursor_pos byte offset
+    let mut remaining = app.cursor_pos;
+    let mut cursor_row = 0;
+    let mut cursor_col = 0usize; // character count within the line
+    for (i, line) in input_lines.iter().enumerate() {
+        let line_bytes = line.len();
+        if remaining <= line_bytes {
+            cursor_col = line[..remaining].chars().count();
+            cursor_row = i;
+            break;
+        }
+        remaining -= line_bytes + 1; // +1 for the '\n' separator
+        // Fallback if cursor_pos == input.len() and input ends with '\n'
+        cursor_row = i + 1;
+        cursor_col = 0;
+    }
+
+    let col = if cursor_row == 0 {
+        prefix.chars().count() + cursor_col
     } else {
-        last_len
+        cursor_col
     };
+
     let inner_x = area.x + 1;
     let inner_y = area.y + 1;
     frame.set_cursor_position(ratatui::layout::Position::new(
         inner_x + col as u16,
-        inner_y + (last.saturating_sub(overflow)) as u16,
+        inner_y + (cursor_row.saturating_sub(overflow)) as u16,
     ));
 }
