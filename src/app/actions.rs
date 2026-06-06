@@ -114,8 +114,7 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
             state.status.clear();
         }
         Command::Goto(None) => {
-            state.calendar = Some(crate::ui::calendar::CalendarState::new(state.date));
-            state.overlay = crate::app::state::Overlay::Calendar;
+            state.status = "usage: /goto YYYY-MM-DD".to_string();
         }
     }
     Ok(())

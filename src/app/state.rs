@@ -23,7 +23,6 @@ pub enum Context {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Overlay {
     None,
-    Calendar,
     Help,
 }
 
@@ -43,7 +42,6 @@ pub struct AppState {
     pub selectables: Vec<Selectable>,
     pub context_display: String,
     pub pending_delete: bool,
-    pub calendar: Option<crate::ui::calendar::CalendarState>,
     pub dates_with_notes: BTreeSet<NaiveDate>,
     pub right_panel_selected: usize,
     pub right_panel_scroll: usize,
@@ -79,7 +77,6 @@ impl AppState {
             selectables,
             context_display,
             pending_delete: false,
-            calendar: None,
             dates_with_notes,
             right_panel_selected: 0,
             right_panel_scroll: 0,

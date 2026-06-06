@@ -13,17 +13,11 @@ pub enum UiAction {
     // Universal
     Quit,
 
-    // Calendar overlay
-    MoveCalendar { dx: i8, dy: i8 },
-    ConfirmCalendar,
-    CloseCalendar,
-
     // Help overlay
     CloseHelp,
 
     // Global hotkeys
     GoToday,
-    OpenCalendar,
     PrevDay,
     NextDay,
 
@@ -60,20 +54,7 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
         return Some(UiAction::Quit);
     }
 
-    // 2. Calendar overlay — only handles its own keys
-    if state.overlay == Overlay::Calendar {
-        return match key.code {
-            KeyCode::Left => Some(UiAction::MoveCalendar { dx: -1, dy: 0 }),
-            KeyCode::Right => Some(UiAction::MoveCalendar { dx: 1, dy: 0 }),
-            KeyCode::Up => Some(UiAction::MoveCalendar { dx: 0, dy: -1 }),
-            KeyCode::Down => Some(UiAction::MoveCalendar { dx: 0, dy: 1 }),
-            KeyCode::Enter => Some(UiAction::ConfirmCalendar),
-            KeyCode::Esc => Some(UiAction::CloseCalendar),
-            _ => None,
-        };
-    }
-
-    // 3. Help overlay — only handles its own keys
+    // 2. Help overlay — only handles its own keys
     if state.overlay == Overlay::Help {
         return match key.code {
             KeyCode::Esc | KeyCode::Char('?') => Some(UiAction::CloseHelp),
@@ -81,11 +62,10 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
         };
     }
 
-    // 4. Global Ctrl hotkeys (Ctrl-J handled later in Capture mode)
+    // 3. Global Ctrl hotkeys (Ctrl-J handled later in Capture mode)
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         match key.code {
             KeyCode::Char('t') => return Some(UiAction::GoToday),
-            KeyCode::Char('g') => return Some(UiAction::OpenCalendar),
             _ => {} // fall through — Ctrl-J is handled in Capture; others ignored per mode
         }
     }
@@ -140,7 +120,7 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
         },
         Focus::RightPanel => None, // replaced in Task 9
         Focus::Navigate => {
-            // Ignore all Ctrl combos in navigate mode (Ctrl-C/T/G already handled above)
+            // Ignore all Ctrl combos in navigate mode (Ctrl-C/T already handled above)
             if key.modifiers.contains(KeyModifiers::CONTROL) {
                 return None;
             }
@@ -171,24 +151,6 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
     match action {
         UiAction::Quit => return Ok(EventOutcome::Quit),
 
-        // Calendar overlay
-        UiAction::MoveCalendar { dx, dy } => {
-            if let Some(cal) = state.calendar.as_mut() {
-                crate::ui::calendar::move_selection(cal, dx as i64, dy as i64);
-            }
-        }
-        UiAction::ConfirmCalendar => {
-            if let Some(cal) = state.calendar.take() {
-                crate::app::actions::go_to_date(state, cal.selected)?;
-                state.status.clear();
-                state.overlay = Overlay::None;
-            }
-        }
-        UiAction::CloseCalendar => {
-            state.overlay = Overlay::None;
-            state.calendar = None;
-        }
-
         // Help overlay
         UiAction::CloseHelp => {
             state.overlay = Overlay::None;
@@ -198,11 +160,6 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         UiAction::GoToday => {
             crate::app::actions::go_today(state)?;
             state.status.clear();
-        }
-        UiAction::OpenCalendar => {
-            state.pending_delete = false;
-            state.calendar = Some(crate::ui::calendar::CalendarState::new(state.date));
-            state.overlay = Overlay::Calendar;
         }
         UiAction::PrevDay => {
             crate::app::actions::go_prev_day(state)?;
@@ -425,25 +382,6 @@ mod tests {
     }
 
     #[test]
-    fn calendar_overlay_left_moves_calendar() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.overlay = Overlay::Calendar;
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::Left)),
-            Some(UiAction::MoveCalendar { dx: -1, dy: 0 })
-        );
-    }
-
-    #[test]
-    fn calendar_overlay_ignores_j() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.overlay = Overlay::Calendar;
-        assert_eq!(key_to_action(&state, make_key(KeyCode::Char('j'))), None);
-    }
-
-    #[test]
     fn help_overlay_esc_closes() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
@@ -644,25 +582,4 @@ mod tests {
         assert!(!state.pending_delete);
     }
 
-    #[test]
-    fn open_calendar_sets_overlay_and_clears_pending() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.pending_delete = true;
-        execute_action(&mut state, UiAction::OpenCalendar).unwrap();
-        assert_eq!(state.overlay, Overlay::Calendar);
-        assert!(state.calendar.is_some());
-        assert!(!state.pending_delete);
-    }
-
-    #[test]
-    fn close_calendar_clears_overlay_and_calendar() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.overlay = Overlay::Calendar;
-        state.calendar = Some(crate::ui::calendar::CalendarState::new(state.date));
-        execute_action(&mut state, UiAction::CloseCalendar).unwrap();
-        assert_eq!(state.overlay, Overlay::None);
-        assert!(state.calendar.is_none());
-    }
 }

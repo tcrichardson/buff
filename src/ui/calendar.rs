@@ -1,99 +1,7 @@
 use chrono::{Datelike, NaiveDate};
-use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Modifier, Style};
-use ratatui::widgets::{Block, Borders, Cell, Clear, Paragraph, Row, Table};
 use std::collections::BTreeSet;
 
-use crate::app::state::AppState;
 use crate::config::WeekStart;
-
-pub struct CalendarState {
-    pub visible_month: (i32, u32), // (year, month)
-    pub selected: NaiveDate,
-}
-
-impl CalendarState {
-    pub fn new(focus_date: NaiveDate) -> Self {
-        Self {
-            visible_month: (focus_date.year(), focus_date.month()),
-            selected: focus_date,
-        }
-    }
-}
-
-pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
-    let Some(calendar) = &app.calendar else {
-        return;
-    };
-    let weeks_grid = weeks(calendar.visible_month, app.config.week_starts_on);
-    let dates_with_notes = &app.dates_with_notes;
-
-    let popup_width = 32;
-    let popup_height = 14;
-    let popup_area = Rect {
-        x: area.x + (area.width.saturating_sub(popup_width)) / 2,
-        y: area.y + (area.height.saturating_sub(popup_height)) / 2,
-        width: popup_width.min(area.width),
-        height: popup_height.min(area.height),
-    };
-
-    frame.render_widget(Clear, popup_area);
-
-    let (year, month) = calendar.visible_month;
-    let month_name = chrono::NaiveDate::from_ymd_opt(year, month, 1)
-        .map(|d| d.format("%B %Y").to_string())
-        .unwrap_or_default();
-
-    let block = Block::default().title(month_name).borders(Borders::ALL);
-    let inner = block.inner(popup_area);
-    frame.render_widget(block, popup_area);
-
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(1)])
-        .split(inner);
-
-    let header = match app.config.week_starts_on {
-        WeekStart::Sunday => Row::new(vec!["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"]),
-        WeekStart::Monday => Row::new(vec!["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]),
-    };
-
-    let mut rows = Vec::new();
-    for week in weeks_grid {
-        let mut cells = Vec::new();
-        for day in week {
-            match day {
-                Some(date) => {
-                    let is_selected = date == calendar.selected;
-                    let has_note = marked(date, dates_with_notes);
-                    let mut text = format!("{:>2}", date.day());
-                    if has_note {
-                        text.push('·');
-                    } else {
-                        text.push(' ');
-                    }
-                    let style = if is_selected {
-                        Style::default().add_modifier(Modifier::REVERSED)
-                    } else {
-                        Style::default()
-                    };
-                    cells.push(Cell::from(text).style(style));
-                }
-                None => {
-                    cells.push(Cell::from("    "));
-                }
-            }
-        }
-        rows.push(Row::new(cells));
-    }
-
-    let table = Table::new(rows, [Constraint::Length(4); 7]).header(header);
-
-    frame.render_widget(table, chunks[0]);
-
-    let footer = Paragraph::new("←/→ day ↑/↓ week Enter open Esc cancel");
-    frame.render_widget(footer, chunks[1]);
-}
 
 pub fn weeks(visible_month: (i32, u32), week_start: WeekStart) -> Vec<[Option<NaiveDate>; 7]> {
     let (year, month) = visible_month;
@@ -136,12 +44,6 @@ pub fn weeks(visible_month: (i32, u32), week_start: WeekStart) -> Vec<[Option<Na
         .chunks_exact(7)
         .map(|w| [w[0], w[1], w[2], w[3], w[4], w[5], w[6]])
         .collect()
-}
-
-pub fn move_selection(state: &mut CalendarState, dx_days: i64, dy_weeks: i64) {
-    let delta = dx_days + dy_weeks * 7;
-    state.selected += chrono::Duration::days(delta);
-    state.visible_month = (state.selected.year(), state.selected.month());
 }
 
 /// Convenience wrapper for checking if a date is in a set.
@@ -194,18 +96,6 @@ mod tests {
         // First week column 1 should be June 2 (Tuesday)
         let june_2 = NaiveDate::from_ymd_opt(2026, 6, 2).unwrap();
         assert_eq!(grid[0][1], Some(june_2));
-    }
-
-    #[test]
-    fn move_left_from_first_rolls_month() {
-        let june_1 = NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
-        let mut state = CalendarState::new(june_1);
-
-        move_selection(&mut state, -1, 0);
-
-        let may_31 = NaiveDate::from_ymd_opt(2026, 5, 31).unwrap();
-        assert_eq!(state.selected, may_31);
-        assert_eq!(state.visible_month, (2026, 5));
     }
 
     #[test]

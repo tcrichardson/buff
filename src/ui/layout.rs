@@ -61,15 +61,9 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
     // Right panel (stub — filled in Tasks 7 and 8)
     super::right_panel::render(frame, panel_area, app);
 
-    // Overlays — keep the existing match unchanged for now; Calendar removed in Task 6
-    match app.overlay {
-        Overlay::Calendar => {
-            super::calendar::render(frame, app, frame.area());
-        }
-        Overlay::Help => {
-            super::help::render(frame, frame.area());
-        }
-        Overlay::None => {}
+    // Overlays
+    if app.overlay == Overlay::Help {
+        super::help::render(frame, frame.area());
     }
 }
 
@@ -103,7 +97,6 @@ mod tests {
             selectables,
             context_display: "context: Notes".to_string(),
             pending_delete: false,
-            calendar: None,
             dates_with_notes: std::collections::BTreeSet::new(),
             right_panel_selected: 0,
             right_panel_scroll: 0,
@@ -181,30 +174,6 @@ mod tests {
         assert!(
             has_reversed,
             "Expected at least one cell with REVERSED modifier in navigate mode"
-        );
-    }
-
-    #[test]
-    fn render_calendar_overlay() {
-        let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
-        let mut app = test_app(doc, Focus::Navigate, 0);
-        app.overlay = Overlay::Calendar;
-        app.calendar = Some(crate::ui::calendar::CalendarState::new(app.date));
-
-        let backend = TestBackend::new(80, 24);
-        let mut terminal = Terminal::new(backend).unwrap();
-        terminal
-            .draw(|frame| {
-                render(frame, &app);
-            })
-            .unwrap();
-
-        let buffer = terminal.backend().buffer();
-        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
-        assert!(
-            content.contains("June 2026"),
-            "Expected 'June 2026' in buffer, got: {}",
-            content
         );
     }
 
