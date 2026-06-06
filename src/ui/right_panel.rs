@@ -1,7 +1,13 @@
-use crate::config::Config;
+use crate::app::state::AppState;
+use crate::config::{Config, WeekStart};
 use crate::model::day::{Document, SelectableKind};
 use crate::storage;
-use chrono::NaiveDate;
+use crate::ui::calendar;
+use chrono::{Datelike, NaiveDate};
+use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
+use ratatui::style::{Modifier, Style};
+use ratatui::text::Line;
+use ratatui::widgets::{Cell, Paragraph, Row, Table};
 use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,12 +60,114 @@ pub fn collect_panel_todos(notes_dir: &Path, date: NaiveDate, config: &Config) -
     todos
 }
 
-pub fn render(
-    _frame: &mut ratatui::Frame,
-    _area: ratatui::layout::Rect,
-    _app: &crate::app::state::AppState,
-) {
-    // stub — implemented in Task 7 and 8
+pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState) {
+    // Split the panel: calendar top (fixed 9 lines) + todo list (rest)
+    let calendar_height = 9u16; // header + day-names + up to 6 weeks
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(calendar_height), Constraint::Min(0)])
+        .split(area);
+
+    render_calendar(frame, chunks[0], app);
+    render_todo_list(frame, chunks[1], app);
+}
+
+fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState) {
+    let visible_month = (app.date.year(), app.date.month());
+    let weeks_grid = calendar::weeks(visible_month, app.config.week_starts_on);
+    let dates_with_notes = &app.dates_with_notes;
+
+    let (year, month) = visible_month;
+    let month_name = NaiveDate::from_ymd_opt(year, month, 1)
+        .map(|d| d.format("%B %Y").to_string())
+        .unwrap_or_default();
+
+    // Split calendar area: header (1) + day-names (1) + weeks (rest)
+    let cal_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ])
+        .split(area);
+
+    let header_widget = Paragraph::new(month_name).alignment(Alignment::Center);
+    frame.render_widget(header_widget, cal_chunks[0]);
+
+    let day_names: Vec<&str> = match app.config.week_starts_on {
+        WeekStart::Sunday => vec!["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"],
+        WeekStart::Monday => vec!["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
+    };
+    let names_row = Row::new(day_names);
+    let names_table = Table::new(vec![names_row], [Constraint::Length(3); 7]);
+    frame.render_widget(names_table, cal_chunks[1]);
+
+    let mut rows = Vec::new();
+    for week in &weeks_grid {
+        let mut cells = Vec::new();
+        for day_opt in week {
+            match day_opt {
+                Some(date) => {
+                    let is_today = *date == app.date;
+                    let has_note = calendar::marked(*date, dates_with_notes);
+                    let marker = if has_note { "·" } else { " " };
+                    let text = format!("{:>2}{}", date.day(), marker);
+                    let style = if is_today {
+                        Style::default().add_modifier(Modifier::REVERSED)
+                    } else {
+                        Style::default()
+                    };
+                    cells.push(Cell::from(text).style(style));
+                }
+                None => {
+                    cells.push(Cell::from("   "));
+                }
+            }
+        }
+        rows.push(Row::new(cells));
+    }
+
+    let table = Table::new(rows, [Constraint::Length(3); 7]);
+    frame.render_widget(table, cal_chunks[2]);
+}
+
+fn render_todo_list(frame: &mut ratatui::Frame, area: Rect, app: &AppState) {
+    use crate::app::state::Focus;
+
+    let mut virtual_lines: Vec<Line> = Vec::new();
+
+    virtual_lines.push(Line::from("To-dos"));
+
+    let mut current_date = None;
+    for (flat_idx, todo) in app.panel_todos.iter().enumerate() {
+        if Some(todo.date) != current_date {
+            current_date = Some(todo.date);
+            let header = todo.date.format("%a %b %d").to_string();
+            virtual_lines.push(Line::from(format!("─ {} ", header)));
+        }
+        let is_selected =
+            app.focus == Focus::RightPanel && flat_idx == app.right_panel_selected;
+        let item_text = format!("☐ {}", todo.text);
+        let style = if is_selected {
+            Style::default().add_modifier(Modifier::REVERSED)
+        } else {
+            Style::default()
+        };
+        virtual_lines.push(Line::styled(item_text, style));
+    }
+
+    let scroll = app
+        .right_panel_scroll
+        .min(virtual_lines.len().saturating_sub(1));
+    let visible: Vec<Line> = virtual_lines
+        .into_iter()
+        .skip(scroll)
+        .take(area.height as usize)
+        .collect();
+
+    let widget = Paragraph::new(visible);
+    frame.render_widget(widget, area);
 }
 
 #[cfg(test)]
@@ -67,6 +175,160 @@ mod tests {
     use super::*;
     use crate::config::Config;
     use chrono::NaiveDate;
+
+    #[test]
+    fn render_shows_current_month_header() {
+        use crate::app::state::{AppState, Context, Focus, Overlay};
+        use crate::config::Config;
+        use crate::model::day::Document;
+        use chrono::NaiveDate;
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        use std::path::PathBuf;
+
+        let date = NaiveDate::from_ymd_opt(2026, 6, 5).unwrap();
+        let doc = Document::new_for_date(date);
+        let selectables = doc.selectables();
+        let app = AppState {
+            doc,
+            date,
+            notes_dir: PathBuf::from("/tmp"),
+            config: Config::default(),
+            context: Context::Notes,
+            focus: Focus::Capture,
+            selected: 0,
+            status: String::new(),
+            input: String::new(),
+            overlay: Overlay::None,
+            editing: None,
+            should_quit: false,
+            selectables,
+            context_display: "context: Notes".to_string(),
+            pending_delete: false,
+            dates_with_notes: std::collections::BTreeSet::new(),
+            right_panel_selected: 0,
+            right_panel_scroll: 0,
+            panel_todos: Vec::new(),
+        };
+
+        let backend = TestBackend::new(30, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| {
+                render(frame, frame.area(), &app);
+            })
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        assert!(content.contains("June 2026"), "expected 'June 2026', got: {}", content);
+    }
+
+    #[test]
+    fn render_shows_todo_text() {
+        use crate::app::state::{AppState, Context, Focus, Overlay};
+        use crate::config::Config;
+        use crate::model::day::Document;
+        use chrono::NaiveDate;
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        use std::path::PathBuf;
+
+        let date = NaiveDate::from_ymd_opt(2026, 6, 5).unwrap();
+        let doc = Document::new_for_date(date);
+        let selectables = doc.selectables();
+        let panel_todos = vec![PanelTodo {
+            date,
+            text: "buy milk".to_string(),
+            todo_index: 0,
+        }];
+        let app = AppState {
+            doc,
+            date,
+            notes_dir: PathBuf::from("/tmp"),
+            config: Config::default(),
+            context: Context::Notes,
+            focus: Focus::Capture,
+            selected: 0,
+            status: String::new(),
+            input: String::new(),
+            overlay: Overlay::None,
+            editing: None,
+            should_quit: false,
+            selectables,
+            context_display: "context: Notes".to_string(),
+            pending_delete: false,
+            dates_with_notes: std::collections::BTreeSet::new(),
+            right_panel_selected: 0,
+            right_panel_scroll: 0,
+            panel_todos,
+        };
+
+        let backend = TestBackend::new(30, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| render(frame, frame.area(), &app))
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        assert!(content.contains("buy milk"), "expected 'buy milk', got: {}", content);
+    }
+
+    #[test]
+    fn render_selected_item_has_reversed_modifier() {
+        use crate::app::state::{AppState, Context, Focus, Overlay};
+        use crate::config::Config;
+        use crate::model::day::Document;
+        use chrono::NaiveDate;
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        use ratatui::style::Modifier;
+        use std::path::PathBuf;
+
+        let date = NaiveDate::from_ymd_opt(2026, 6, 5).unwrap();
+        let doc = Document::new_for_date(date);
+        let selectables = doc.selectables();
+        let panel_todos = vec![PanelTodo {
+            date,
+            text: "buy milk".to_string(),
+            todo_index: 0,
+        }];
+        let app = AppState {
+            doc,
+            date,
+            notes_dir: PathBuf::from("/tmp"),
+            config: Config::default(),
+            context: Context::Notes,
+            focus: Focus::RightPanel,
+            selected: 0,
+            status: String::new(),
+            input: String::new(),
+            overlay: Overlay::None,
+            editing: None,
+            should_quit: false,
+            selectables,
+            context_display: "context: Notes".to_string(),
+            pending_delete: false,
+            dates_with_notes: std::collections::BTreeSet::new(),
+            right_panel_selected: 0,
+            right_panel_scroll: 0,
+            panel_todos,
+        };
+
+        let backend = TestBackend::new(30, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| render(frame, frame.area(), &app))
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let has_reversed = buffer
+            .content
+            .iter()
+            .any(|cell| cell.style().add_modifier.contains(Modifier::REVERSED));
+        assert!(has_reversed, "expected REVERSED modifier for selected todo");
+    }
 
     fn jun5() -> NaiveDate {
         NaiveDate::from_ymd_opt(2026, 6, 5).unwrap()
