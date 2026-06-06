@@ -101,6 +101,7 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
                 }
             }
             Focus::Navigate => Some(UiAction::ExitNavigateMode),
+            Focus::RightPanel => None, // replaced in Task 9
         };
     }
 
@@ -137,6 +138,7 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
             KeyCode::Up | KeyCode::Down => None, // ignored in capture mode
             _ => None,
         },
+        Focus::RightPanel => None, // replaced in Task 9
         Focus::Navigate => {
             // Ignore all Ctrl combos in navigate mode (Ctrl-C/T/G already handled above)
             if key.modifiers.contains(KeyModifiers::CONTROL) {

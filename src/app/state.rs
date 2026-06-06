@@ -9,6 +9,7 @@ use std::path::PathBuf;
 pub enum Focus {
     Capture,
     Navigate,
+    RightPanel,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
