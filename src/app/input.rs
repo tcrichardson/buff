@@ -134,6 +134,7 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
             {
                 Some(UiAction::TypeChar(c))
             }
+            KeyCode::Up | KeyCode::Down => None, // ignored in capture mode
             _ => None,
         },
         Focus::Navigate => {
@@ -241,6 +242,7 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         }
         UiAction::CommitEdit => {
             crate::app::actions::commit_edit(state)?;
+            // Note: commit_edit clears state.input internally (see actions.rs)
         }
 
         // Navigate mode
@@ -272,6 +274,9 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
             state.pending_delete = false;
         }
         UiAction::CancelDelete => {
+            // Key is consumed — user must re-press to take the cancelled action.
+            // This is an intentional UX simplification vs. the original run() which
+            // would fall through and also process the keystroke normally.
             state.pending_delete = false;
         }
         UiAction::ResumeHeading => {
