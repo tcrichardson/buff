@@ -243,7 +243,8 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
 
         // Capture mode
         UiAction::TypeChar(c) => {
-            state.input.push(c);
+            state.input.insert(state.cursor_pos, c);
+            state.cursor_pos += c.len_utf8();
         }
         UiAction::DeleteChar => {
             state.input.pop();
@@ -564,6 +565,17 @@ mod tests {
         execute_action(&mut state, UiAction::TypeChar('h')).unwrap();
         execute_action(&mut state, UiAction::TypeChar('i')).unwrap();
         assert_eq!(state.input, "hi");
+    }
+
+    #[test]
+    fn type_char_inserts_at_cursor_pos() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "ac".to_string();
+        state.cursor_pos = 1; // between 'a' and 'c'
+        execute_action(&mut state, UiAction::TypeChar('b')).unwrap();
+        assert_eq!(state.input, "abc");
+        assert_eq!(state.cursor_pos, 2);
     }
 
     #[test]
