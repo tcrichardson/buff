@@ -5,9 +5,9 @@ use crate::storage;
 use crate::ui::calendar;
 use chrono::{Datelike, NaiveDate};
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
-use ratatui::style::{Modifier, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Line;
-use ratatui::widgets::{Cell, Paragraph, Row, Table};
+use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,13 +60,22 @@ pub fn collect_panel_todos(notes_dir: &Path, date: NaiveDate, config: &Config) -
     todos
 }
 
+const PANEL_BG: Color = Color::Rgb(220, 220, 220);
+
 pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState) {
-    // Split the panel: calendar top (fixed 9 lines) + todo list (rest)
+    // Fill panel background with padding inset
+    let bg_block = Block::default()
+        .style(Style::default().bg(PANEL_BG))
+        .padding(Padding::new(2, 2, 2, 2));
+    let inner = bg_block.inner(area);
+    frame.render_widget(bg_block, area);
+
+    // Split the inner area: calendar top (fixed 9 lines) + todo list (rest)
     let calendar_height = 9u16; // header(1) + day-names(1) + weeks grid(7)
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(calendar_height), Constraint::Min(0)])
-        .split(area);
+        .split(inner);
 
     render_calendar(frame, chunks[0], app);
     render_todo_list(frame, chunks[1], app);
@@ -96,7 +105,9 @@ fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState) {
         .direction(Direction::Horizontal)
         .constraints([Constraint::Length(21), Constraint::Min(0)])
         .split(cal_chunks[0]);
-    let header_widget = Paragraph::new(month_name).alignment(Alignment::Center);
+    let header_widget = Paragraph::new(month_name)
+        .alignment(Alignment::Center)
+        .style(Style::default().bg(PANEL_BG));
     frame.render_widget(header_widget, header_sub[0]);
 
     let day_names: Vec<&str> = match app.config.week_starts_on {
@@ -104,7 +115,8 @@ fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState) {
         WeekStart::Monday => vec!["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
     };
     let names_row = Row::new(day_names);
-    let names_table = Table::new(vec![names_row], [Constraint::Length(3); 7]);
+    let names_table = Table::new(vec![names_row], [Constraint::Length(3); 7])
+        .style(Style::default().bg(PANEL_BG));
     frame.render_widget(names_table, cal_chunks[1]);
 
     let mut rows = Vec::new();
@@ -132,7 +144,8 @@ fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState) {
         rows.push(Row::new(cells));
     }
 
-    let table = Table::new(rows, [Constraint::Length(3); 7]);
+    let table = Table::new(rows, [Constraint::Length(3); 7])
+        .style(Style::default().bg(PANEL_BG));
     frame.render_widget(table, cal_chunks[2]);
 }
 
@@ -168,7 +181,7 @@ fn render_todo_list(frame: &mut ratatui::Frame, area: Rect, app: &AppState) {
         .take(area.height as usize)
         .collect();
 
-    let widget = Paragraph::new(visible);
+    let widget = Paragraph::new(visible).style(Style::default().bg(PANEL_BG));
     frame.render_widget(widget, area);
 }
 

@@ -16,6 +16,7 @@ pub struct Config {
     pub date_format: String,
     pub panel_width: u16,
     pub todo_lookback_days: u16,
+    pub capture_height: u16,
 }
 
 impl Default for Config {
@@ -27,6 +28,7 @@ impl Default for Config {
             date_format: "%Y-%m-%d-%a".to_string(),
             panel_width: 30,
             todo_lookback_days: 7,
+            capture_height: 5,
         }
     }
 }

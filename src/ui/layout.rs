@@ -15,7 +15,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
 
     // Left column: existing vertical stack
     let input_line_count = app.input.split('\n').count().max(1) as u16;
-    let input_height = (input_line_count + 2).clamp(3, 12);
+    let input_height = (input_line_count + 2).clamp(app.config.capture_height, 12);
     let title_height = 5u16;
     let chunks = Layout::default()
         .direction(Direction::Vertical)
