@@ -14,6 +14,8 @@ pub struct Config {
     pub timestamp_entries: bool,
     pub week_starts_on: WeekStart,
     pub date_format: String,
+    pub panel_width: u16,
+    pub todo_lookback_days: u16,
 }
 
 impl Default for Config {
@@ -23,6 +25,8 @@ impl Default for Config {
             timestamp_entries: false,
             week_starts_on: WeekStart::Sunday,
             date_format: "%Y-%m-%d-%a".to_string(),
+            panel_width: 30,
+            todo_lookback_days: 7,
         }
     }
 }
@@ -135,5 +139,36 @@ mod tests {
             "expected {} to end with foo",
             result.display()
         );
+    }
+
+    #[test]
+    fn panel_width_default_is_30() {
+        let config = Config::default();
+        assert_eq!(config.panel_width, 30);
+    }
+
+    #[test]
+    fn todo_lookback_days_default_is_7() {
+        let config = Config::default();
+        assert_eq!(config.todo_lookback_days, 7);
+    }
+
+    #[test]
+    fn parse_panel_fields_from_toml() {
+        let toml = r#"
+            panel_width = 40
+            todo_lookback_days = 14
+        "#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.panel_width, 40);
+        assert_eq!(config.todo_lookback_days, 14);
+    }
+
+    #[test]
+    fn panel_fields_use_defaults_when_absent() {
+        let toml = r#"timestamp_entries = true"#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.panel_width, 30);
+        assert_eq!(config.todo_lookback_days, 7);
     }
 }
