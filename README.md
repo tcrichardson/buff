@@ -22,7 +22,7 @@ Type at the bottom bar and press **Enter**. Plain text becomes a note entry. Use
 | `/note` | Switch context to Notes (the default). |
 | `/todo Buy milk` | Add a to-do to the central To-dos list. If you're in a meeting, it gets tagged `_(Meeting Name)_`. |
 | `/leave` | Exit the current meeting context and return to Notes. |
-| `/goto 2026-06-05` | Jump to a specific date. `/goto` with no args opens the calendar overlay. |
+| `/goto 2026-06-05` | Jump to a specific date. |
 | `/today` | Jump to today's note. |
 | `/help` | Show the help overlay. |
 | `/quit` | Exit. |
@@ -62,18 +62,26 @@ Press **Esc** to move focus into the document. Use these keys to act on entries:
 
 All entry types — bullets (including multi-line), to-dos, meeting headings, and Markdown blocks — are selectable, editable (`e`), and deletable (`dd`).
 
+### Right panel
+
+A persistent panel on the right side of the terminal always shows the current month calendar (today highlighted, days with notes marked with `·`) and, below it, all incomplete to-dos from the last 7 days grouped by date.
+
+| Key | Action |
+|---|---|
+| `Tab` | Move focus into the right panel |
+| `j` / `k` or `↑` / `↓` | Navigate between to-dos in the panel |
+| `Space` or `x` | Toggle the selected to-do done |
+| `Esc` or `Tab` | Return focus to the document |
+
+Toggling a to-do from the panel updates the source day's file immediately. If the to-do belongs to today's note, the left document view also updates in place.
+
 ### Global shortcuts
 
 | Key | Action |
 |---|---|
 | `Ctrl-T` | Jump to today |
 | `[` / `]` | Previous / next day |
-| `Ctrl-G` | Open calendar overlay |
 | `Ctrl-C` | Quit |
-
-### Calendar overlay
-
-`Ctrl-G` or `/goto` opens a month calendar. Arrow keys move the selection, `Enter` opens the chosen day, `Esc` closes the overlay. Days that already have notes are marked with a dot.
 
 ## Configuration
 
@@ -84,6 +92,8 @@ notes_dir = "~/Documents/buff"   # where daily files are stored
 timestamp_entries = false          # prefix every bullet with HH:MM
 week_starts_on = "sunday"          # calendar layout: sunday or monday
 date_format = "%Y-%m-%d-%a"       # day-file naming pattern
+panel_width = 30                   # right panel width in terminal columns
+todo_lookback_days = 7             # days to scan for incomplete to-dos
 ```
 
 All fields are optional. `notes_dir` can also be set via `--notes-dir <path>` on the command line.
@@ -122,7 +132,7 @@ Requires Rust 1.85+ (edition 2024).
 ## Architecture
 
 - **Pure core** (`src/model/`, `src/storage/`, `src/config/`, `src/app/command.rs`, `src/app/actions.rs`) holds all behavior and is unit-tested with string/temp-dir fixtures. No terminal dependency.
-- **TUI layer** (`src/ui/`) is a thin Ratatui front-end that renders state and routes key events into the core.
+- **TUI layer** (`src/ui/`) is a thin Ratatui front-end that renders state and routes key events into the core. The right panel (`src/ui/right_panel.rs`) is a self-contained module handling calendar rendering, todo collection, and panel display.
 - **Markdown handling** uses an anchored structural model: the file is kept as a `Vec<String>` of lines; mutations splice specific lines and re-index, so untouched lines are preserved verbatim. Saves are atomic (temp file + rename).
 
 ## Future features (not yet implemented)
