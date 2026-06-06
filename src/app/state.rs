@@ -36,6 +36,7 @@ pub struct AppState {
     pub selected: usize,
     pub status: String,
     pub input: String,
+    pub cursor_pos: usize,  // byte offset into `input`; always <= input.len(), always on a char boundary
     pub overlay: Overlay,
     pub editing: Option<usize>,
     pub should_quit: bool,
@@ -71,6 +72,7 @@ impl AppState {
             selected: 0,
             status: String::new(),
             input: String::new(),
+            cursor_pos: 0,
             overlay: Overlay::None,
             editing: None,
             should_quit: false,

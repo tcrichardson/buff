@@ -91,6 +91,7 @@ mod tests {
             selected,
             status: String::new(),
             input: String::new(),
+            cursor_pos: 0,
             overlay: Overlay::None,
             editing: None,
             should_quit: false,

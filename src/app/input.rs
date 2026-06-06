@@ -803,4 +803,11 @@ mod tests {
         assert_eq!(state.right_panel_selected, 0);
     }
 
+    #[test]
+    fn cursor_pos_initializes_to_zero() {
+        let tmp = tempfile::tempdir().unwrap();
+        let state = test_state(&tmp);
+        assert_eq!(state.cursor_pos, 0);
+    }
+
 }
