@@ -270,9 +270,13 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
             // Note: commit_edit clears state.input internally (see actions.rs)
         }
 
-        // Capture mode — cursor movement (implemented in a later task)
-        UiAction::MoveCursorLeft => {}
-        UiAction::MoveCursorRight => {}
+        // Capture mode — cursor movement
+        UiAction::MoveCursorLeft => {
+            state.cursor_pos = prev_char_boundary(&state.input, state.cursor_pos);
+        }
+        UiAction::MoveCursorRight => {
+            state.cursor_pos = next_char_boundary(&state.input, state.cursor_pos);
+        }
         UiAction::MoveCursorLineStart => {}
         UiAction::MoveCursorLineEnd => {}
 
@@ -1008,6 +1012,66 @@ mod tests {
         let s = "aé";
         assert_eq!(super::next_char_boundary(s, 0), 1); // 'a' → start of 'é'
         assert_eq!(super::next_char_boundary(s, 1), 3); // start of 'é' → past 'é' = end
+    }
+
+    #[test]
+    fn move_cursor_left_decrements() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "abc".to_string();
+        state.cursor_pos = 2;
+        execute_action(&mut state, UiAction::MoveCursorLeft).unwrap();
+        assert_eq!(state.cursor_pos, 1);
+    }
+
+    #[test]
+    fn move_cursor_left_clamps_at_zero() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "abc".to_string();
+        state.cursor_pos = 0;
+        execute_action(&mut state, UiAction::MoveCursorLeft).unwrap();
+        assert_eq!(state.cursor_pos, 0);
+    }
+
+    #[test]
+    fn move_cursor_right_increments() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "abc".to_string();
+        state.cursor_pos = 1;
+        execute_action(&mut state, UiAction::MoveCursorRight).unwrap();
+        assert_eq!(state.cursor_pos, 2);
+    }
+
+    #[test]
+    fn move_cursor_right_clamps_at_end() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "abc".to_string();
+        state.cursor_pos = 3;
+        execute_action(&mut state, UiAction::MoveCursorRight).unwrap();
+        assert_eq!(state.cursor_pos, 3);
+    }
+
+    #[test]
+    fn move_cursor_left_steps_over_multibyte_char() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "aé".to_string(); // bytes: [0x61, 0xC3, 0xA9] — len = 3
+        state.cursor_pos = 3; // past 'é'
+        execute_action(&mut state, UiAction::MoveCursorLeft).unwrap();
+        assert_eq!(state.cursor_pos, 1); // back to start of 'é'
+    }
+
+    #[test]
+    fn move_cursor_right_steps_over_multibyte_char() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "aé".to_string();
+        state.cursor_pos = 1; // at start of 'é'
+        execute_action(&mut state, UiAction::MoveCursorRight).unwrap();
+        assert_eq!(state.cursor_pos, 3); // past 'é'
     }
 
 }
