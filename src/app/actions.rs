@@ -209,6 +209,42 @@ pub fn resume_selected_heading(state: &mut AppState) {
     state.status = "not a meeting or note".to_string();
 }
 
+pub fn toggle_panel_todo(state: &mut AppState) -> anyhow::Result<()> {
+    let Some(todo) = state.panel_todos.get(state.right_panel_selected).cloned() else {
+        return Ok(()); // empty panel — nothing to do
+    };
+
+    let path = crate::storage::path_for(&state.notes_dir, todo.date, &state.config.date_format);
+    let text = std::fs::read_to_string(&path)?;
+    let mut doc = crate::model::day::Document::from_text(&text);
+    doc.toggle_todo(todo.todo_index)?;
+
+    // Write back to disk atomically
+    let tmp_path = path.with_extension("tmp");
+    std::fs::write(&tmp_path, doc.to_text())?;
+    std::fs::rename(&tmp_path, &path)?;
+
+    // If this is today's date, also refresh app.doc so the left view stays in sync
+    if todo.date == state.date {
+        state.doc = doc;
+        state.selectables = state.doc.selectables();
+    }
+
+    // Rebuild panel_todos (the toggled item is now done, drops off the list)
+    state.panel_todos =
+        crate::ui::right_panel::collect_panel_todos(&state.notes_dir, state.date, &state.config);
+
+    // Clamp selection to new list length
+    let new_len = state.panel_todos.len();
+    if new_len == 0 {
+        state.right_panel_selected = 0;
+    } else {
+        state.right_panel_selected = state.right_panel_selected.min(new_len - 1);
+    }
+
+    Ok(())
+}
+
 pub fn commit_edit(state: &mut AppState) -> anyhow::Result<()> {
     if let Some(idx) = state.editing {
         let new_lines = crate::model::writer::format_entry(&state.input, None);
@@ -759,6 +795,107 @@ mod tests {
         let heading = text.find("### Idea Bucket").unwrap();
         let entry = text.find("- under note").unwrap();
         assert!(entry > heading, "entry should be under the note heading");
+    }
+
+    #[test]
+    fn toggle_panel_todo_marks_past_todo_done() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = Config::default();
+        let today = NaiveDate::from_ymd_opt(2026, 6, 5).unwrap();
+        let past = today - chrono::Duration::days(1);
+
+        let past_path = crate::storage::path_for(tmp.path(), past, &config.date_format);
+        std::fs::write(
+            &past_path,
+            "# 2026-06-04 (Thu)\n\n## Meetings\n\n## Notes\n\n## To-dos\n- [ ] past task\n",
+        )
+        .unwrap();
+
+        let mut state =
+            AppState::open_day(tmp.path().to_path_buf(), config.clone(), today).unwrap();
+        state.focus = crate::app::state::Focus::RightPanel;
+        state.right_panel_selected = 0;
+
+        assert_eq!(state.panel_todos.len(), 1, "should have 1 open todo");
+
+        toggle_panel_todo(&mut state).unwrap();
+
+        let saved = std::fs::read_to_string(&past_path).unwrap();
+        assert!(
+            saved.contains("- [x] past task"),
+            "past task should be checked: {}",
+            saved
+        );
+        assert!(
+            state.panel_todos.is_empty(),
+            "panel_todos should be empty after toggle"
+        );
+    }
+
+    #[test]
+    fn toggle_panel_todo_today_updates_app_doc() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = Config::default();
+        let today = NaiveDate::from_ymd_opt(2026, 6, 5).unwrap();
+
+        let mut state =
+            AppState::open_day(tmp.path().to_path_buf(), config.clone(), today).unwrap();
+
+        dispatch(&mut state, Command::Todo("today task".to_string())).unwrap();
+
+        state.panel_todos =
+            crate::ui::right_panel::collect_panel_todos(&state.notes_dir, state.date, &state.config);
+
+        state.focus = crate::app::state::Focus::RightPanel;
+        state.right_panel_selected = 0;
+        assert_eq!(state.panel_todos.len(), 1);
+
+        toggle_panel_todo(&mut state).unwrap();
+
+        let text = state.doc.to_text();
+        assert!(
+            text.contains("- [x] today task"),
+            "today doc should be updated: {}",
+            text
+        );
+        assert!(state.panel_todos.is_empty());
+    }
+
+    #[test]
+    fn toggle_panel_todo_noop_when_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = crate::app::state::Focus::RightPanel;
+        state.right_panel_selected = 0;
+        assert!(toggle_panel_todo(&mut state).is_ok());
+    }
+
+    #[test]
+    fn go_to_date_refreshes_panel_todos() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = Config::default();
+        let today = NaiveDate::from_ymd_opt(2026, 6, 5).unwrap();
+        let yesterday = today - chrono::Duration::days(1);
+
+        let yest_path = crate::storage::path_for(tmp.path(), yesterday, &config.date_format);
+        std::fs::write(
+            &yest_path,
+            "# 2026-06-04 (Thu)\n\n## Meetings\n\n## Notes\n\n## To-dos\n- [ ] old task\n",
+        )
+        .unwrap();
+
+        let mut state =
+            AppState::open_day(tmp.path().to_path_buf(), config.clone(), today).unwrap();
+        let initial_count = state.panel_todos.len();
+
+        go_to_date(&mut state, yesterday).unwrap();
+
+        assert_eq!(
+            state.panel_todos.len(),
+            1,
+            "panel_todos should be refreshed after navigation, had {} before",
+            initial_count
+        );
     }
 
     #[test]

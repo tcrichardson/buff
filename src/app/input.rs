@@ -290,7 +290,7 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
             }
         }
         UiAction::RightPanelToggle => {
-            // wired up in Task 10: crate::app::actions::toggle_panel_todo(state)?;
+            crate::app::actions::toggle_panel_todo(state)?;
         }
     }
 
