@@ -1,4 +1,4 @@
-use crate::app::state::AppState;
+use crate::app::state::{AppState, Focus};
 use crate::config::{Config, WeekStart};
 use crate::model::day::{Document, SelectableKind};
 use crate::storage;
@@ -62,7 +62,7 @@ pub fn collect_panel_todos(notes_dir: &Path, date: NaiveDate, config: &Config) -
 
 pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState) {
     // Split the panel: calendar top (fixed 9 lines) + todo list (rest)
-    let calendar_height = 9u16; // header + day-names + up to 6 weeks
+    let calendar_height = 9u16; // header(1) + day-names(1) + weeks grid(7)
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(calendar_height), Constraint::Min(0)])
@@ -92,8 +92,12 @@ fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState) {
         ])
         .split(area);
 
+    let header_sub = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(21), Constraint::Min(0)])
+        .split(cal_chunks[0]);
     let header_widget = Paragraph::new(month_name).alignment(Alignment::Center);
-    frame.render_widget(header_widget, cal_chunks[0]);
+    frame.render_widget(header_widget, header_sub[0]);
 
     let day_names: Vec<&str> = match app.config.week_starts_on {
         WeekStart::Sunday => vec!["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"],
@@ -133,8 +137,6 @@ fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState) {
 }
 
 fn render_todo_list(frame: &mut ratatui::Frame, area: Rect, app: &AppState) {
-    use crate::app::state::Focus;
-
     let mut virtual_lines: Vec<Line> = Vec::new();
 
     virtual_lines.push(Line::from("To-dos"));
