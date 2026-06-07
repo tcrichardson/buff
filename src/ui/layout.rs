@@ -1,10 +1,8 @@
 use crate::app::state::{AppState, Focus, Overlay};
 use ratatui::layout::{Constraint, Direction, Layout};
-use ratatui::style::{Color, Style};
+use ratatui::style::{Modifier, Style};
+use ratatui::text::Span;
 use ratatui::widgets::{Block, Borders};
-
-const FOCUSED_BORDER: Color = Color::Cyan;
-const UNFOCUSED_BORDER: Color = Color::DarkGray;
 
 pub fn render(frame: &mut ratatui::Frame, app: &AppState, theme: &crate::ui::theme::Theme) {
     // Outer horizontal split: main (notes + chat) | right panel (full height)
@@ -72,7 +70,13 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, theme: &crate::ui::the
     // Notes pane with border
     let notes_block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(if notes_focused { FOCUSED_BORDER } else { UNFOCUSED_BORDER }));
+        .title(Span::styled(" Notes ", Style::default().add_modifier(Modifier::BOLD)))
+        .border_style(Style::default().fg(if notes_focused {
+            theme.border_focused
+        } else {
+            theme.border_unfocused
+        }))
+        .style(Style::default().bg(theme.notes_panel_bg));
     let notes_inner = notes_block.inner(notes_area);
     frame.render_widget(notes_block, notes_area);
     super::document::render(frame, app, notes_inner, theme);
@@ -87,7 +91,11 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, theme: &crate::ui::the
     if let Some(chat_area) = chat_area_opt {
         let chat_block = Block::default()
             .borders(Borders::ALL)
-            .border_style(Style::default().fg(if chat_focused { FOCUSED_BORDER } else { UNFOCUSED_BORDER }));
+            .border_style(Style::default().fg(if chat_focused {
+                theme.border_focused
+            } else {
+                theme.border_unfocused
+            }));
         let chat_inner = chat_block.inner(chat_area);
         frame.render_widget(chat_block, chat_area);
         super::chat_panel::render(frame, chat_inner, app, theme);
@@ -96,7 +104,11 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, theme: &crate::ui::the
     // Right panel with border — full terminal height
     let panel_block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(if panel_focused { FOCUSED_BORDER } else { UNFOCUSED_BORDER }));
+        .border_style(Style::default().fg(if panel_focused {
+            theme.border_focused
+        } else {
+            theme.border_unfocused
+        }));
     let panel_inner = panel_block.inner(panel_area);
     frame.render_widget(panel_block, panel_area);
     super::right_panel::render(frame, panel_inner, app, theme);
@@ -433,11 +445,11 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
         terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
         let buffer = terminal.backend().buffer();
-        let has_cyan_border = buffer.content.iter().any(|cell| {
-            cell.style().fg == Some(Color::Cyan)
+        let has_focused_border = buffer.content.iter().any(|cell| {
+            cell.style().fg == Some(Color::Rgb(2, 119, 189))
                 && matches!(cell.symbol(), "│" | "─" | "┌" | "┐" | "└" | "┘")
         });
-        assert!(has_cyan_border, "expected cyan border for focused notes pane");
+        assert!(has_focused_border, "expected focused border color for notes pane");
     }
 
     #[test]
@@ -466,11 +478,11 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
         terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
         let buffer = terminal.backend().buffer();
-        let has_cyan_border = buffer.content.iter().any(|cell| {
-            cell.style().fg == Some(Color::Cyan)
+        let has_focused_border = buffer.content.iter().any(|cell| {
+            cell.style().fg == Some(Color::Rgb(2, 119, 189))
                 && matches!(cell.symbol(), "│" | "─" | "┌" | "┐" | "└" | "┘")
         });
-        assert!(has_cyan_border, "expected cyan border for focused chat pane");
+        assert!(has_focused_border, "expected focused border color for chat pane");
     }
 
     #[test]
@@ -487,5 +499,34 @@ mod tests {
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
         assert!(content.contains("June 2026"), "calendar header should be present with chat visible");
+    }
+
+    #[test]
+    fn notes_pane_title_is_notes() {
+        let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let app = test_app(doc, Focus::Capture, 0);
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
+        let buffer = terminal.backend().buffer();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        assert!(content.contains("Notes"), "Expected 'Notes' block title, got: {}", content);
+    }
+
+    #[test]
+    fn notes_pane_focused_border_uses_theme_color() {
+        use ratatui::style::Color;
+        let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let app = test_app(doc, Focus::Capture, 0);
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
+        let buffer = terminal.backend().buffer();
+        // light theme border_focused = Color::Rgb(2, 119, 189)
+        let has_focused_border = buffer.content.iter().any(|cell| {
+            cell.style().fg == Some(Color::Rgb(2, 119, 189))
+                && matches!(cell.symbol(), "│" | "─" | "┌" | "┐" | "└" | "┘")
+        });
+        assert!(has_focused_border, "expected theme border_focused color on notes pane border");
     }
 }
