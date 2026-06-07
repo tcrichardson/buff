@@ -67,6 +67,10 @@ fn run() -> Result<()> {
         buff::app::state::AppState::open_day(notes_dir, config, chrono::Local::now().date_naive())
             .context("Failed to open day")?;
 
+    // LLM event channel: worker threads send LlmEvents; the loop polls them.
+    let (llm_tx, llm_rx) = std::sync::mpsc::channel::<buff::app::llm::LlmEvent>();
+    app.chat.event_tx = Some(llm_tx);
+
     let mut terminal = ratatui::init();
     let _guard = TerminalGuard;
 
@@ -74,6 +78,11 @@ fn run() -> Result<()> {
         terminal.draw(|frame| {
             buff::ui::render(frame, &app);
         })?;
+
+        // Drain any LLM events that arrived since the last iteration.
+        while let Ok(event) = llm_rx.try_recv() {
+            app.handle_llm_event(event);
+        }
 
         if let Some(key) = read_key()? {
             if let Some(action) = buff::app::input::key_to_action(&app, key) {
