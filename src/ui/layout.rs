@@ -529,4 +529,39 @@ mod tests {
         });
         assert!(has_focused_border, "expected theme border_focused color on notes pane border");
     }
+
+    #[test]
+    fn render_h4_h5_h6_headings() {
+        let doc = Document::from_text("#### Level 4\n##### Level 5\n###### Level 6\n");
+        let app = test_app(doc, Focus::Capture, 0);
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
+        let buffer = terminal.backend().buffer();
+        // h4 color = Color::Rgb(106, 27, 154) in light theme
+        let has_h4_color = buffer.content.iter().any(|cell| {
+            cell.style().fg == Some(ratatui::style::Color::Rgb(106, 27, 154))
+        });
+        assert!(has_h4_color, "expected h4 heading color applied");
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        assert!(content.contains("Level 4"), "h4 text missing: {}", content);
+        assert!(content.contains("Level 5"), "h5 text missing: {}", content);
+        assert!(content.contains("Level 6"), "h6 text missing: {}", content);
+    }
+
+    #[test]
+    fn render_h1_uses_theme_color() {
+        let doc = Document::from_text("# My Heading\n");
+        let app = test_app(doc, Focus::Capture, 0);
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
+        let buffer = terminal.backend().buffer();
+        // light theme h1 = Color::Black
+        let has_h1_color = buffer.content.iter().any(|cell| {
+            cell.style().fg == Some(ratatui::style::Color::Black)
+                && cell.style().add_modifier.contains(ratatui::style::Modifier::BOLD)
+        });
+        assert!(has_h1_color, "expected h1 theme color with BOLD");
+    }
 }

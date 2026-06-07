@@ -1,10 +1,11 @@
 use crate::app::state::{AppState, Focus};
+use crate::ui::theme::Theme;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::Paragraph;
 
-pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect, _theme: &crate::ui::theme::Theme) {
+pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect, theme: &Theme) {
     let selected_range: Option<std::ops::Range<usize>> = if app.focus == Focus::Navigate {
         app.selectables.get(app.selected).map(|s| s.lines.clone())
     } else {
@@ -32,33 +33,45 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect, _theme: &c
                 }
                 return Line::from(Span::styled(
                     line.as_str(),
-                    Style::default().fg(Color::DarkGray),
+                    Style::default().fg(theme.code),
                 ))
                 .style(highlight);
             }
 
-            if let Some(rest) = line.strip_prefix("# ") {
+            if let Some(rest) = line.strip_prefix("###### ") {
                 Line::from(vec![Span::styled(
-                    format!("# {}", rest),
-                    Style::default()
-                        .fg(Color::White)
-                        .add_modifier(Modifier::BOLD),
+                    format!("###### {}", rest),
+                    Style::default().fg(theme.heading6).add_modifier(Modifier::BOLD),
                 )])
                 .style(highlight)
-            } else if let Some(rest) = line.strip_prefix("## ") {
+            } else if let Some(rest) = line.strip_prefix("##### ") {
                 Line::from(vec![Span::styled(
-                    format!("## {}", rest),
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD),
+                    format!("##### {}", rest),
+                    Style::default().fg(theme.heading5).add_modifier(Modifier::BOLD),
+                )])
+                .style(highlight)
+            } else if let Some(rest) = line.strip_prefix("#### ") {
+                Line::from(vec![Span::styled(
+                    format!("#### {}", rest),
+                    Style::default().fg(theme.heading4).add_modifier(Modifier::BOLD),
                 )])
                 .style(highlight)
             } else if let Some(rest) = line.strip_prefix("### ") {
                 Line::from(vec![Span::styled(
                     format!("### {}", rest),
-                    Style::default()
-                        .fg(Color::Yellow)
-                        .add_modifier(Modifier::BOLD),
+                    Style::default().fg(theme.heading3).add_modifier(Modifier::BOLD),
+                )])
+                .style(highlight)
+            } else if let Some(rest) = line.strip_prefix("## ") {
+                Line::from(vec![Span::styled(
+                    format!("## {}", rest),
+                    Style::default().fg(theme.heading2).add_modifier(Modifier::BOLD),
+                )])
+                .style(highlight)
+            } else if let Some(rest) = line.strip_prefix("# ") {
+                Line::from(vec![Span::styled(
+                    format!("# {}", rest),
+                    Style::default().fg(theme.heading1).add_modifier(Modifier::BOLD),
                 )])
                 .style(highlight)
             } else if let Some(rest) = line.strip_prefix("- [ ] ") {
@@ -68,11 +81,11 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect, _theme: &c
                 .or_else(|| line.strip_prefix("- [X] "))
             {
                 Line::from(vec![
-                    Span::styled("☑ ", Style::default().fg(Color::Green)),
+                    Span::styled("☑ ", Style::default().fg(theme.todo_done)),
                     Span::styled(
                         rest,
                         Style::default()
-                            .fg(Color::Green)
+                            .fg(theme.todo_done)
                             .add_modifier(Modifier::CROSSED_OUT),
                     ),
                 ])
@@ -85,7 +98,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect, _theme: &c
                     Span::styled(
                         "│ ",
                         Style::default()
-                            .fg(Color::Magenta)
+                            .fg(theme.quote_marker)
                             .add_modifier(Modifier::ITALIC),
                     ),
                     Span::styled(rest, Style::default().add_modifier(Modifier::ITALIC)),
