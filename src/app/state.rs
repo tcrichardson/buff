@@ -165,10 +165,10 @@ impl AppState {
         match event {
             LlmEvent::Started { .. } => {}
             LlmEvent::Token { text, .. } => {
-                if let Some(last) = self.chat.messages.last_mut() {
-                    if last.role == ChatRole::Assistant {
-                        last.content.push_str(&text);
-                    }
+                if let Some(last) = self.chat.messages.last_mut()
+                    && last.role == ChatRole::Assistant
+                {
+                    last.content.push_str(&text);
                 }
             }
             LlmEvent::Done { .. } => {

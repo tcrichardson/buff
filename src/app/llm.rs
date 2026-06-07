@@ -73,10 +73,8 @@ pub fn parse_sse_line(line: &str) -> SseLine {
 /// Build the OpenAI-compatible request body for a chat completion.
 fn build_body(req: &ChatRequest) -> serde_json::Value {
     let mut messages: Vec<serde_json::Value> = Vec::new();
-    if let Some(system) = &req.system {
-        if !system.is_empty() {
-            messages.push(serde_json::json!({"role": "system", "content": system}));
-        }
+    if let Some(system) = &req.system && !system.is_empty() {
+        messages.push(serde_json::json!({"role": "system", "content": system}));
     }
     for m in &req.messages {
         let role = match m.role {
