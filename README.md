@@ -24,6 +24,9 @@ Type at the bottom bar and press **Enter**. Plain text is stored as-is. Use slas
 | `/leave` | Exit the current meeting context and return to Notes. |
 | `/goto 2026-06-05` | Jump to a specific date. |
 | `/today` | Jump to today's note. |
+| `/ask "How are you?"` | Ask the local LLM; reply streams into the chat panel. |
+| `/ask <message>` | Same, without quotes. |
+| `/clear` | Clear the current day's chat conversation. |
 | `/help` | Show the help overlay. |
 | `/quit` | Exit. |
 
@@ -94,6 +97,21 @@ A persistent panel on the right side of the terminal always shows the current mo
 
 Toggling a to-do from the panel updates the source day's file immediately. If the to-do belongs to today's note, the left document view also updates in place.
 
+### Chat panel
+
+A middle panel streams replies from a local LM Studio server (or any OpenAI-compatible endpoint). Conversations are saved per-day in `.chat.json` sidecars, so they survive restarts.
+
+| Key | Action |
+|---|---|
+| `Ctrl-L` | Show / hide the chat panel |
+| `/ask <message>` | Send a message; the reply streams token-by-token |
+| `/clear` | Erase the current day's conversation |
+| `Tab` (in navigate mode) | Focus the chat panel (when visible) |
+| `j` / `k` or `↑` / `↓` | Scroll the chat history |
+| `Esc` or `Tab` | Return focus to the document |
+
+The chat panel is visible by default. If LM Studio is not running, a red error line appears and the app stays responsive.
+
 ### Global shortcuts
 
 | Key | Action |
@@ -113,6 +131,13 @@ week_starts_on = "sunday"          # calendar layout: sunday or monday
 date_format = "%Y-%m-%d-%a"       # day-file naming pattern
 panel_width = 30                   # right panel width in terminal columns
 todo_lookback_days = 7             # days to scan for incomplete to-dos
+
+# Chat / LLM settings
+llm_base_url = "http://localhost:1234/v1"   # OpenAI-compatible local server
+llm_model = "google/gemma-4-12b-qat"        # model id served by LM Studio
+llm_system_prompt = ""                       # optional system prompt
+chat_width = 40                              # chat panel width in columns
+chat_visible = true                          # show the chat panel on startup
 ```
 
 All fields are optional. `notes_dir` can also be set via `--notes-dir <path>` on the command line.
@@ -156,6 +181,6 @@ Requires Rust 1.85+ (edition 2024).
 
 ## Future features (not yet implemented)
 
-- Local LLM integration for note-taking assistance and `/summarize`
+- Phase 2 assistant prompts (e.g. `/summarize`, smart suggestions) on top of the existing chat infrastructure
 - Automated to-do tracking, rollover, and migration between days
 - Vector index for semantic search across notes

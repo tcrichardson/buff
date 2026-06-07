@@ -263,6 +263,11 @@ mod tests {
             "Expected '/meeting' in buffer, got: {}",
             content
         );
+        assert!(
+            content.contains("/ask"),
+            "Expected '/ask' in help buffer, got: {}",
+            content
+        );
     }
 
     #[test]

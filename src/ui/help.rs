@@ -3,7 +3,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
 pub fn render(frame: &mut ratatui::Frame, area: Rect) {
     let popup_width = 60;
-    let popup_height = 20;
+    let popup_height = 24;
     let popup_area = Rect {
         x: area.x + (area.width.saturating_sub(popup_width)) / 2,
         y: area.y + (area.height.saturating_sub(popup_height)) / 2,
@@ -26,6 +26,12 @@ Commands:
   /leave           exit meeting context
   /goto YYYY-MM-DD  jump to date
   /today, Ctrl-T   jump to today
+  /ask message     ask the local LLM (streams to chat)
+  /clear           clear the chat conversation
+
+Chat panel:
+  Ctrl-L           show/hide chat panel
+  Tab              focus chat (then j/k to scroll)
 
 Navigation:
   [ ]        prev/next day
