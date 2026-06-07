@@ -63,6 +63,7 @@ fn run() -> Result<()> {
     };
 
     let (config, notes_dir) = buff::config::load(cli.notes_dir).context("Config error")?;
+    let theme = buff::ui::theme::resolve_theme(&config.theme, &config.theme_overrides);
     let mut app =
         buff::app::state::AppState::open_day(notes_dir, config, chrono::Local::now().date_naive())
             .context("Failed to open day")?;
@@ -76,7 +77,7 @@ fn run() -> Result<()> {
 
     loop {
         terminal.draw(|frame| {
-            buff::ui::render(frame, &app);
+            buff::ui::render(frame, &app, &theme);
         })?;
 
         // Drain any LLM events that arrived since the last iteration.

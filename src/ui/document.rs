@@ -4,7 +4,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::Paragraph;
 
-pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
+pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect, _theme: &crate::ui::theme::Theme) {
     let selected_range: Option<std::ops::Range<usize>> = if app.focus == Focus::Navigate {
         app.selectables.get(app.selected).map(|s| s.lines.clone())
     } else {

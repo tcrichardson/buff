@@ -6,7 +6,7 @@ use ratatui::widgets::{Block, Borders};
 const FOCUSED_BORDER: Color = Color::Cyan;
 const UNFOCUSED_BORDER: Color = Color::DarkGray;
 
-pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
+pub fn render(frame: &mut ratatui::Frame, app: &AppState, theme: &crate::ui::theme::Theme) {
     // Outer horizontal split: main (notes + chat) | right panel (full height)
     let panel_constraint = pane_size_to_constraint(&app.config.panel_width);
     let outer = Layout::default()
@@ -75,7 +75,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
         .border_style(Style::default().fg(if notes_focused { FOCUSED_BORDER } else { UNFOCUSED_BORDER }));
     let notes_inner = notes_block.inner(notes_area);
     frame.render_widget(notes_block, notes_area);
-    super::document::render(frame, app, notes_inner);
+    super::document::render(frame, app, notes_inner, theme);
 
     // Status bar (footer chrome, no border)
     super::capture::render_status(frame, app, status_area);
@@ -90,7 +90,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
             .border_style(Style::default().fg(if chat_focused { FOCUSED_BORDER } else { UNFOCUSED_BORDER }));
         let chat_inner = chat_block.inner(chat_area);
         frame.render_widget(chat_block, chat_area);
-        super::chat_panel::render(frame, chat_inner, app);
+        super::chat_panel::render(frame, chat_inner, app, theme);
     }
 
     // Right panel with border — full terminal height
@@ -99,7 +99,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
         .border_style(Style::default().fg(if panel_focused { FOCUSED_BORDER } else { UNFOCUSED_BORDER }));
     let panel_inner = panel_block.inner(panel_area);
     frame.render_widget(panel_block, panel_area);
-    super::right_panel::render(frame, panel_inner, app);
+    super::right_panel::render(frame, panel_inner, app, theme);
 
     // Overlays (always on top of full frame)
     if app.overlay == Overlay::Help {
@@ -153,6 +153,10 @@ mod tests {
         }
     }
 
+    fn test_theme() -> crate::ui::theme::Theme {
+        crate::ui::theme::light()
+    }
+
     #[test]
     fn render_empty_day() {
         let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
@@ -162,7 +166,7 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
         terminal
             .draw(|frame| {
-                render(frame, &app);
+                render(frame, &app, &test_theme());
             })
             .unwrap();
 
@@ -185,7 +189,7 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
         terminal
             .draw(|frame| {
-                render(frame, &app);
+                render(frame, &app, &test_theme());
             })
             .unwrap();
 
@@ -219,7 +223,7 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
         terminal
             .draw(|frame| {
-                render(frame, &app);
+                render(frame, &app, &test_theme());
             })
             .unwrap();
 
@@ -241,7 +245,7 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
         terminal
             .draw(|frame| {
-                render(frame, &app);
+                render(frame, &app, &test_theme());
             })
             .unwrap();
 
@@ -264,7 +268,7 @@ mod tests {
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app)).unwrap();
+        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
@@ -292,7 +296,7 @@ mod tests {
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app)).unwrap();
+        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
@@ -314,7 +318,7 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
         terminal
             .draw(|frame| {
-                render(frame, &app);
+                render(frame, &app, &test_theme());
             })
             .unwrap();
 
@@ -353,7 +357,7 @@ mod tests {
         let app = test_app(doc, Focus::Capture, 0);
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app)).unwrap();
+        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
     }
 
     #[test]
@@ -365,7 +369,7 @@ mod tests {
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app)).unwrap();
+        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
@@ -398,7 +402,7 @@ mod tests {
 
         let backend = TestBackend::new(120, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app)).unwrap();
+        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
         let content: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
         assert!(content.contains("paneltext"), "chat text missing: {}", content);
     }
@@ -415,7 +419,7 @@ mod tests {
 
         let backend = TestBackend::new(120, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app)).unwrap();
+        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
         let content: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
         assert!(!content.contains("paneltext"), "chat should be hidden: {}", content);
     }
@@ -427,7 +431,7 @@ mod tests {
         let app = test_app(doc, Focus::Capture, 0);
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app)).unwrap();
+        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
         let buffer = terminal.backend().buffer();
         let has_cyan_border = buffer.content.iter().any(|cell| {
             cell.style().fg == Some(Color::Cyan)
@@ -443,7 +447,7 @@ mod tests {
         let app = test_app(doc, Focus::Capture, 0);
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app)).unwrap();
+        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
         let buffer = terminal.backend().buffer();
         let has_dark_border = buffer.content.iter().any(|cell| {
             cell.style().fg == Some(Color::DarkGray)
@@ -460,7 +464,7 @@ mod tests {
         app.chat.visible = true;
         let backend = TestBackend::new(120, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app)).unwrap();
+        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
         let buffer = terminal.backend().buffer();
         let has_cyan_border = buffer.content.iter().any(|cell| {
             cell.style().fg == Some(Color::Cyan)
@@ -479,7 +483,7 @@ mod tests {
         app.chat.visible = true;
         let backend = TestBackend::new(120, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app)).unwrap();
+        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
         assert!(content.contains("June 2026"), "calendar header should be present with chat visible");

@@ -62,7 +62,7 @@ pub fn collect_panel_todos(notes_dir: &Path, date: NaiveDate, config: &Config) -
 
 const PANEL_BG: Color = Color::Rgb(220, 220, 220);
 
-pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState) {
+pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &crate::ui::theme::Theme) {
     // Fill panel background with padding inset
     let bg_block = Block::default()
         .style(Style::default().bg(PANEL_BG))
@@ -77,11 +77,11 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState) {
         .constraints([Constraint::Length(calendar_height), Constraint::Min(0)])
         .split(inner);
 
-    render_calendar(frame, chunks[0], app);
-    render_todo_list(frame, chunks[1], app);
+    render_calendar(frame, chunks[0], app, theme);
+    render_todo_list(frame, chunks[1], app, theme);
 }
 
-fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState) {
+fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState, _theme: &crate::ui::theme::Theme) {
     let visible_month = (app.date.year(), app.date.month());
     let weeks_grid = calendar::weeks(visible_month, app.config.week_starts_on);
     let dates_with_notes = &app.dates_with_notes;
@@ -149,7 +149,7 @@ fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState) {
     frame.render_widget(table, cal_chunks[2]);
 }
 
-fn render_todo_list(frame: &mut ratatui::Frame, area: Rect, app: &AppState) {
+fn render_todo_list(frame: &mut ratatui::Frame, area: Rect, app: &AppState, _theme: &crate::ui::theme::Theme) {
     let mut virtual_lines: Vec<Line> = Vec::new();
 
     virtual_lines.push(Line::from("To-dos"));
@@ -190,6 +190,10 @@ mod tests {
     use super::*;
     use crate::config::Config;
     use chrono::NaiveDate;
+
+    fn test_theme() -> crate::ui::theme::Theme {
+        crate::ui::theme::light()
+    }
 
     #[test]
     fn render_shows_current_month_header() {
@@ -232,7 +236,7 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
         terminal
             .draw(|frame| {
-                render(frame, frame.area(), &app);
+                render(frame, frame.area(), &app, &test_theme());
             })
             .unwrap();
 
@@ -286,7 +290,7 @@ mod tests {
         let backend = TestBackend::new(30, 24);
         let mut terminal = Terminal::new(backend).unwrap();
         terminal
-            .draw(|frame| render(frame, frame.area(), &app))
+            .draw(|frame| render(frame, frame.area(), &app, &test_theme()))
             .unwrap();
 
         let buffer = terminal.backend().buffer();
@@ -340,7 +344,7 @@ mod tests {
         let backend = TestBackend::new(30, 24);
         let mut terminal = Terminal::new(backend).unwrap();
         terminal
-            .draw(|frame| render(frame, frame.area(), &app))
+            .draw(|frame| render(frame, frame.area(), &app, &test_theme()))
             .unwrap();
 
         let buffer = terminal.backend().buffer();

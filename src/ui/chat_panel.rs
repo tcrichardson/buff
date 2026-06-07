@@ -33,7 +33,7 @@ fn wrap_line(text: &str, width: usize) -> Vec<String> {
     out
 }
 
-pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState) {
+pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, _theme: &crate::ui::theme::Theme) {
     let bg = Block::default()
         .style(Style::default().bg(PANEL_BG))
         .padding(Padding::new(1, 1, 1, 1));
@@ -141,7 +141,7 @@ mod tests {
         ]);
         let backend = TestBackend::new(40, 20);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|f| render(f, f.area(), &app)).unwrap();
+        terminal.draw(|f| render(f, f.area(), &app, &crate::ui::theme::light())).unwrap();
         let content: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
         assert!(content.contains("ping"), "got: {}", content);
         assert!(content.contains("pong"), "got: {}", content);
@@ -157,7 +157,7 @@ mod tests {
         app.chat.pending = true;
         let backend = TestBackend::new(40, 20);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|f| render(f, f.area(), &app)).unwrap();
+        terminal.draw(|f| render(f, f.area(), &app, &crate::ui::theme::light())).unwrap();
         let content: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
         assert!(content.contains('…'), "thinking indicator missing: {}", content);
     }
