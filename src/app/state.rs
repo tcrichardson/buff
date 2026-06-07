@@ -6,6 +6,19 @@ use chrono::NaiveDate;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ChatRole {
+    User,
+    Assistant,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
+pub struct ChatMessage {
+    pub role: ChatRole,
+    pub content: String,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Focus {
     Capture,
@@ -117,5 +130,24 @@ impl AppState {
                 }
             }
         };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chat_message_json_roundtrip() {
+        let msgs = vec![
+            ChatMessage { role: ChatRole::User, content: "hi".to_string() },
+            ChatMessage { role: ChatRole::Assistant, content: "hello".to_string() },
+        ];
+        let json = serde_json::to_string(&msgs).unwrap();
+        let back: Vec<ChatMessage> = serde_json::from_str(&json).unwrap();
+        assert_eq!(msgs, back);
+        // role serializes lowercase
+        assert!(json.contains("\"role\":\"user\""), "got: {}", json);
+        assert!(json.contains("\"role\":\"assistant\""), "got: {}", json);
     }
 }
