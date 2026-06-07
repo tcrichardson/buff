@@ -14,6 +14,37 @@ pub fn path_for(notes_dir: &Path, date: NaiveDate, date_format: &str) -> PathBuf
     notes_dir.join(file_name_for(date, date_format))
 }
 
+pub fn chat_path_for(notes_dir: &Path, date: NaiveDate, date_format: &str) -> PathBuf {
+    notes_dir.join(format!("{}.chat.json", date.format(date_format)))
+}
+
+pub fn load_chat(path: &Path) -> Vec<crate::app::state::ChatMessage> {
+    match std::fs::read_to_string(path) {
+        Ok(text) => serde_json::from_str(&text).unwrap_or_default(),
+        Err(_) => Vec::new(),
+    }
+}
+
+pub fn save_chat(
+    path: &Path,
+    messages: &[crate::app::state::ChatMessage],
+) -> anyhow::Result<()> {
+    if messages.is_empty() {
+        if path.exists() {
+            std::fs::remove_file(path)?;
+        }
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let json = serde_json::to_string_pretty(messages)?;
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, json)?;
+    std::fs::rename(&tmp, path)?;
+    Ok(())
+}
+
 pub fn note_exists(notes_dir: &Path, date: NaiveDate, date_format: &str) -> bool {
     path_for(notes_dir, date, date_format).is_file()
 }
@@ -125,5 +156,54 @@ mod tests {
         fs::create_dir(tmp.path().join("2026-06-04-Thu.md")).unwrap();
         let dates = dates_with_notes(tmp.path(), "%Y-%m-%d-%a");
         assert!(dates.is_empty());
+    }
+
+    #[test]
+    fn chat_path_for_uses_chat_json_suffix() {
+        let date = NaiveDate::from_ymd_opt(2026, 6, 4).unwrap();
+        let dir = std::path::PathBuf::from("/tmp/notes");
+        assert_eq!(
+            chat_path_for(&dir, date, "%Y-%m-%d-%a"),
+            std::path::PathBuf::from("/tmp/notes/2026-06-04-Thu.chat.json")
+        );
+    }
+
+    #[test]
+    fn save_then_load_chat_roundtrip() {
+        use crate::app::state::{ChatMessage, ChatRole};
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("c.chat.json");
+        let msgs = vec![
+            ChatMessage { role: ChatRole::User, content: "q".to_string() },
+            ChatMessage { role: ChatRole::Assistant, content: "a".to_string() },
+        ];
+        save_chat(&path, &msgs).unwrap();
+        assert_eq!(load_chat(&path), msgs);
+    }
+
+    #[test]
+    fn save_empty_removes_file() {
+        use crate::app::state::ChatMessage;
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("c.chat.json");
+        std::fs::write(&path, "[]").unwrap();
+        let empty: Vec<ChatMessage> = vec![];
+        save_chat(&path, &empty).unwrap();
+        assert!(!path.exists(), "empty conversation should remove the sidecar");
+    }
+
+    #[test]
+    fn load_missing_returns_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("nope.chat.json");
+        assert!(load_chat(&path).is_empty());
+    }
+
+    #[test]
+    fn load_malformed_returns_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("bad.chat.json");
+        std::fs::write(&path, "{ not json").unwrap();
+        assert!(load_chat(&path).is_empty());
     }
 }
