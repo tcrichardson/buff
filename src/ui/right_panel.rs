@@ -5,7 +5,7 @@ use crate::storage;
 use crate::ui::calendar;
 use chrono::{Datelike, NaiveDate};
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Cell, Padding, Paragraph, Row, Table};
 use std::path::Path;
@@ -60,12 +60,10 @@ pub fn collect_panel_todos(notes_dir: &Path, date: NaiveDate, config: &Config) -
     todos
 }
 
-const PANEL_BG: Color = Color::Rgb(220, 220, 220);
-
 pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &crate::ui::theme::Theme) {
     // Fill panel background with padding inset
     let bg_block = Block::default()
-        .style(Style::default().bg(PANEL_BG))
+        .style(Style::default().bg(theme.panel_bg))
         .padding(Padding::new(2, 2, 2, 2));
     let inner = bg_block.inner(area);
     frame.render_widget(bg_block, area);
@@ -81,7 +79,7 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &cr
     render_todo_list(frame, chunks[1], app, theme);
 }
 
-fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState, _theme: &crate::ui::theme::Theme) {
+fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &crate::ui::theme::Theme) {
     let visible_month = (app.date.year(), app.date.month());
     let weeks_grid = calendar::weeks(visible_month, app.config.week_starts_on);
     let dates_with_notes = &app.dates_with_notes;
@@ -107,7 +105,7 @@ fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState, _them
         .split(cal_chunks[0]);
     let header_widget = Paragraph::new(month_name)
         .alignment(Alignment::Center)
-        .style(Style::default().bg(PANEL_BG));
+        .style(Style::default().bg(theme.panel_bg));
     frame.render_widget(header_widget, header_sub[0]);
 
     let day_names: Vec<&str> = match app.config.week_starts_on {
@@ -116,7 +114,7 @@ fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState, _them
     };
     let names_row = Row::new(day_names);
     let names_table = Table::new(vec![names_row], [Constraint::Length(3); 7])
-        .style(Style::default().bg(PANEL_BG));
+        .style(Style::default().bg(theme.panel_bg));
     frame.render_widget(names_table, cal_chunks[1]);
 
     let mut rows = Vec::new();
@@ -145,11 +143,11 @@ fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState, _them
     }
 
     let table = Table::new(rows, [Constraint::Length(3); 7])
-        .style(Style::default().bg(PANEL_BG));
+        .style(Style::default().bg(theme.panel_bg));
     frame.render_widget(table, cal_chunks[2]);
 }
 
-fn render_todo_list(frame: &mut ratatui::Frame, area: Rect, app: &AppState, _theme: &crate::ui::theme::Theme) {
+fn render_todo_list(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &crate::ui::theme::Theme) {
     let mut virtual_lines: Vec<Line> = Vec::new();
 
     virtual_lines.push(Line::from("To-dos"));
@@ -165,9 +163,11 @@ fn render_todo_list(frame: &mut ratatui::Frame, area: Rect, app: &AppState, _the
             app.focus == Focus::RightPanel && flat_idx == app.right_panel_selected;
         let item_text = format!("☐ {}", todo.text);
         let style = if is_selected {
-            Style::default().add_modifier(Modifier::REVERSED)
-        } else {
             Style::default()
+                .add_modifier(Modifier::REVERSED)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().add_modifier(Modifier::BOLD)
         };
         virtual_lines.push(Line::styled(item_text, style));
     }
@@ -181,7 +181,7 @@ fn render_todo_list(frame: &mut ratatui::Frame, area: Rect, app: &AppState, _the
         .take(area.height as usize)
         .collect();
 
-    let widget = Paragraph::new(visible).style(Style::default().bg(PANEL_BG));
+    let widget = Paragraph::new(visible).style(Style::default().bg(theme.panel_bg));
     frame.render_widget(widget, area);
 }
 
@@ -500,5 +500,115 @@ mod tests {
             todos[0].todo_index,
             selectables[todos[0].todo_index].kind
         );
+    }
+
+    #[test]
+    fn todo_items_are_bold() {
+        use crate::app::state::{AppState, Context, Focus, Overlay};
+        use crate::config::Config;
+        use crate::model::day::Document;
+        use chrono::NaiveDate;
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        use ratatui::style::Modifier;
+        use std::path::PathBuf;
+
+        let date = NaiveDate::from_ymd_opt(2026, 6, 5).unwrap();
+        let doc = Document::new_for_date(date);
+        let selectables = doc.selectables();
+        let panel_todos = vec![PanelTodo {
+            date,
+            text: "buy milk".to_string(),
+            todo_index: 0,
+        }];
+        let app = AppState {
+            doc,
+            date,
+            notes_dir: PathBuf::from("/tmp"),
+            config: Config::default(),
+            context: Context::Notes,
+            focus: Focus::Capture, // not RightPanel so no REVERSED
+            selected: 0,
+            status: String::new(),
+            input: String::new(),
+            cursor_pos: 0,
+            overlay: Overlay::None,
+            editing: None,
+            should_quit: false,
+            selectables,
+            context_display: "context: Notes".to_string(),
+            pending_delete: false,
+            dates_with_notes: std::collections::BTreeSet::new(),
+            right_panel_selected: 0,
+            right_panel_scroll: 0,
+            panel_todos,
+            chat: crate::app::state::ChatState::default(),
+        };
+
+        let backend = TestBackend::new(30, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| render(frame, frame.area(), &app, &test_theme()))
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let has_bold = buffer
+            .content
+            .iter()
+            .any(|cell| cell.style().add_modifier.contains(Modifier::BOLD));
+        assert!(has_bold, "expected BOLD modifier on todo item text");
+    }
+
+    #[test]
+    fn panel_uses_theme_panel_bg() {
+        use crate::app::state::{AppState, Context, Focus, Overlay};
+        use crate::config::Config;
+        use crate::model::day::Document;
+        use chrono::NaiveDate;
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        use ratatui::style::Color;
+        use std::path::PathBuf;
+
+        let date = NaiveDate::from_ymd_opt(2026, 6, 5).unwrap();
+        let doc = Document::new_for_date(date);
+        let selectables = doc.selectables();
+        let app = AppState {
+            doc,
+            date,
+            notes_dir: PathBuf::from("/tmp"),
+            config: Config::default(),
+            context: Context::Notes,
+            focus: Focus::Capture,
+            selected: 0,
+            status: String::new(),
+            input: String::new(),
+            cursor_pos: 0,
+            overlay: Overlay::None,
+            editing: None,
+            should_quit: false,
+            selectables,
+            context_display: "context: Notes".to_string(),
+            pending_delete: false,
+            dates_with_notes: std::collections::BTreeSet::new(),
+            right_panel_selected: 0,
+            right_panel_scroll: 0,
+            panel_todos: Vec::new(),
+            chat: crate::app::state::ChatState::default(),
+        };
+
+        let backend = TestBackend::new(30, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| render(frame, frame.area(), &app, &test_theme()))
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        // light theme panel_bg = Color::Rgb(221, 232, 245)
+        let has_panel_bg = buffer
+            .content
+            .iter()
+            .any(|cell| cell.style().bg == Some(Color::Rgb(221, 232, 245)));
+        assert!(has_panel_bg, "expected light theme panel_bg color in right panel");
     }
 }
