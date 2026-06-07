@@ -7,6 +7,40 @@ pub enum WeekStart {
     Monday,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PaneSize {
+    Columns(u16),
+    Percent(u16),
+}
+
+impl<'de> serde::Deserialize<'de> for PaneSize {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct PaneSizeVisitor;
+        impl<'de> serde::de::Visitor<'de> for PaneSizeVisitor {
+            type Value = PaneSize;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, "an integer column count or a percentage string like \"25%\"")
+            }
+            fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<PaneSize, E> {
+                Ok(PaneSize::Columns(v as u16))
+            }
+            fn visit_i64<E: serde::de::Error>(self, v: i64) -> Result<PaneSize, E> {
+                Ok(PaneSize::Columns(v as u16))
+            }
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<PaneSize, E> {
+                if let Some(digits) = v.strip_suffix('%') {
+                    digits.parse::<u16>()
+                        .map(PaneSize::Percent)
+                        .map_err(|_| E::custom(format!("invalid percentage: {}", v)))
+                } else {
+                    Err(E::custom(format!("expected integer or \"N%\" string, got: {}", v)))
+                }
+            }
+        }
+        d.deserialize_any(PaneSizeVisitor)
+    }
+}
+
 #[derive(Clone, Debug, serde::Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -14,13 +48,12 @@ pub struct Config {
     pub timestamp_entries: bool,
     pub week_starts_on: WeekStart,
     pub date_format: String,
-    pub panel_width: u16,
+    pub panel_width: PaneSize,
     pub todo_lookback_days: u16,
     pub capture_height: u16,
     pub llm_base_url: String,
     pub llm_model: String,
     pub llm_system_prompt: String,
-    pub chat_width: u16,
     pub chat_visible: bool,
 }
 
@@ -31,13 +64,12 @@ impl Default for Config {
             timestamp_entries: false,
             week_starts_on: WeekStart::Sunday,
             date_format: "%Y-%m-%d-%a".to_string(),
-            panel_width: 30,
+            panel_width: PaneSize::Columns(30),
             todo_lookback_days: 7,
             capture_height: 5,
             llm_base_url: "http://localhost:1234/v1".to_string(),
             llm_model: "google/gemma-4-12b-qat".to_string(),
             llm_system_prompt: String::new(),
-            chat_width: 70,
             chat_visible: true,
         }
     }
@@ -154,9 +186,30 @@ mod tests {
     }
 
     #[test]
-    fn panel_width_default_is_30() {
+    fn panel_width_default_is_columns_30() {
         let config = Config::default();
-        assert_eq!(config.panel_width, 30);
+        assert_eq!(config.panel_width, PaneSize::Columns(30));
+    }
+
+    #[test]
+    fn panel_width_parses_as_integer() {
+        let toml = r#"panel_width = 40"#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.panel_width, PaneSize::Columns(40));
+    }
+
+    #[test]
+    fn panel_width_parses_as_percentage_string() {
+        let toml = r#"panel_width = "25%""#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.panel_width, PaneSize::Percent(25));
+    }
+
+    #[test]
+    fn panel_width_percentage_100_is_valid() {
+        let toml = r#"panel_width = "100%""#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.panel_width, PaneSize::Percent(100));
     }
 
     #[test]
@@ -172,7 +225,7 @@ mod tests {
             todo_lookback_days = 14
         "#;
         let config: Config = toml::from_str(toml).unwrap();
-        assert_eq!(config.panel_width, 40);
+        assert_eq!(config.panel_width, PaneSize::Columns(40));
         assert_eq!(config.todo_lookback_days, 14);
     }
 
@@ -180,7 +233,7 @@ mod tests {
     fn panel_fields_use_defaults_when_absent() {
         let toml = r#"timestamp_entries = true"#;
         let config: Config = toml::from_str(toml).unwrap();
-        assert_eq!(config.panel_width, 30);
+        assert_eq!(config.panel_width, PaneSize::Columns(30));
         assert_eq!(config.todo_lookback_days, 7);
     }
 
@@ -190,7 +243,6 @@ mod tests {
         assert_eq!(config.llm_base_url, "http://localhost:1234/v1");
         assert_eq!(config.llm_model, "google/gemma-4-12b-qat");
         assert_eq!(config.llm_system_prompt, "");
-        assert_eq!(config.chat_width, 40);
         assert!(config.chat_visible);
     }
 
@@ -200,14 +252,12 @@ mod tests {
             llm_base_url = "http://127.0.0.1:9999/v1"
             llm_model = "my-model"
             llm_system_prompt = "be terse"
-            chat_width = 50
             chat_visible = false
         "#;
         let config: Config = toml::from_str(toml).unwrap();
         assert_eq!(config.llm_base_url, "http://127.0.0.1:9999/v1");
         assert_eq!(config.llm_model, "my-model");
         assert_eq!(config.llm_system_prompt, "be terse");
-        assert_eq!(config.chat_width, 50);
         assert!(!config.chat_visible);
     }
 }

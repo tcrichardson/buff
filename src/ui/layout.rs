@@ -4,13 +4,20 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
     use ratatui::layout::{Constraint, Direction, Layout};
 
     // Outer horizontal split: left = doc+chrome, [chat], right = panel
-    let panel_width = app.config.panel_width;
+    let panel_width = match app.config.panel_width {
+        crate::config::PaneSize::Columns(n) => n,
+        crate::config::PaneSize::Percent(p) => {
+            let total = frame.area().width;
+            (total as u16 * p / 100).max(10)
+        }
+    };
+    let chat_width = 30; // temporary until Task 4 replaces layout
     let (left_area, chat_area, panel_area) = if app.chat.visible {
         let outer = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Min(0),
-                Constraint::Length(app.config.chat_width),
+                Constraint::Length(chat_width),
                 Constraint::Length(panel_width),
             ])
             .split(frame.area());
