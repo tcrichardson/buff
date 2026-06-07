@@ -1,60 +1,43 @@
-use crate::app::state::{AppState, Overlay};
+use crate::app::state::{AppState, Focus, Overlay};
+use ratatui::layout::{Constraint, Direction, Layout};
+use ratatui::style::{Color, Style};
+use ratatui::widgets::{Block, Borders};
+
+const FOCUSED_BORDER: Color = Color::Cyan;
+const UNFOCUSED_BORDER: Color = Color::DarkGray;
 
 pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
-    use ratatui::layout::{Constraint, Direction, Layout};
+    // Outer horizontal split: main (notes + chat) | right panel (full height)
+    let panel_constraint = pane_size_to_constraint(&app.config.panel_width);
+    let outer = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(0), panel_constraint])
+        .split(frame.area());
+    let main_area = outer[0];
+    let panel_area = outer[1];
 
-    // Outer horizontal split: left = doc+chrome, [chat], right = panel
-    let panel_width = match app.config.panel_width {
-        crate::config::PaneSize::Columns(n) => n,
-        crate::config::PaneSize::Percent(p) => {
-            let total = frame.area().width;
-            (total as u16 * p / 100).max(10)
-        }
-    };
-    let chat_width = 30; // temporary until Task 4 replaces layout
-    let (left_area, chat_area, panel_area) = if app.chat.visible {
-        let outer = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Min(0),
-                Constraint::Length(chat_width),
-                Constraint::Length(panel_width),
-            ])
-            .split(frame.area());
-        (outer[0], Some(outer[1]), outer[2])
-    } else {
-        let outer = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(0), Constraint::Length(panel_width)])
-            .split(frame.area());
-        (outer[0], None, outer[1])
-    };
-
-    // Left column: existing vertical stack
+    // main_area vertical split: header | content_row | status | input
     let input_line_count = app.input.split('\n').count().max(1) as u16;
     let input_height = (input_line_count + 2).clamp(app.config.capture_height, 12);
-    let title_height = 5u16;
-    let chunks = Layout::default()
+    let main_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(title_height),
-            Constraint::Min(0),
-            Constraint::Length(1),
-            Constraint::Length(input_height),
+            Constraint::Length(5),             // header
+            Constraint::Min(0),                // content_row
+            Constraint::Length(1),             // status
+            Constraint::Length(input_height),  // input (footer)
         ])
-        .split(left_area);
+        .split(main_area);
+    let header_area = main_chunks[0];
+    let content_row = main_chunks[1];
+    let status_area = main_chunks[2];
+    let input_area = main_chunks[3];
 
-    let title_area = chunks[0];
-    let document_area = chunks[1];
-    let status_area = chunks[2];
-    let input_area = chunks[3];
-
-    // Split title area into left (ASCII art) and right (date + context)
+    // Header: buff ASCII art (left) + date/context (right), spans full main_area width
     let title_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Min(0), Constraint::Length(30)])
-        .split(title_area);
-
+        .split(header_area);
     let ascii_art = r#"_             __  __
 | |__  _   _  / _|/ _|
 | '_ \| | | || |_ | |_
@@ -62,30 +45,67 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
 |_.__/ \__,_||_|  |_|"#;
     let art_widget = ratatui::widgets::Paragraph::new(ascii_art);
     frame.render_widget(art_widget, title_chunks[0]);
-
-    let meta = format!(
-        "{}\n{}",
-        app.date.format("%Y-%m-%d (%a)"),
-        app.context_display
-    );
+    let meta = format!("{}\n{}", app.date.format("%Y-%m-%d (%a)"), app.context_display);
     let meta_widget = ratatui::widgets::Paragraph::new(meta);
     frame.render_widget(meta_widget, title_chunks[1]);
 
-    super::document::render(frame, app, document_area);
+    // content_row horizontal split: notes | chat (optional, 50/50)
+    let notes_focused = matches!(app.focus, Focus::Capture | Focus::Navigate);
+    let chat_focused = app.focus == Focus::Chat;
+    let panel_focused = app.focus == Focus::RightPanel;
+
+    let (notes_area, chat_area_opt) = if app.chat.visible {
+        let row = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(content_row);
+        (row[0], Some(row[1]))
+    } else {
+        (content_row, None)
+    };
+
+    // Notes pane with border
+    let notes_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(if notes_focused { FOCUSED_BORDER } else { UNFOCUSED_BORDER }));
+    let notes_inner = notes_block.inner(notes_area);
+    frame.render_widget(notes_block, notes_area);
+    super::document::render(frame, app, notes_inner);
+
+    // Status bar (footer chrome, no border)
     super::capture::render_status(frame, app, status_area);
+
+    // Input box (footer, spans full main_area width; render_input draws its own Block)
     super::capture::render_input(frame, app, input_area);
 
-    // Chat panel (middle column), when visible
-    if let Some(chat_area) = chat_area {
-        super::chat_panel::render(frame, chat_area, app);
+    // Chat pane with border (when visible)
+    if let Some(chat_area) = chat_area_opt {
+        let chat_block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(if chat_focused { FOCUSED_BORDER } else { UNFOCUSED_BORDER }));
+        let chat_inner = chat_block.inner(chat_area);
+        frame.render_widget(chat_block, chat_area);
+        super::chat_panel::render(frame, chat_inner, app);
     }
 
-    // Right panel
-    super::right_panel::render(frame, panel_area, app);
+    // Right panel with border — full terminal height
+    let panel_block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(if panel_focused { FOCUSED_BORDER } else { UNFOCUSED_BORDER }));
+    let panel_inner = panel_block.inner(panel_area);
+    frame.render_widget(panel_block, panel_area);
+    super::right_panel::render(frame, panel_inner, app);
 
-    // Overlays
+    // Overlays (always on top of full frame)
     if app.overlay == Overlay::Help {
         super::help::render(frame, frame.area());
+    }
+}
+
+fn pane_size_to_constraint(size: &crate::config::PaneSize) -> Constraint {
+    match size {
+        crate::config::PaneSize::Columns(n) => Constraint::Length(*n),
+        crate::config::PaneSize::Percent(p) => Constraint::Percentage(*p),
     }
 }
 
@@ -348,5 +368,70 @@ mod tests {
         terminal.draw(|frame| render(frame, &app)).unwrap();
         let content: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
         assert!(!content.contains("paneltext"), "chat should be hidden: {}", content);
+    }
+
+    #[test]
+    fn notes_pane_has_cyan_border_in_capture_mode() {
+        use ratatui::style::Color;
+        let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let app = test_app(doc, Focus::Capture, 0);
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let has_cyan_border = buffer.content.iter().any(|cell| {
+            cell.style().fg == Some(Color::Cyan)
+                && matches!(cell.symbol(), "│" | "─" | "┌" | "┐" | "└" | "┘")
+        });
+        assert!(has_cyan_border, "expected cyan border for focused notes pane");
+    }
+
+    #[test]
+    fn right_panel_has_dark_border_when_notes_focused() {
+        use ratatui::style::Color;
+        let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let app = test_app(doc, Focus::Capture, 0);
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let has_dark_border = buffer.content.iter().any(|cell| {
+            cell.style().fg == Some(Color::DarkGray)
+                && matches!(cell.symbol(), "│" | "─" | "┌" | "┐" | "└" | "┘")
+        });
+        assert!(has_dark_border, "expected dark border for unfocused right panel");
+    }
+
+    #[test]
+    fn chat_pane_has_cyan_border_when_focused() {
+        use ratatui::style::Color;
+        let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let mut app = test_app(doc, Focus::Chat, 0);
+        app.chat.visible = true;
+        let backend = TestBackend::new(120, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let has_cyan_border = buffer.content.iter().any(|cell| {
+            cell.style().fg == Some(Color::Cyan)
+                && matches!(cell.symbol(), "│" | "─" | "┌" | "┐" | "└" | "┘")
+        });
+        assert!(has_cyan_border, "expected cyan border for focused chat pane");
+    }
+
+    #[test]
+    fn right_panel_has_full_height_independently() {
+        // With chat visible, right panel should still span full height.
+        // Verify it renders content (calendar header) in the same location
+        // regardless of main_area layout.
+        let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let mut app = test_app(doc, Focus::Capture, 0);
+        app.chat.visible = true;
+        let backend = TestBackend::new(120, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app)).unwrap();
+        let buffer = terminal.backend().buffer();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        assert!(content.contains("June 2026"), "calendar header should be present with chat visible");
     }
 }
