@@ -61,6 +61,15 @@ pub enum UiAction {
     RightPanelDown,
     RightPanelToggle,
     RightPanelBlur,
+
+    // Chat panel
+    ToggleChat,
+    FocusChat,
+    ChatBlur,
+    ChatScrollUp,
+    ChatScrollDown,
+    ChatPageUp,
+    ChatPageDown,
 }
 
 /// Step back one Unicode scalar from `pos`. Returns 0 if already at start.
@@ -105,6 +114,7 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         match key.code {
             KeyCode::Char('t') => return Some(UiAction::GoToday),
+            KeyCode::Char('l') => return Some(UiAction::ToggleChat),
             _ => {} // fall through — Ctrl-J is handled in Capture; others ignored per mode
         }
     }
@@ -113,8 +123,15 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     if key.code == KeyCode::Tab {
         return match state.focus {
             Focus::Capture => Some(UiAction::TypeIndent),
+            Focus::Navigate => {
+                if state.chat.visible {
+                    Some(UiAction::FocusChat)
+                } else {
+                    Some(UiAction::FocusRightPanel)
+                }
+            }
+            Focus::Chat => Some(UiAction::FocusRightPanel),
             Focus::RightPanel => Some(UiAction::RightPanelBlur),
-            _ => Some(UiAction::FocusRightPanel),
         };
     }
 
@@ -130,6 +147,7 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
             }
             Focus::Navigate => Some(UiAction::ExitNavigateMode),
             Focus::RightPanel => Some(UiAction::RightPanelBlur),
+            Focus::Chat => Some(UiAction::ChatBlur),
         };
     }
 
@@ -183,6 +201,13 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
             KeyCode::Down | KeyCode::Char('j') => Some(UiAction::RightPanelDown),
             KeyCode::Up | KeyCode::Char('k') => Some(UiAction::RightPanelUp),
             KeyCode::Char(' ') | KeyCode::Char('x') => Some(UiAction::RightPanelToggle),
+            _ => None,
+        },
+        Focus::Chat => match key.code {
+            KeyCode::Down | KeyCode::Char('j') => Some(UiAction::ChatScrollDown),
+            KeyCode::Up | KeyCode::Char('k') => Some(UiAction::ChatScrollUp),
+            KeyCode::PageDown => Some(UiAction::ChatPageDown),
+            KeyCode::PageUp => Some(UiAction::ChatPageUp),
             _ => None,
         },
         Focus::Navigate => {
@@ -379,6 +404,32 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         }
         UiAction::RightPanelToggle => {
             crate::app::actions::toggle_panel_todo(state)?;
+        }
+
+        // Chat panel
+        UiAction::ToggleChat => {
+            state.chat.visible = !state.chat.visible;
+            if !state.chat.visible && state.focus == Focus::Chat {
+                state.focus = Focus::Capture;
+            }
+        }
+        UiAction::FocusChat => {
+            state.focus = Focus::Chat;
+        }
+        UiAction::ChatBlur => {
+            state.focus = Focus::Capture;
+        }
+        UiAction::ChatScrollUp => {
+            state.chat.scroll += 1;
+        }
+        UiAction::ChatScrollDown => {
+            state.chat.scroll = state.chat.scroll.saturating_sub(1);
+        }
+        UiAction::ChatPageUp => {
+            state.chat.scroll += 10;
+        }
+        UiAction::ChatPageDown => {
+            state.chat.scroll = state.chat.scroll.saturating_sub(10);
         }
     }
 
@@ -816,6 +867,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::Navigate;
+        state.chat.visible = false; // skip chat to reach right panel
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Tab)),
             Some(UiAction::FocusRightPanel)
@@ -1252,6 +1304,117 @@ mod tests {
         execute_action(&mut state, UiAction::PrependIndent).unwrap();
         execute_action(&mut state, UiAction::PrependIndent).unwrap();
         assert_eq!(state.input, "->->- item");
+    }
+
+    #[test]
+    fn ctrl_l_toggles_chat() {
+        let tmp = tempfile::tempdir().unwrap();
+        let state = test_state(&tmp);
+        assert_eq!(
+            key_to_action(&state, ctrl(KeyCode::Char('l'))),
+            Some(UiAction::ToggleChat)
+        );
+    }
+
+    #[test]
+    fn toggle_chat_flips_visibility() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        let before = state.chat.visible;
+        execute_action(&mut state, UiAction::ToggleChat).unwrap();
+        assert_eq!(state.chat.visible, !before);
+    }
+
+    #[test]
+    fn toggle_chat_off_while_focused_returns_to_capture() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.chat.visible = true;
+        state.focus = Focus::Chat;
+        execute_action(&mut state, UiAction::ToggleChat).unwrap(); // turns off
+        assert!(!state.chat.visible);
+        assert_eq!(state.focus, Focus::Capture);
+    }
+
+    #[test]
+    fn tab_from_navigate_focuses_chat_when_visible() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Navigate;
+        state.chat.visible = true;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Tab)),
+            Some(UiAction::FocusChat)
+        );
+    }
+
+    #[test]
+    fn tab_from_navigate_skips_chat_when_hidden() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Navigate;
+        state.chat.visible = false;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Tab)),
+            Some(UiAction::FocusRightPanel)
+        );
+    }
+
+    #[test]
+    fn tab_from_chat_goes_to_right_panel() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Chat;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Tab)),
+            Some(UiAction::FocusRightPanel)
+        );
+    }
+
+    #[test]
+    fn esc_in_chat_blurs_to_capture() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Chat;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Esc)),
+            Some(UiAction::ChatBlur)
+        );
+    }
+
+    #[test]
+    fn chat_scroll_keys_map() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Chat;
+        assert_eq!(key_to_action(&state, make_key(KeyCode::Char('k'))), Some(UiAction::ChatScrollUp));
+        assert_eq!(key_to_action(&state, make_key(KeyCode::Char('j'))), Some(UiAction::ChatScrollDown));
+    }
+
+    #[test]
+    fn chat_scroll_down_saturates_at_zero() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.chat.scroll = 0;
+        execute_action(&mut state, UiAction::ChatScrollDown).unwrap();
+        assert_eq!(state.chat.scroll, 0);
+    }
+
+    #[test]
+    fn chat_scroll_up_increments() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.chat.scroll = 0;
+        execute_action(&mut state, UiAction::ChatScrollUp).unwrap();
+        assert_eq!(state.chat.scroll, 1);
+    }
+
+    #[test]
+    fn focus_chat_sets_focus() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        execute_action(&mut state, UiAction::FocusChat).unwrap();
+        assert_eq!(state.focus, Focus::Chat);
     }
 
 }

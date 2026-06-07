@@ -24,6 +24,7 @@ pub enum Focus {
     Capture,
     Navigate,
     RightPanel,
+    Chat,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
