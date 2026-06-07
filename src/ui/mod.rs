@@ -1,5 +1,6 @@
 mod calendar;
 mod capture;
+mod chat_panel;
 mod document;
 pub mod help;
 pub mod layout;
