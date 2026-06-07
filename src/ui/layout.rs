@@ -330,6 +330,21 @@ mod tests {
             "Expected '/ask' in help buffer, got: {}",
             content
         );
+        assert!(
+            content.contains("/start"),
+            "Expected '/start' in help buffer, got: {}",
+            content
+        );
+        assert!(
+            content.contains("/end"),
+            "Expected '/end' in help buffer, got: {}",
+            content
+        );
+        assert!(
+            content.contains("/scheduled"),
+            "Expected '/scheduled' in help buffer, got: {}",
+            content
+        );
     }
 
     #[test]

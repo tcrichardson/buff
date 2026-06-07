@@ -23,6 +23,9 @@ Commands:
   /note "Name"     start note context
   /note            switch to Notes context
   /todo text       add todo
+  /start           record meeting start (current time)
+  /end             record meeting end (current time)
+  /scheduled HH:MM  record scheduled start time
   /leave           exit meeting context
   /goto YYYY-MM-DD  jump to date
   /today, Ctrl-T   jump to today
