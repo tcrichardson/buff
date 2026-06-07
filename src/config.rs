@@ -55,6 +55,8 @@ pub struct Config {
     pub llm_model: String,
     pub llm_system_prompt: String,
     pub chat_visible: bool,
+    pub theme: String,
+    pub theme_overrides: ThemeOverrides,
 }
 
 impl Default for Config {
@@ -71,6 +73,8 @@ impl Default for Config {
             llm_model: "google/gemma-4-12b-qat".to_string(),
             llm_system_prompt: String::new(),
             chat_visible: true,
+            theme: "light".to_string(),
+            theme_overrides: ThemeOverrides::default(),
         }
     }
 }
@@ -278,5 +282,41 @@ mod tests {
         assert_eq!(config.llm_model, "my-model");
         assert_eq!(config.llm_system_prompt, "be terse");
         assert!(!config.chat_visible);
+    }
+
+    #[test]
+    fn theme_defaults_to_light() {
+        let config = Config::default();
+        assert_eq!(config.theme, "light");
+    }
+
+    #[test]
+    fn parse_theme_name_from_toml() {
+        let toml = r#"theme = "dark""#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.theme, "dark");
+    }
+
+    #[test]
+    fn parse_theme_overrides_from_toml() {
+        let toml = r##"
+            theme = "light"
+            [theme_overrides]
+            heading1 = "red"
+            border_focused = "#0000ff"
+        "##;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.theme, "light");
+        assert_eq!(config.theme_overrides.heading1, Some("red".to_string()));
+        assert_eq!(config.theme_overrides.border_focused, Some("#0000ff".to_string()));
+    }
+
+    #[test]
+    fn missing_theme_overrides_all_none() {
+        let toml = r#"theme = "dark""#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert!(config.theme_overrides.heading1.is_none());
+        assert!(config.theme_overrides.heading2.is_none());
+        assert!(config.theme_overrides.panel_bg.is_none());
     }
 }
