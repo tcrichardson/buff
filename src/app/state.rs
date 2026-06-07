@@ -39,6 +39,17 @@ pub enum Overlay {
     Help,
 }
 
+#[derive(Default)]
+pub struct ChatState {
+    pub visible: bool,
+    pub messages: Vec<ChatMessage>,
+    pub pending: bool,
+    pub active_request: u64,
+    pub scroll: usize,
+    pub status: Option<String>,
+    pub event_tx: Option<std::sync::mpsc::Sender<crate::app::llm::LlmEvent>>,
+}
+
 pub struct AppState {
     pub doc: Document,
     pub date: NaiveDate,
@@ -60,6 +71,7 @@ pub struct AppState {
     pub right_panel_selected: usize,
     pub right_panel_scroll: usize, // scroll offset for todo list — scroll-follow not yet implemented
     pub panel_todos: Vec<PanelTodo>,
+    pub chat: ChatState,
 }
 
 impl AppState {
@@ -75,11 +87,13 @@ impl AppState {
         let context_display = "context: Notes".to_string();
         let dates_with_notes = storage::dates_with_notes(&notes_dir, &config.date_format);
         let panel_todos = right_panel::collect_panel_todos(&notes_dir, date, &config);
+        let chat_path = storage::chat_path_for(&notes_dir, date, &config.date_format);
+        let chat_messages = storage::load_chat(&chat_path);
         Ok(Self {
             doc,
             date,
             notes_dir,
-            config,
+            config: config.clone(),
             context: Context::Notes,
             focus: Focus::Capture,
             selected: 0,
@@ -96,6 +110,11 @@ impl AppState {
             right_panel_selected: 0,
             right_panel_scroll: 0,
             panel_todos,
+            chat: ChatState {
+                visible: config.chat_visible,
+                messages: chat_messages,
+                ..Default::default()
+            },
         })
     }
 
@@ -131,6 +150,43 @@ impl AppState {
             }
         };
     }
+
+    pub fn save_chat(&self) -> anyhow::Result<()> {
+        let path = storage::chat_path_for(&self.notes_dir, self.date, &self.config.date_format);
+        storage::save_chat(&path, &self.chat.messages)
+    }
+
+    pub fn handle_llm_event(&mut self, event: crate::app::llm::LlmEvent) {
+        use crate::app::llm::LlmEvent;
+        if event.id() != self.chat.active_request {
+            return; // stale: superseded, cleared, or day switched
+        }
+        match event {
+            LlmEvent::Started { .. } => {}
+            LlmEvent::Token { text, .. } => {
+                if let Some(last) = self.chat.messages.last_mut() {
+                    if last.role == ChatRole::Assistant {
+                        last.content.push_str(&text);
+                    }
+                }
+            }
+            LlmEvent::Done { .. } => {
+                self.chat.pending = false;
+                let _ = self.save_chat();
+            }
+            LlmEvent::Error { message, .. } => {
+                self.chat.pending = false;
+                if matches!(
+                    self.chat.messages.last(),
+                    Some(m) if m.role == ChatRole::Assistant && m.content.is_empty()
+                ) {
+                    self.chat.messages.pop();
+                }
+                self.chat.status = Some(message);
+                let _ = self.save_chat();
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -149,5 +205,76 @@ mod tests {
         // role serializes lowercase
         assert!(json.contains("\"role\":\"user\""), "got: {}", json);
         assert!(json.contains("\"role\":\"assistant\""), "got: {}", json);
+    }
+
+    use crate::app::llm::LlmEvent;
+    use crate::config::Config;
+    use chrono::NaiveDate;
+
+    fn chat_state_with(messages: Vec<ChatMessage>, active: u64, pending: bool) -> AppState {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut s = AppState::open_day(
+            tmp.path().to_path_buf(),
+            Config::default(),
+            NaiveDate::from_ymd_opt(2026, 6, 4).unwrap(),
+        )
+        .unwrap();
+        s.chat.messages = messages;
+        s.chat.active_request = active;
+        s.chat.pending = pending;
+        s
+    }
+
+    #[test]
+    fn token_appends_to_last_assistant() {
+        let mut s = chat_state_with(
+            vec![
+                ChatMessage { role: ChatRole::User, content: "q".into() },
+                ChatMessage { role: ChatRole::Assistant, content: String::new() },
+            ],
+            5,
+            true,
+        );
+        s.handle_llm_event(LlmEvent::Token { id: 5, text: "Hel".into() });
+        s.handle_llm_event(LlmEvent::Token { id: 5, text: "lo".into() });
+        assert_eq!(s.chat.messages.last().unwrap().content, "Hello");
+    }
+
+    #[test]
+    fn stale_token_is_ignored() {
+        let mut s = chat_state_with(
+            vec![ChatMessage { role: ChatRole::Assistant, content: String::new() }],
+            5,
+            true,
+        );
+        s.handle_llm_event(LlmEvent::Token { id: 4, text: "nope".into() });
+        assert_eq!(s.chat.messages.last().unwrap().content, "");
+    }
+
+    #[test]
+    fn done_clears_pending() {
+        let mut s = chat_state_with(
+            vec![ChatMessage { role: ChatRole::Assistant, content: "hi".into() }],
+            5,
+            true,
+        );
+        s.handle_llm_event(LlmEvent::Done { id: 5 });
+        assert!(!s.chat.pending);
+    }
+
+    #[test]
+    fn error_before_tokens_removes_empty_placeholder_and_sets_status() {
+        let mut s = chat_state_with(
+            vec![
+                ChatMessage { role: ChatRole::User, content: "q".into() },
+                ChatMessage { role: ChatRole::Assistant, content: String::new() },
+            ],
+            5,
+            true,
+        );
+        s.handle_llm_event(LlmEvent::Error { id: 5, message: "boom".into() });
+        assert!(!s.chat.pending);
+        assert_eq!(s.chat.messages.len(), 1); // empty assistant removed
+        assert_eq!(s.chat.status.as_deref(), Some("boom"));
     }
 }
