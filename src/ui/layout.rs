@@ -45,7 +45,12 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
 |_.__/ \__,_||_|  |_|"#;
     let art_widget = ratatui::widgets::Paragraph::new(ascii_art);
     frame.render_widget(art_widget, title_chunks[0]);
-    let meta = format!("{}\n{}", app.date.format("%Y-%m-%d (%a)"), app.context_display);
+    let meta = format!(
+        "{}  {}\n{}",
+        app.date.format("%Y-%m-%d (%a)"),
+        chrono::Local::now().format("%H:%M"),
+        app.context_display
+    );
     let meta_widget = ratatui::widgets::Paragraph::new(meta);
     frame.render_widget(meta_widget, title_chunks[1]);
 
@@ -169,6 +174,36 @@ mod tests {
             content.contains("context: Notes"),
             "Expected context in buffer"
         );
+    }
+
+    #[test]
+    fn render_header_contains_time() {
+        let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let app = test_app(doc, Focus::Capture, 0);
+
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| {
+                render(frame, &app);
+            })
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        // Time is HH:MM — look for the colon surrounded by digits
+        let has_time = content
+            .chars()
+            .collect::<Vec<_>>()
+            .windows(5)
+            .any(|w| {
+                w[0].is_ascii_digit()
+                    && w[1].is_ascii_digit()
+                    && w[2] == ':'
+                    && w[3].is_ascii_digit()
+                    && w[4].is_ascii_digit()
+            });
+        assert!(has_time, "Expected HH:MM time in header, buffer: {}", content);
     }
 
     #[test]
