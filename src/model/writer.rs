@@ -412,6 +412,60 @@ impl Document {
     }
 }
 
+const TIME_FIELD_ORDER: &[&str] = &["Scheduled", "Started", "Ended"];
+
+fn is_time_field_line(line: &str) -> bool {
+    TIME_FIELD_ORDER
+        .iter()
+        .any(|k| line.starts_with(&format!("{}: ", k)))
+}
+
+/// Insert or replace a labeled time line (`Key: HH:MM`) in the meeting's
+/// metadata block — the consecutive `Key: HH:MM` lines immediately after the
+/// `### heading` line. The block is always rewritten in canonical order:
+/// Scheduled, Started, Ended.
+///
+/// `heading_line` is the index in `lines` of the `### Name` heading.
+pub fn set_meeting_time_field(
+    lines: &mut Vec<String>,
+    heading_line: usize,
+    key: &str,
+    value: &str,
+) {
+    // Find the end of the existing metadata block.
+    let mut meta_end = heading_line + 1;
+    while meta_end < lines.len() && is_time_field_line(&lines[meta_end]) {
+        meta_end += 1;
+    }
+
+    // Parse existing fields into a map.
+    let mut fields: std::collections::HashMap<String, String> =
+        lines[heading_line + 1..meta_end]
+            .iter()
+            .filter_map(|line| {
+                let mut parts = line.splitn(2, ": ");
+                let k = parts.next()?.to_string();
+                let v = parts.next()?.to_string();
+                Some((k, v))
+            })
+            .collect();
+
+    // Insert or overwrite the target key.
+    fields.insert(key.to_string(), value.to_string());
+
+    // Rebuild in canonical order (only keys that exist).
+    let new_lines: Vec<String> = TIME_FIELD_ORDER
+        .iter()
+        .filter_map(|k| fields.get(*k).map(|v| format!("{}: {}", k, v)))
+        .collect();
+
+    // Replace the old metadata range with the new lines.
+    lines.drain(heading_line + 1..meta_end);
+    for (i, line) in new_lines.into_iter().enumerate() {
+        lines.insert(heading_line + 1 + i, line);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -956,6 +1010,84 @@ mod tests {
             text
         );
         assert!(!text.contains("  - child\n"), "old child should be gone: {}", text);
+    }
+
+    #[test]
+    fn set_time_field_inserts_started_when_absent() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\n- note\n\n## Notes\n\n## To-dos\n",
+        );
+        let heading = doc.meetings()[0].heading_line;
+        set_meeting_time_field(&mut doc.lines, heading, "Started", "09:15");
+        let text = doc.to_text();
+        let heading_pos = text.find("### Standup").unwrap();
+        let started_pos = text.find("Started: 09:15").unwrap();
+        let note_pos = text.find("- note").unwrap();
+        assert!(started_pos > heading_pos, "Started should be after heading");
+        assert!(started_pos < note_pos, "Started should be before note");
+    }
+
+    #[test]
+    fn set_time_field_overwrites_existing_started() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\nStarted: 09:00\n- note\n\n## Notes\n\n## To-dos\n",
+        );
+        let heading = doc.meetings()[0].heading_line;
+        set_meeting_time_field(&mut doc.lines, heading, "Started", "09:15");
+        let text = doc.to_text();
+        assert!(text.contains("Started: 09:15\n"), "should have new time: {}", text);
+        assert!(!text.contains("Started: 09:00\n"), "old time should be gone: {}", text);
+    }
+
+    #[test]
+    fn set_time_field_canonical_order() {
+        // Add Ended first, then Started, then Scheduled — result should be Scheduled, Started, Ended
+        let mut doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\n\n## Notes\n\n## To-dos\n",
+        );
+        let heading = doc.meetings()[0].heading_line;
+        set_meeting_time_field(&mut doc.lines, heading, "Ended", "10:00");
+        set_meeting_time_field(&mut doc.lines, heading, "Started", "09:15");
+
+        // re-fetch heading_line since lines shifted
+        let heading = doc.meetings()[0].heading_line;
+        set_meeting_time_field(&mut doc.lines, heading, "Scheduled", "09:00");
+
+        let text = doc.to_text();
+        let scheduled_pos = text.find("Scheduled: 09:00").unwrap();
+        let started_pos = text.find("Started: 09:15").unwrap();
+        let ended_pos = text.find("Ended: 10:00").unwrap();
+        assert!(scheduled_pos < started_pos, "Scheduled before Started");
+        assert!(started_pos < ended_pos, "Started before Ended");
+    }
+
+    #[test]
+    fn set_time_field_does_not_eat_note_content() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\n- note one\n- note two\n\n## Notes\n\n## To-dos\n",
+        );
+        let heading = doc.meetings()[0].heading_line;
+        set_meeting_time_field(&mut doc.lines, heading, "Started", "09:15");
+        let text = doc.to_text();
+        assert!(text.contains("- note one\n"), "note one should remain: {}", text);
+        assert!(text.contains("- note two\n"), "note two should remain: {}", text);
+    }
+
+    #[test]
+    fn set_time_field_all_three_fields() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\n\n## Notes\n\n## To-dos\n",
+        );
+        let heading = doc.meetings()[0].heading_line;
+        set_meeting_time_field(&mut doc.lines, heading, "Scheduled", "09:00");
+        let heading = doc.meetings()[0].heading_line;
+        set_meeting_time_field(&mut doc.lines, heading, "Started", "09:05");
+        let heading = doc.meetings()[0].heading_line;
+        set_meeting_time_field(&mut doc.lines, heading, "Ended", "09:45");
+        let text = doc.to_text();
+        assert!(text.contains("Scheduled: 09:00\n"), "got: {}", text);
+        assert!(text.contains("Started: 09:05\n"), "got: {}", text);
+        assert!(text.contains("Ended: 09:45\n"), "got: {}", text);
     }
 
     #[test]
