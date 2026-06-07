@@ -37,7 +37,7 @@ impl Default for Config {
             llm_base_url: "http://localhost:1234/v1".to_string(),
             llm_model: "google/gemma-4-12b-qat".to_string(),
             llm_system_prompt: String::new(),
-            chat_width: 40,
+            chat_width: 70,
             chat_visible: true,
         }
     }

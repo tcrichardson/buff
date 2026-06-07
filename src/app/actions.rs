@@ -96,7 +96,7 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
             state.status.clear();
         }
         Command::Help => {
-            state.status = "Press ? for help, /quit to exit".to_string();
+            state.overlay = crate::app::state::Overlay::Help;
         }
         Command::Quit => {
             state.should_quit = true;
@@ -744,7 +744,9 @@ mod tests {
         dispatch(&mut state, Command::Summarize).unwrap();
         assert_eq!(state.status, "summarize is not implemented yet");
         dispatch(&mut state, Command::Help).unwrap();
-        assert_eq!(state.status, "Press ? for help, /quit to exit");
+        assert_eq!(state.overlay, crate::app::state::Overlay::Help);
+        // Help is an info command — it should not clear the previous status.
+        assert_eq!(state.status, "summarize is not implemented yet");
     }
 
     #[test]
