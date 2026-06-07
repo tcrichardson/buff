@@ -41,7 +41,7 @@ To create nested bullets or indented content, prefix the line with `->` (one lev
 ->->- Deep bullet       stored as:     - Deep bullet
 ```
 
-- `# Heading`, `## Subheading` — headings
+- `# Heading`, `## Subheading`, `### Heading 3`, `#### Heading 4`, `##### Heading 5`, `###### Heading 6` — headings
 - `> quoted text` — blockquote
 - `1. first`, `2. second` — numbered list
 - `- item`, `* item`, `+ item` — bullet
@@ -136,11 +136,51 @@ todo_lookback_days = 7             # days to scan for incomplete to-dos
 llm_base_url = "http://localhost:1234/v1"   # OpenAI-compatible local server
 llm_model = "google/gemma-4-12b-qat"        # model id served by LM Studio
 llm_system_prompt = ""                       # optional system prompt
-chat_width = 40                              # chat panel width in columns
 chat_visible = true                          # show the chat panel on startup
+
+# Theme
+theme = "light"                              # "light" or "dark"
+
+[theme_overrides]
+heading1 = "red"
+border_focused = "#0000ff"
 ```
 
 All fields are optional. `notes_dir` can also be set via `--notes-dir <path>` on the command line.
+
+### Themes
+
+buff ships with two built-in themes:
+
+| Theme | Description |
+|---|---|
+| `light` (default) | Clean light-blue focused borders with colored headings |
+| `dark` | Cyan-focused borders with white headings for dark terminals |
+
+Set the theme with the `theme` config field. You can override any individual color via the `[theme_overrides]` table:
+
+| Override key | Default (light) | Example values |
+|---|---|---|
+| `heading1` | `black` | `"red"`, `"#ff0000"` |
+| `heading2` | `#0277bd` | `"cyan"`, `"#00bcd4"` |
+| `heading3` | `#e65100` | `"yellow"`, `"#ff9800"` |
+| `heading4` | `#6a1b9a` | `"magenta"`, `"#9c27b0"` |
+| `heading5` | `#2e7d32` | `"green"`, `"#4caf50"` |
+| `heading6` | `darkgray` | `"gray"`, `"#757575"` |
+| `border_focused` | `#0277bd` | `"cyan"`, `"#0288d1"` |
+| `border_unfocused` | `darkgray` | `"gray"`, `"#9e9e9e"` |
+| `notes_panel_bg` | `reset` | `"white"`, `"#fafafa"` |
+| `panel_bg` | `#dde8f5` | `"lightgray"`, `"#e3f2fd"` |
+| `chat_panel_bg` | `#e6e6f0` | `"lightgray"`, `"#f3e5f5"` |
+| `quote_marker` | `#7b1fa2` | `"magenta"`, `"#ab47bc"` |
+| `code` | `darkgray` | `"gray"`, `"#616161"` |
+| `todo_done` | `green` | `"lightgreen"`, `"#66bb6a"` |
+| `todo_overdue` | `red` | `"lightred"`, `"#ef5350"` |
+
+Colors can be specified as:
+- **Named colors**: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`, `darkgray`, `white`, `reset`
+- **Hex colors**: `#rrggbb` (e.g., `#0277bd`)
+- **Case-insensitive**: `Cyan`, `DARK_GRAY`, `DarkGray` all work
 
 ## File format
 
