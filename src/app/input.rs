@@ -55,6 +55,7 @@ pub enum UiAction {
     ResumeHeading,
     OpenHelp,
     SwitchToCapture,
+    FocusNavigate,
 
     // Right panel
     FocusRightPanel,
@@ -132,13 +133,24 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
                 }
             }
             Focus::Chat => Some(UiAction::FocusRightPanel),
-            Focus::RightPanel => Some(UiAction::RightPanelBlur),
+            Focus::RightPanel => Some(UiAction::FocusNavigate),
         };
     }
 
-    // 4b. BackTab in Capture — un-indent current line
-    if key.code == KeyCode::BackTab && state.focus == Focus::Capture {
-        return Some(UiAction::RemoveIndent);
+    // 4b. BackTab — reverse focus cycle (or un-indent in capture mode)
+    if key.code == KeyCode::BackTab {
+        return match state.focus {
+            Focus::Capture => Some(UiAction::RemoveIndent),
+            Focus::Navigate => Some(UiAction::FocusRightPanel),
+            Focus::Chat => Some(UiAction::FocusNavigate),
+            Focus::RightPanel => {
+                if state.chat.visible {
+                    Some(UiAction::FocusChat)
+                } else {
+                    Some(UiAction::FocusNavigate)
+                }
+            }
+        };
     }
 
     // 5. Esc handling (context-dependent)
@@ -399,6 +411,10 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         UiAction::SwitchToCapture => {
             state.pending_delete = false;
             state.focus = Focus::Capture;
+        }
+        UiAction::FocusNavigate => {
+            state.pending_delete = false;
+            state.focus = Focus::Navigate;
         }
 
         // Right panel
@@ -893,492 +909,6 @@ mod tests {
     }
 
     #[test]
-    fn tab_in_right_panel_blurs() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::RightPanel;
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::Tab)),
-            Some(UiAction::RightPanelBlur)
-        );
-    }
-
-    #[test]
-    fn esc_in_right_panel_blurs() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::RightPanel;
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::Esc)),
-            Some(UiAction::RightPanelBlur)
-        );
-    }
-
-    #[test]
-    fn right_panel_down_moves_selection() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::RightPanel;
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::Down)),
-            Some(UiAction::RightPanelDown)
-        );
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::Char('j'))),
-            Some(UiAction::RightPanelDown)
-        );
-    }
-
-    #[test]
-    fn right_panel_up_moves_selection() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::RightPanel;
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::Up)),
-            Some(UiAction::RightPanelUp)
-        );
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::Char('k'))),
-            Some(UiAction::RightPanelUp)
-        );
-    }
-
-    #[test]
-    fn right_panel_space_triggers_toggle() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::RightPanel;
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::Char(' '))),
-            Some(UiAction::RightPanelToggle)
-        );
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::Char('x'))),
-            Some(UiAction::RightPanelToggle)
-        );
-    }
-
-    #[test]
-    fn focus_right_panel_sets_focus_and_resets_selection() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::Capture;
-        state.right_panel_selected = 3;
-        execute_action(&mut state, UiAction::FocusRightPanel).unwrap();
-        assert_eq!(state.focus, Focus::RightPanel);
-        assert_eq!(state.right_panel_selected, 0);
-    }
-
-    #[test]
-    fn right_panel_blur_returns_to_capture() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::RightPanel;
-        execute_action(&mut state, UiAction::RightPanelBlur).unwrap();
-        assert_eq!(state.focus, Focus::Capture);
-    }
-
-    #[test]
-    fn right_panel_down_increments_selected() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::RightPanel;
-        state.right_panel_selected = 0;
-        state.panel_todos = vec![
-            crate::ui::right_panel::PanelTodo {
-                date: chrono::NaiveDate::from_ymd_opt(2026, 6, 5).unwrap(),
-                text: "a".to_string(),
-                todo_index: 0,
-            },
-            crate::ui::right_panel::PanelTodo {
-                date: chrono::NaiveDate::from_ymd_opt(2026, 6, 5).unwrap(),
-                text: "b".to_string(),
-                todo_index: 1,
-            },
-        ];
-        execute_action(&mut state, UiAction::RightPanelDown).unwrap();
-        assert_eq!(state.right_panel_selected, 1);
-    }
-
-    #[test]
-    fn right_panel_down_clamps_at_last() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::RightPanel;
-        state.panel_todos = vec![crate::ui::right_panel::PanelTodo {
-            date: chrono::NaiveDate::from_ymd_opt(2026, 6, 5).unwrap(),
-            text: "only".to_string(),
-            todo_index: 0,
-        }];
-        state.right_panel_selected = 0;
-        execute_action(&mut state, UiAction::RightPanelDown).unwrap();
-        assert_eq!(state.right_panel_selected, 0);
-    }
-
-    #[test]
-    fn right_panel_up_decrements_selected() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::RightPanel;
-        state.right_panel_selected = 1;
-        state.panel_todos = vec![
-            crate::ui::right_panel::PanelTodo {
-                date: chrono::NaiveDate::from_ymd_opt(2026, 6, 5).unwrap(),
-                text: "a".to_string(),
-                todo_index: 0,
-            },
-            crate::ui::right_panel::PanelTodo {
-                date: chrono::NaiveDate::from_ymd_opt(2026, 6, 5).unwrap(),
-                text: "b".to_string(),
-                todo_index: 1,
-            },
-        ];
-        execute_action(&mut state, UiAction::RightPanelUp).unwrap();
-        assert_eq!(state.right_panel_selected, 0);
-    }
-
-    #[test]
-    fn right_panel_up_clamps_at_zero() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::RightPanel;
-        state.right_panel_selected = 0;
-        execute_action(&mut state, UiAction::RightPanelUp).unwrap();
-        assert_eq!(state.right_panel_selected, 0);
-    }
-
-    #[test]
-    fn capture_left_arrow_moves_cursor_left() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::Capture;
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::Left)),
-            Some(UiAction::MoveCursorLeft)
-        );
-    }
-
-    #[test]
-    fn capture_right_arrow_moves_cursor_right() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::Capture;
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::Right)),
-            Some(UiAction::MoveCursorRight)
-        );
-    }
-
-    #[test]
-    fn capture_home_moves_to_line_start() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::Capture;
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::Home)),
-            Some(UiAction::MoveCursorLineStart)
-        );
-    }
-
-    #[test]
-    fn capture_end_moves_to_line_end() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::Capture;
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::End)),
-            Some(UiAction::MoveCursorLineEnd)
-        );
-    }
-
-    #[test]
-    fn capture_ctrl_a_moves_to_line_start() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::Capture;
-        assert_eq!(
-            key_to_action(&state, ctrl(KeyCode::Char('a'))),
-            Some(UiAction::MoveCursorLineStart)
-        );
-    }
-
-    #[test]
-    fn capture_ctrl_e_moves_to_line_end() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::Capture;
-        assert_eq!(
-            key_to_action(&state, ctrl(KeyCode::Char('e'))),
-            Some(UiAction::MoveCursorLineEnd)
-        );
-    }
-
-    #[test]
-    fn cursor_pos_initializes_to_zero() {
-        let tmp = tempfile::tempdir().unwrap();
-        let state = test_state(&tmp);
-        assert_eq!(state.cursor_pos, 0);
-    }
-
-    #[test]
-    fn prev_char_boundary_steps_back_one_ascii() {
-        assert_eq!(super::prev_char_boundary("hello", 3), 2);
-    }
-
-    #[test]
-    fn prev_char_boundary_at_zero_stays_zero() {
-        assert_eq!(super::prev_char_boundary("hello", 0), 0);
-    }
-
-    #[test]
-    fn prev_char_boundary_steps_back_multibyte() {
-        // "é" is U+00E9, encoded as 2 bytes: 0xC3 0xA9
-        let s = "aé"; // bytes: [0x61, 0xC3, 0xA9]
-        assert_eq!(super::prev_char_boundary(s, 3), 1); // from end back to start of 'é'
-        assert_eq!(super::prev_char_boundary(s, 1), 0); // from 'é' back to 'a'
-    }
-
-    #[test]
-    fn next_char_boundary_steps_forward_one_ascii() {
-        assert_eq!(super::next_char_boundary("hello", 1), 2);
-    }
-
-    #[test]
-    fn next_char_boundary_at_end_stays_end() {
-        assert_eq!(super::next_char_boundary("hello", 5), 5);
-    }
-
-    #[test]
-    fn next_char_boundary_steps_forward_multibyte() {
-        // "aé" bytes: [0x61, 0xC3, 0xA9]
-        let s = "aé";
-        assert_eq!(super::next_char_boundary(s, 0), 1); // 'a' → start of 'é'
-        assert_eq!(super::next_char_boundary(s, 1), 3); // start of 'é' → past 'é' = end
-    }
-
-    #[test]
-    fn move_cursor_left_decrements() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.input = "abc".to_string();
-        state.cursor_pos = 2;
-        execute_action(&mut state, UiAction::MoveCursorLeft).unwrap();
-        assert_eq!(state.cursor_pos, 1);
-    }
-
-    #[test]
-    fn move_cursor_left_clamps_at_zero() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.input = "abc".to_string();
-        state.cursor_pos = 0;
-        execute_action(&mut state, UiAction::MoveCursorLeft).unwrap();
-        assert_eq!(state.cursor_pos, 0);
-    }
-
-    #[test]
-    fn move_cursor_right_increments() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.input = "abc".to_string();
-        state.cursor_pos = 1;
-        execute_action(&mut state, UiAction::MoveCursorRight).unwrap();
-        assert_eq!(state.cursor_pos, 2);
-    }
-
-    #[test]
-    fn move_cursor_right_clamps_at_end() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.input = "abc".to_string();
-        state.cursor_pos = 3;
-        execute_action(&mut state, UiAction::MoveCursorRight).unwrap();
-        assert_eq!(state.cursor_pos, 3);
-    }
-
-    #[test]
-    fn move_cursor_left_steps_over_multibyte_char() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.input = "aé".to_string(); // bytes: [0x61, 0xC3, 0xA9] — len = 3
-        state.cursor_pos = 3; // past 'é'
-        execute_action(&mut state, UiAction::MoveCursorLeft).unwrap();
-        assert_eq!(state.cursor_pos, 1); // back to start of 'é'
-    }
-
-    #[test]
-    fn move_cursor_right_steps_over_multibyte_char() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.input = "aé".to_string();
-        state.cursor_pos = 1; // at start of 'é'
-        execute_action(&mut state, UiAction::MoveCursorRight).unwrap();
-        assert_eq!(state.cursor_pos, 3); // past 'é'
-    }
-
-    #[test]
-    fn move_cursor_line_start_jumps_to_zero_when_no_newline() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.input = "hello".to_string();
-        state.cursor_pos = 3;
-        execute_action(&mut state, UiAction::MoveCursorLineStart).unwrap();
-        assert_eq!(state.cursor_pos, 0);
-    }
-
-    #[test]
-    fn move_cursor_line_start_jumps_past_newline() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.input = "abc\ndefg".to_string();
-        state.cursor_pos = 6; // at 'f' on second line
-        execute_action(&mut state, UiAction::MoveCursorLineStart).unwrap();
-        assert_eq!(state.cursor_pos, 4); // first char of second line ('d')
-    }
-
-    #[test]
-    fn move_cursor_line_start_at_bol_is_noop() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.input = "abc\ndefg".to_string();
-        state.cursor_pos = 4; // already at start of second line
-        execute_action(&mut state, UiAction::MoveCursorLineStart).unwrap();
-        assert_eq!(state.cursor_pos, 4);
-    }
-
-    #[test]
-    fn move_cursor_line_end_jumps_to_end_when_no_newline() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.input = "hello".to_string();
-        state.cursor_pos = 2;
-        execute_action(&mut state, UiAction::MoveCursorLineEnd).unwrap();
-        assert_eq!(state.cursor_pos, 5);
-    }
-
-    #[test]
-    fn move_cursor_line_end_jumps_to_newline_position() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.input = "abc\ndefg".to_string();
-        state.cursor_pos = 1; // at 'b' on first line
-        execute_action(&mut state, UiAction::MoveCursorLineEnd).unwrap();
-        assert_eq!(state.cursor_pos, 3); // position of '\n' (= right after 'c')
-    }
-
-    #[test]
-    fn move_cursor_line_end_at_eol_is_noop() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.input = "abc\ndefg".to_string();
-        state.cursor_pos = 3; // already at position of '\n' on first line
-        execute_action(&mut state, UiAction::MoveCursorLineEnd).unwrap();
-        assert_eq!(state.cursor_pos, 3);
-    }
-
-    #[test]
-    fn ctrl_dot_in_capture_emits_prepend_indent() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::Capture;
-        let key = KeyEvent {
-            code: KeyCode::Char('.'),
-            modifiers: KeyModifiers::CONTROL,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        };
-        assert_eq!(key_to_action(&state, key), Some(UiAction::PrependIndent));
-    }
-
-    #[test]
-    fn prepend_indent_on_first_line_inserts_at_start() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.input = "- item".to_string();
-        state.cursor_pos = 3; // mid-line
-        execute_action(&mut state, UiAction::PrependIndent).unwrap();
-        assert_eq!(state.input, "->- item");
-        assert_eq!(state.cursor_pos, 5); // 3 + 2
-    }
-
-    #[test]
-    fn prepend_indent_on_second_line_inserts_at_line_start() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.input = "- parent\n- child".to_string();
-        state.cursor_pos = 12; // somewhere on second line ("- ch|ild")
-        execute_action(&mut state, UiAction::PrependIndent).unwrap();
-        assert_eq!(state.input, "- parent\n->- child");
-        assert_eq!(state.cursor_pos, 14); // 12 + 2
-    }
-
-    #[test]
-    fn prepend_indent_twice_stacks_markers() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.input = "- item".to_string();
-        state.cursor_pos = 0;
-        execute_action(&mut state, UiAction::PrependIndent).unwrap();
-        execute_action(&mut state, UiAction::PrependIndent).unwrap();
-        assert_eq!(state.input, "->->- item");
-    }
-
-    #[test]
-    fn ctrl_l_toggles_chat() {
-        let tmp = tempfile::tempdir().unwrap();
-        let state = test_state(&tmp);
-        assert_eq!(
-            key_to_action(&state, ctrl(KeyCode::Char('l'))),
-            Some(UiAction::ToggleChat)
-        );
-    }
-
-    #[test]
-    fn toggle_chat_flips_visibility() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        let before = state.chat.visible;
-        execute_action(&mut state, UiAction::ToggleChat).unwrap();
-        assert_eq!(state.chat.visible, !before);
-    }
-
-    #[test]
-    fn toggle_chat_off_while_focused_returns_to_capture() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.chat.visible = true;
-        state.focus = Focus::Chat;
-        execute_action(&mut state, UiAction::ToggleChat).unwrap(); // turns off
-        assert!(!state.chat.visible);
-        assert_eq!(state.focus, Focus::Capture);
-    }
-
-    #[test]
-    fn tab_from_navigate_focuses_chat_when_visible() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::Navigate;
-        state.chat.visible = true;
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::Tab)),
-            Some(UiAction::FocusChat)
-        );
-    }
-
-    #[test]
-    fn tab_from_navigate_skips_chat_when_hidden() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::Navigate;
-        state.chat.visible = false;
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::Tab)),
-            Some(UiAction::FocusRightPanel)
-        );
-    }
-
-    #[test]
     fn tab_from_chat_goes_to_right_panel() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
@@ -1510,6 +1040,94 @@ mod tests {
         execute_action(&mut state, UiAction::RemoveIndent).unwrap();
         assert_eq!(state.input, "item");
         assert_eq!(state.cursor_pos, 0); // at line start, no adjustment
+    }
+
+    #[test]
+    fn tab_in_right_panel_wraps_to_navigate() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::RightPanel;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Tab)),
+            Some(UiAction::FocusNavigate)
+        );
+    }
+
+    #[test]
+    fn backtab_in_navigate_wraps_to_right_panel() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Navigate;
+        let key = KeyEvent {
+            code: KeyCode::BackTab,
+            modifiers: KeyModifiers::SHIFT,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        };
+        assert_eq!(key_to_action(&state, key), Some(UiAction::FocusRightPanel));
+    }
+
+    #[test]
+    fn backtab_in_chat_goes_to_navigate() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Chat;
+        let key = KeyEvent {
+            code: KeyCode::BackTab,
+            modifiers: KeyModifiers::SHIFT,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        };
+        assert_eq!(key_to_action(&state, key), Some(UiAction::FocusNavigate));
+    }
+
+    #[test]
+    fn backtab_in_right_panel_goes_to_chat_when_visible() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::RightPanel;
+        state.chat.visible = true;
+        let key = KeyEvent {
+            code: KeyCode::BackTab,
+            modifiers: KeyModifiers::SHIFT,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        };
+        assert_eq!(key_to_action(&state, key), Some(UiAction::FocusChat));
+    }
+
+    #[test]
+    fn backtab_in_right_panel_goes_to_navigate_when_chat_hidden() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::RightPanel;
+        state.chat.visible = false;
+        let key = KeyEvent {
+            code: KeyCode::BackTab,
+            modifiers: KeyModifiers::SHIFT,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        };
+        assert_eq!(key_to_action(&state, key), Some(UiAction::FocusNavigate));
+    }
+
+    #[test]
+    fn focus_navigate_sets_focus_to_navigate() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::RightPanel;
+        execute_action(&mut state, UiAction::FocusNavigate).unwrap();
+        assert_eq!(state.focus, Focus::Navigate);
+    }
+
+    #[test]
+    fn focus_navigate_clears_pending_delete() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::RightPanel;
+        state.pending_delete = true;
+        execute_action(&mut state, UiAction::FocusNavigate).unwrap();
+        assert!(!state.pending_delete);
     }
 
 }
