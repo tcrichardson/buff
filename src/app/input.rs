@@ -32,6 +32,7 @@ pub enum UiAction {
     TypeNewline,
     TypeIndent,
     PrependIndent,
+    RemoveIndent,
     SubmitInput,
     CommitEdit,
 
@@ -133,6 +134,11 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
             Focus::Chat => Some(UiAction::FocusRightPanel),
             Focus::RightPanel => Some(UiAction::RightPanelBlur),
         };
+    }
+
+    // 4b. BackTab in Capture — un-indent current line
+    if key.code == KeyCode::BackTab && state.focus == Focus::Capture {
+        return Some(UiAction::RemoveIndent);
     }
 
     // 5. Esc handling (context-dependent)
@@ -300,6 +306,18 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
             };
             state.input.insert_str(line_start, "->");
             state.cursor_pos += 2;
+        }
+        UiAction::RemoveIndent => {
+            let line_start = match state.input[..state.cursor_pos].rfind('\n') {
+                Some(nl) => nl + 1,
+                None => 0,
+            };
+            if state.input[line_start..].starts_with("->") {
+                state.input.drain(line_start..line_start + 2);
+                if state.cursor_pos > line_start {
+                    state.cursor_pos = state.cursor_pos.saturating_sub(2).max(line_start);
+                }
+            }
         }
         UiAction::SubmitInput => {
             let cmd = crate::app::command::parse(&state.input);
@@ -1415,6 +1433,83 @@ mod tests {
         let mut state = test_state(&tmp);
         execute_action(&mut state, UiAction::FocusChat).unwrap();
         assert_eq!(state.focus, Focus::Chat);
+    }
+
+    #[test]
+    fn backtab_in_capture_emits_remove_indent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::Capture;
+        let key = KeyEvent {
+            code: KeyCode::BackTab,
+            modifiers: KeyModifiers::SHIFT,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        };
+        assert_eq!(key_to_action(&state, key), Some(UiAction::RemoveIndent));
+    }
+
+    #[test]
+    fn remove_indent_removes_arrow_from_line_start() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "->item".to_string();
+        state.cursor_pos = 6;
+        execute_action(&mut state, UiAction::RemoveIndent).unwrap();
+        assert_eq!(state.input, "item");
+    }
+
+    #[test]
+    fn remove_indent_adjusts_cursor_pos_past_line_start() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "->item".to_string();
+        state.cursor_pos = 6; // at end
+        execute_action(&mut state, UiAction::RemoveIndent).unwrap();
+        assert_eq!(state.cursor_pos, 4); // 6 - 2
+    }
+
+    #[test]
+    fn remove_indent_clamps_cursor_to_line_start() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "->item".to_string();
+        state.cursor_pos = 1; // inside the "->"
+        execute_action(&mut state, UiAction::RemoveIndent).unwrap();
+        assert_eq!(state.cursor_pos, 0); // clamped to line start
+    }
+
+    #[test]
+    fn remove_indent_noop_when_no_arrow() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "item".to_string();
+        state.cursor_pos = 2;
+        execute_action(&mut state, UiAction::RemoveIndent).unwrap();
+        assert_eq!(state.input, "item");
+        assert_eq!(state.cursor_pos, 2);
+    }
+
+    #[test]
+    fn remove_indent_on_second_line_uses_line_start() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "parent\n->child".to_string();
+        state.cursor_pos = 14; // at end of "->child"
+        execute_action(&mut state, UiAction::RemoveIndent).unwrap();
+        assert_eq!(state.input, "parent\nchild");
+        assert_eq!(state.cursor_pos, 12); // 14 - 2
+    }
+
+    #[test]
+    fn remove_indent_cursor_at_line_start_not_adjusted() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.input = "->item".to_string();
+        state.cursor_pos = 0; // at line start
+        execute_action(&mut state, UiAction::RemoveIndent).unwrap();
+        assert_eq!(state.input, "item");
+        assert_eq!(state.cursor_pos, 0); // at line start, no adjustment
     }
 
 }
