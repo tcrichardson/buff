@@ -17,6 +17,11 @@ pub struct Config {
     pub panel_width: u16,
     pub todo_lookback_days: u16,
     pub capture_height: u16,
+    pub llm_base_url: String,
+    pub llm_model: String,
+    pub llm_system_prompt: String,
+    pub chat_width: u16,
+    pub chat_visible: bool,
 }
 
 impl Default for Config {
@@ -29,6 +34,11 @@ impl Default for Config {
             panel_width: 30,
             todo_lookback_days: 7,
             capture_height: 5,
+            llm_base_url: "http://localhost:1234/v1".to_string(),
+            llm_model: "google/gemma-4-12b-qat".to_string(),
+            llm_system_prompt: String::new(),
+            chat_width: 40,
+            chat_visible: true,
         }
     }
 }
@@ -172,5 +182,32 @@ mod tests {
         let config: Config = toml::from_str(toml).unwrap();
         assert_eq!(config.panel_width, 30);
         assert_eq!(config.todo_lookback_days, 7);
+    }
+
+    #[test]
+    fn llm_and_chat_defaults() {
+        let config = Config::default();
+        assert_eq!(config.llm_base_url, "http://localhost:1234/v1");
+        assert_eq!(config.llm_model, "google/gemma-4-12b-qat");
+        assert_eq!(config.llm_system_prompt, "");
+        assert_eq!(config.chat_width, 40);
+        assert!(config.chat_visible);
+    }
+
+    #[test]
+    fn parse_llm_and_chat_fields_from_toml() {
+        let toml = r#"
+            llm_base_url = "http://127.0.0.1:9999/v1"
+            llm_model = "my-model"
+            llm_system_prompt = "be terse"
+            chat_width = 50
+            chat_visible = false
+        "#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.llm_base_url, "http://127.0.0.1:9999/v1");
+        assert_eq!(config.llm_model, "my-model");
+        assert_eq!(config.llm_system_prompt, "be terse");
+        assert_eq!(config.chat_width, 50);
+        assert!(!config.chat_visible);
     }
 }
