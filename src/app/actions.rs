@@ -151,6 +151,9 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
             state.chat.scroll = 0;
             let _ = state.save_chat();
         }
+        Command::Start | Command::End | Command::Scheduled(_) => {
+            // placeholder — implemented in Task 4
+        }
         Command::Unknown(word) => {
             state.status = format!("Unknown command: /{}", word);
         }

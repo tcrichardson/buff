@@ -12,8 +12,30 @@ pub enum Command {
     Summarize,
     Ask(String),
     Clear,
+    Start,
+    End,
+    Scheduled(String),
     Unknown(String),
     InvalidArgs(String),
+}
+
+fn parse_hhmm(s: &str) -> bool {
+    if s.len() != 5 {
+        return false;
+    }
+    let b = s.as_bytes();
+    if b[2] != b':' {
+        return false;
+    }
+    let hh = match (b[0] as char).to_digit(10).zip((b[1] as char).to_digit(10)) {
+        Some((a, b)) => a * 10 + b,
+        None => return false,
+    };
+    let mm = match (b[3] as char).to_digit(10).zip((b[4] as char).to_digit(10)) {
+        Some((a, b)) => a * 10 + b,
+        None => return false,
+    };
+    hh <= 23 && mm <= 59
 }
 
 pub fn parse(input: &str) -> Command {
@@ -71,6 +93,15 @@ pub fn parse(input: &str) -> Command {
                 Command::InvalidArgs("/meeting needs a name".to_string())
             } else {
                 Command::Meeting(name.to_string())
+            }
+        }
+        "/start" => Command::Start,
+        "/end" => Command::End,
+        "/scheduled" => {
+            if rest.is_empty() || !parse_hhmm(rest) {
+                Command::InvalidArgs("invalid time, use HH:MM".to_string())
+            } else {
+                Command::Scheduled(rest.to_string())
             }
         }
         _ => {
@@ -218,6 +249,56 @@ mod tests {
     #[test]
     fn parse_clear() {
         assert_eq!(parse("/clear"), Command::Clear);
+    }
+
+    #[test]
+    fn parse_start() {
+        assert_eq!(parse("/start"), Command::Start);
+    }
+
+    #[test]
+    fn parse_end() {
+        assert_eq!(parse("/end"), Command::End);
+    }
+
+    #[test]
+    fn parse_scheduled_valid() {
+        assert_eq!(
+            parse("/scheduled 09:00"),
+            Command::Scheduled("09:00".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_scheduled_no_arg() {
+        assert_eq!(
+            parse("/scheduled"),
+            Command::InvalidArgs("invalid time, use HH:MM".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_scheduled_bad_time() {
+        assert_eq!(
+            parse("/scheduled 9am"),
+            Command::InvalidArgs("invalid time, use HH:MM".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_scheduled_out_of_range_hour() {
+        assert_eq!(
+            parse("/scheduled 25:00"),
+            Command::InvalidArgs("invalid time, use HH:MM".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_scheduled_out_of_range_minute() {
+        assert_eq!(
+            parse("/scheduled 12:60"),
+            Command::InvalidArgs("invalid time, use HH:MM".to_string())
+        );
     }
 
     #[test]
