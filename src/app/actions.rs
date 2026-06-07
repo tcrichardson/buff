@@ -151,8 +151,61 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
             state.chat.scroll = 0;
             let _ = state.save_chat();
         }
-        Command::Start | Command::End | Command::Scheduled(_) => {
-            // placeholder — implemented in Task 4
+        Command::Start => {
+            let ord = match &state.context {
+                Context::Meeting(ord) => *ord,
+                _ => {
+                    state.status = "Not in a meeting".to_string();
+                    return Ok(());
+                }
+            };
+            if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
+                let time = state.current_time_hhmm();
+                crate::model::writer::set_meeting_time_field(
+                    &mut state.doc.lines,
+                    heading,
+                    "Started",
+                    &time,
+                );
+                after_doc_mutation(state)?;
+            }
+        }
+        Command::End => {
+            let ord = match &state.context {
+                Context::Meeting(ord) => *ord,
+                _ => {
+                    state.status = "Not in a meeting".to_string();
+                    return Ok(());
+                }
+            };
+            if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
+                let time = state.current_time_hhmm();
+                crate::model::writer::set_meeting_time_field(
+                    &mut state.doc.lines,
+                    heading,
+                    "Ended",
+                    &time,
+                );
+                after_doc_mutation(state)?;
+            }
+        }
+        Command::Scheduled(time) => {
+            let ord = match &state.context {
+                Context::Meeting(ord) => *ord,
+                _ => {
+                    state.status = "Not in a meeting".to_string();
+                    return Ok(());
+                }
+            };
+            if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
+                crate::model::writer::set_meeting_time_field(
+                    &mut state.doc.lines,
+                    heading,
+                    "Scheduled",
+                    &time,
+                );
+                after_doc_mutation(state)?;
+            }
         }
         Command::Unknown(word) => {
             state.status = format!("Unknown command: /{}", word);
@@ -1117,6 +1170,93 @@ mod tests {
         dispatch(&mut state, Command::Entry("->->- deep".to_string())).unwrap();
         let text = state.doc.to_text();
         assert!(text.contains("    - deep\n"), "got: {}", text);
+    }
+
+    #[test]
+    fn start_outside_meeting_sets_status() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        // context starts as Notes
+        let before = state.doc.to_text();
+        dispatch(&mut state, Command::Start).unwrap();
+        assert_eq!(state.status, "Not in a meeting");
+        assert_eq!(state.doc.to_text(), before);
+    }
+
+    #[test]
+    fn end_outside_meeting_sets_status() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        let before = state.doc.to_text();
+        dispatch(&mut state, Command::End).unwrap();
+        assert_eq!(state.status, "Not in a meeting");
+        assert_eq!(state.doc.to_text(), before);
+    }
+
+    #[test]
+    fn scheduled_outside_meeting_sets_status() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        let before = state.doc.to_text();
+        dispatch(&mut state, Command::Scheduled("09:00".to_string())).unwrap();
+        assert_eq!(state.status, "Not in a meeting");
+        assert_eq!(state.doc.to_text(), before);
+    }
+
+    #[test]
+    fn start_in_meeting_inserts_started_line() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        dispatch(&mut state, Command::Start).unwrap();
+        let text = state.doc.to_text();
+        // line format is "Started: HH:MM" — just verify prefix since time varies
+        assert!(
+            text.contains("Started: "),
+            "Started line missing: {}",
+            text
+        );
+        // Started should appear between the heading and any notes
+        let heading_pos = text.find("### Standup").unwrap();
+        let started_pos = text.find("Started: ").unwrap();
+        assert!(started_pos > heading_pos, "Started should be after heading");
+    }
+
+    #[test]
+    fn end_in_meeting_inserts_ended_line() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        dispatch(&mut state, Command::End).unwrap();
+        let text = state.doc.to_text();
+        assert!(text.contains("Ended: "), "Ended line missing: {}", text);
+    }
+
+    #[test]
+    fn scheduled_in_meeting_inserts_scheduled_line() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        dispatch(&mut state, Command::Scheduled("09:00".to_string())).unwrap();
+        let text = state.doc.to_text();
+        assert!(
+            text.contains("Scheduled: 09:00\n"),
+            "Scheduled line missing: {}",
+            text
+        );
+    }
+
+    #[test]
+    fn start_twice_overwrites_started_line() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        dispatch(&mut state, Command::Start).unwrap();
+        dispatch(&mut state, Command::Start).unwrap();
+        let text = state.doc.to_text();
+        // Only one "Started:" line should exist
+        let count = text.matches("Started: ").count();
+        assert_eq!(count, 1, "should have exactly one Started line: {}", text);
     }
 
     #[test]
