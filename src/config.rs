@@ -114,6 +114,25 @@ fn resolve_notes_dir(cli: Option<String>, cfg: Option<String>, default: &Path) -
     }
 }
 
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+pub struct ThemeOverrides {
+    pub heading1: Option<String>,
+    pub heading2: Option<String>,
+    pub heading3: Option<String>,
+    pub heading4: Option<String>,
+    pub heading5: Option<String>,
+    pub heading6: Option<String>,
+    pub border_focused: Option<String>,
+    pub border_unfocused: Option<String>,
+    pub notes_panel_bg: Option<String>,
+    pub panel_bg: Option<String>,
+    pub chat_panel_bg: Option<String>,
+    pub quote_marker: Option<String>,
+    pub code: Option<String>,
+    pub todo_done: Option<String>,
+    pub todo_overdue: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -5,5 +5,6 @@ mod document;
 pub mod help;
 pub mod layout;
 pub mod right_panel;
+pub mod theme;
 
 pub use layout::render;
