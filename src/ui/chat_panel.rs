@@ -4,8 +4,6 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Line;
 use ratatui::widgets::{Block, Padding, Paragraph};
 
-const PANEL_BG: Color = Color::Rgb(230, 230, 240);
-
 /// Wrap `text` to `width` columns, splitting on spaces and honoring existing newlines.
 fn wrap_line(text: &str, width: usize) -> Vec<String> {
     if width == 0 {
@@ -33,9 +31,9 @@ fn wrap_line(text: &str, width: usize) -> Vec<String> {
     out
 }
 
-pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, _theme: &crate::ui::theme::Theme) {
+pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &crate::ui::theme::Theme) {
     let bg = Block::default()
-        .style(Style::default().bg(PANEL_BG))
+        .style(Style::default().bg(theme.chat_panel_bg))
         .padding(Padding::new(1, 1, 1, 1));
     let inner = bg.inner(area);
     frame.render_widget(bg, area);
@@ -51,7 +49,7 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, _theme: &c
 
     let header = Paragraph::new("Chat").style(
         Style::default()
-            .bg(PANEL_BG)
+            .bg(theme.chat_panel_bg)
             .add_modifier(Modifier::BOLD),
     );
     frame.render_widget(header, chunks[0]);
@@ -67,7 +65,7 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, _theme: &c
         };
         let full = format!("{}{}", prefix, msg.content);
         for wl in wrap_line(&full, width) {
-            lines.push(Line::styled(wl, style.bg(PANEL_BG)));
+            lines.push(Line::styled(wl, style.bg(theme.chat_panel_bg)));
         }
     }
     // Thinking indicator while waiting for the first token.
@@ -77,7 +75,7 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, _theme: &c
             Some(m) if m.role == ChatRole::Assistant && m.content.is_empty()
         )
     {
-        lines.push(Line::styled("…", Style::default().bg(PANEL_BG)));
+        lines.push(Line::styled("…", Style::default().bg(theme.chat_panel_bg)));
     }
 
     let height = body_area.height as usize;
@@ -88,13 +86,13 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, _theme: &c
     let end = (top + height).min(total);
     let visible: Vec<Line> = if top < end { lines[top..end].to_vec() } else { Vec::new() };
     frame.render_widget(
-        Paragraph::new(visible).style(Style::default().bg(PANEL_BG)),
+        Paragraph::new(visible).style(Style::default().bg(theme.chat_panel_bg)),
         body_area,
     );
 
     if let Some(status) = &app.chat.status {
         let status_widget = Paragraph::new(status.clone())
-            .style(Style::default().bg(PANEL_BG).fg(Color::Red));
+            .style(Style::default().bg(theme.chat_panel_bg).fg(Color::Red));
         frame.render_widget(status_widget, chunks[2]);
     }
 }
@@ -160,5 +158,29 @@ mod tests {
         terminal.draw(|f| render(f, f.area(), &app, &crate::ui::theme::light())).unwrap();
         let content: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
         assert!(content.contains('…'), "thinking indicator missing: {}", content);
+    }
+
+    #[test]
+    fn panel_uses_theme_chat_panel_bg() {
+        use ratatui::style::Color;
+
+        // Build a theme with a distinctive chat_panel_bg to prove the theme is used
+        let mut overrides = crate::config::ThemeOverrides::default();
+        overrides.chat_panel_bg = Some("#010203".to_string());
+        let custom_theme = crate::ui::theme::resolve_theme("light", &overrides);
+
+        let app = app_with_messages(vec![]);
+        let backend = TestBackend::new(40, 20);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| render(f, f.area(), &app, &custom_theme))
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let has_bg = buffer
+            .content
+            .iter()
+            .any(|cell| cell.style().bg == Some(Color::Rgb(1, 2, 3)));
+        assert!(has_bg, "expected custom chat_panel_bg color from theme");
     }
 }
