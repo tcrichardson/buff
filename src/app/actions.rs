@@ -101,6 +101,53 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
         Command::Summarize => {
             state.status = "summarize is not implemented yet".to_string();
         }
+        Command::Ask(text) => {
+            let Some(tx) = state.chat.event_tx.clone() else {
+                state.chat.status = Some("LLM channel unavailable".to_string());
+                return Ok(());
+            };
+            state.chat.visible = true;
+            state.chat.status = None;
+            state.chat.scroll = 0;
+            state.chat.messages.push(crate::app::state::ChatMessage {
+                role: crate::app::state::ChatRole::User,
+                content: text.clone(),
+            });
+            // Persist the user message before the reply streams in.
+            let _ = state.save_chat();
+
+            let request_messages = state.chat.messages.clone();
+            let id = crate::app::llm::next_request_id();
+            state.chat.active_request = id;
+            state.chat.pending = true;
+            // Empty assistant placeholder that tokens append into.
+            state.chat.messages.push(crate::app::state::ChatMessage {
+                role: crate::app::state::ChatRole::Assistant,
+                content: String::new(),
+            });
+
+            let system = if state.config.llm_system_prompt.is_empty() {
+                None
+            } else {
+                Some(state.config.llm_system_prompt.clone())
+            };
+            let req = crate::app::llm::ChatRequest {
+                id,
+                base_url: state.config.llm_base_url.clone(),
+                model: state.config.llm_model.clone(),
+                system,
+                messages: request_messages,
+            };
+            crate::app::llm::spawn(req, tx);
+        }
+        Command::Clear => {
+            state.chat.messages.clear();
+            state.chat.active_request = crate::app::llm::next_request_id();
+            state.chat.pending = false;
+            state.chat.status = None;
+            state.chat.scroll = 0;
+            let _ = state.save_chat();
+        }
         Command::Unknown(word) => {
             state.status = format!("Unknown command: /{}", word);
         }
@@ -1050,5 +1097,60 @@ mod tests {
         );
         assert_eq!(state.selectables[0].text, "- parent");
         assert_eq!(state.selectables[1].text, "  - child");
+    }
+
+    #[test]
+    fn ask_pushes_user_and_placeholder_and_sets_pending() {
+        use crate::app::llm::LlmEvent;
+        use crate::app::state::ChatRole;
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        // Keep the receiver alive for the duration of the test so the spawned
+        // worker's send (if any) is harmless. We assert only on state, not on the
+        // channel, to avoid depending on network timing.
+        let (tx, _rx) = std::sync::mpsc::channel::<LlmEvent>();
+        state.chat.event_tx = Some(tx);
+
+        dispatch(&mut state, Command::Ask("hello".to_string())).unwrap();
+
+        assert_eq!(state.chat.messages.len(), 2);
+        assert_eq!(state.chat.messages[0].role, ChatRole::User);
+        assert_eq!(state.chat.messages[0].content, "hello");
+        assert_eq!(state.chat.messages[1].role, ChatRole::Assistant);
+        assert_eq!(state.chat.messages[1].content, "");
+        assert!(state.chat.pending);
+        assert!(state.chat.visible, "/ask should reveal the panel");
+        assert!(state.chat.active_request > 0);
+    }
+
+    #[test]
+    fn ask_persists_user_message_to_sidecar() {
+        use crate::app::llm::LlmEvent;
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        let (tx, _rx) = std::sync::mpsc::channel::<LlmEvent>();
+        state.chat.event_tx = Some(tx);
+
+        dispatch(&mut state, Command::Ask("persist me".to_string())).unwrap();
+
+        let path = crate::storage::chat_path_for(&state.notes_dir, state.date, &state.config.date_format);
+        let loaded = crate::storage::load_chat(&path);
+        assert_eq!(loaded.first().map(|m| m.content.as_str()), Some("persist me"));
+    }
+
+    #[test]
+    fn clear_empties_messages_and_bumps_request() {
+        use crate::app::state::{ChatMessage, ChatRole};
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.chat.messages = vec![ChatMessage { role: ChatRole::User, content: "x".into() }];
+        state.chat.active_request = 0;
+        state.chat.pending = true;
+
+        dispatch(&mut state, Command::Clear).unwrap();
+
+        assert!(state.chat.messages.is_empty());
+        assert!(!state.chat.pending);
+        assert!(state.chat.active_request > 0);
     }
 }

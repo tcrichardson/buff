@@ -10,6 +10,8 @@ pub enum Command {
     Help,
     Quit,
     Summarize,
+    Ask(String),
+    Clear,
     Unknown(String),
     InvalidArgs(String),
 }
@@ -38,6 +40,14 @@ pub fn parse(input: &str) -> Command {
         "/help" => Command::Help,
         "/quit" => Command::Quit,
         "/summarize" => Command::Summarize,
+        "/clear" => Command::Clear,
+        "/ask" => {
+            if rest.is_empty() {
+                Command::InvalidArgs("/ask needs a message".to_string())
+            } else {
+                Command::Ask(rest.to_string())
+            }
+        },
         "/todo" => {
             if rest.is_empty() {
                 Command::InvalidArgs("/todo needs text".to_string())
@@ -193,6 +203,21 @@ mod tests {
     #[test]
     fn parse_unknown() {
         assert_eq!(parse("/bogus"), Command::Unknown("bogus".to_string()));
+    }
+
+    #[test]
+    fn parse_ask_with_text() {
+        assert_eq!(parse("/ask how are you"), Command::Ask("how are you".to_string()));
+    }
+
+    #[test]
+    fn parse_ask_empty_is_invalid() {
+        assert_eq!(parse("/ask"), Command::InvalidArgs("/ask needs a message".to_string()));
+    }
+
+    #[test]
+    fn parse_clear() {
+        assert_eq!(parse("/clear"), Command::Clear);
     }
 
     #[test]
