@@ -4,9 +4,12 @@ use crate::model::day::{EntryTarget, SelectableKind};
 
 pub fn go_to_date(state: &mut AppState, date: chrono::NaiveDate) -> anyhow::Result<()> {
     state.save()?;
+    state.save_chat()?;
+    let tx = state.chat.event_tx.take();
     let notes_dir = state.notes_dir.clone();
     let config = state.config.clone();
     *state = AppState::open_day(notes_dir, config, date)?;
+    state.chat.event_tx = tx;
     state.save()?;
     state.dates_with_notes =
         crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
@@ -990,6 +993,34 @@ mod tests {
         // dates_with_notes should still be consistent after toggle
         // (the file still exists even though the todo is done)
         assert!(state.dates_with_notes.contains(&past));
+    }
+
+    #[test]
+    fn go_to_date_preserves_sender_and_loads_target_chat() {
+        use crate::app::llm::LlmEvent;
+        use crate::app::state::{ChatMessage, ChatRole};
+        let tmp = tempfile::tempdir().unwrap();
+        let config = Config::default();
+        let today = NaiveDate::from_ymd_opt(2026, 6, 5).unwrap();
+        let other = NaiveDate::from_ymd_opt(2026, 6, 6).unwrap();
+
+        // Pre-write a chat sidecar for the *other* day.
+        let other_chat = crate::storage::chat_path_for(tmp.path(), other, &config.date_format);
+        crate::storage::save_chat(
+            &other_chat,
+            &[ChatMessage { role: ChatRole::Assistant, content: "from other day".into() }],
+        )
+        .unwrap();
+
+        let mut state = AppState::open_day(tmp.path().to_path_buf(), config, today).unwrap();
+        let (tx, _rx) = std::sync::mpsc::channel::<LlmEvent>();
+        state.chat.event_tx = Some(tx);
+
+        go_to_date(&mut state, other).unwrap();
+
+        assert!(state.chat.event_tx.is_some(), "sender must survive day switch");
+        assert_eq!(state.chat.messages.len(), 1);
+        assert_eq!(state.chat.messages[0].content, "from other day");
     }
 
     #[test]
