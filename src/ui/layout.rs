@@ -3,15 +3,25 @@ use crate::app::state::{AppState, Overlay};
 pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
     use ratatui::layout::{Constraint, Direction, Layout};
 
-    // Outer horizontal split: left = doc+chrome, right = panel
+    // Outer horizontal split: left = doc+chrome, [chat], right = panel
     let panel_width = app.config.panel_width;
-    let outer = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(0), Constraint::Length(panel_width)])
-        .split(frame.area());
-
-    let left_area = outer[0];
-    let panel_area = outer[1];
+    let (left_area, chat_area, panel_area) = if app.chat.visible {
+        let outer = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Min(0),
+                Constraint::Length(app.config.chat_width),
+                Constraint::Length(panel_width),
+            ])
+            .split(frame.area());
+        (outer[0], Some(outer[1]), outer[2])
+    } else {
+        let outer = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Min(0), Constraint::Length(panel_width)])
+            .split(frame.area());
+        (outer[0], None, outer[1])
+    };
 
     // Left column: existing vertical stack
     let input_line_count = app.input.split('\n').count().max(1) as u16;
@@ -57,6 +67,11 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState) {
     super::document::render(frame, app, document_area);
     super::capture::render_status(frame, app, status_area);
     super::capture::render_input(frame, app, input_area);
+
+    // Chat panel (middle column), when visible
+    if let Some(chat_area) = chat_area {
+        super::chat_panel::render(frame, chat_area, app);
+    }
 
     // Right panel
     super::right_panel::render(frame, panel_area, app);
@@ -287,5 +302,39 @@ mod tests {
             "code text missing: {}",
             content
         );
+    }
+
+    #[test]
+    fn chat_panel_renders_when_visible() {
+        let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let mut app = test_app(doc, Focus::Capture, 0);
+        app.chat.visible = true;
+        app.chat.messages = vec![crate::app::state::ChatMessage {
+            role: crate::app::state::ChatRole::Assistant,
+            content: "paneltext".to_string(),
+        }];
+
+        let backend = TestBackend::new(120, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app)).unwrap();
+        let content: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
+        assert!(content.contains("paneltext"), "chat text missing: {}", content);
+    }
+
+    #[test]
+    fn chat_panel_hidden_does_not_render_chat() {
+        let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let mut app = test_app(doc, Focus::Capture, 0);
+        app.chat.visible = false;
+        app.chat.messages = vec![crate::app::state::ChatMessage {
+            role: crate::app::state::ChatRole::Assistant,
+            content: "paneltext".to_string(),
+        }];
+
+        let backend = TestBackend::new(120, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app)).unwrap();
+        let content: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
+        assert!(!content.contains("paneltext"), "chat should be hidden: {}", content);
     }
 }
