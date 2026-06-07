@@ -100,15 +100,11 @@ impl Document {
         meetings
     }
 
-    pub fn add_meeting(&mut self, time: &str, name: &str) -> usize {
+    pub fn add_meeting(&mut self, name: &str) -> usize {
         let start = ensure_section(&mut self.lines, SectionKind::Meetings);
         let end = section_end(&self.lines, start);
         let insert_idx = block_insert_index(&self.lines, start, end);
-        let line = if time.is_empty() {
-            format!("### {}", name)
-        } else {
-            format!("### {} {}", time, name)
-        };
+        let line = format!("### {}", name);
         self.lines.insert(insert_idx, line);
 
         let mut ordinal = 0;
@@ -473,20 +469,20 @@ mod tests {
     #[test]
     fn add_meeting_to_empty_doc() {
         let mut doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
-        let ord = doc.add_meeting("09:15", "Standup");
+        let ord = doc.add_meeting("Standup");
         assert_eq!(ord, 0);
         let meetings = doc.meetings();
         assert_eq!(meetings.len(), 1);
         assert_eq!(meetings[0].ordinal, 0);
-        assert_eq!(meetings[0].time, "09:15");
+        assert_eq!(meetings[0].time, "");
         assert_eq!(meetings[0].name, "Standup");
     }
 
     #[test]
     fn add_two_meetings() {
         let mut doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
-        let ord0 = doc.add_meeting("09:15", "Standup");
-        let ord1 = doc.add_meeting("10:00", "Review");
+        let ord0 = doc.add_meeting("Standup");
+        let ord1 = doc.add_meeting("Review");
         assert_eq!(ord0, 0);
         assert_eq!(ord1, 1);
         let meetings = doc.meetings();
@@ -572,7 +568,7 @@ mod tests {
         let mut doc = Document::from_text(
             "# 2026-06-04\n\n## Meetings\n\n### 09:15 Standup\n\n## Notes\n\n## To-dos\n",
         );
-        doc.add_meeting("09:15", "Standup");
+        doc.add_meeting("Standup");
         doc.add_todo("Action item", None);
         let text = doc.to_text();
 
@@ -632,10 +628,10 @@ mod tests {
     #[test]
     fn add_meeting_creates_missing_meetings_section() {
         let mut doc = Document::from_text("# Title\n\n## Notes\n\n## To-dos\n");
-        doc.add_meeting("09:15", "Standup");
+        doc.add_meeting("Standup");
         let text = doc.to_text();
         assert!(
-            text.contains("## Meetings\n### 09:15 Standup\n"),
+            text.contains("## Meetings\n### Standup\n"),
             "got: {}",
             text
         );

@@ -62,7 +62,7 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
             after_doc_mutation(state)?;
         }
         Command::Meeting(name) => {
-            let ord = state.doc.add_meeting(&state.current_time_hhmm(), &name);
+            let ord = state.doc.add_meeting(&name);
             state.context = Context::Meeting(ord);
             state.update_context_display();
             after_doc_mutation(state)?;
