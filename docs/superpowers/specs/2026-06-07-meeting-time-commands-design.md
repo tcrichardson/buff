@@ -75,15 +75,7 @@ The canonical order ensures predictable document output regardless of the order 
 
 ### 4. Live clock in the header
 
-**`AppState`** (`src/app/state.rs`) gains:
-
-```rust
-pub last_rendered_minute: u32,
-```
-
-Initialized to `61` (sentinel value that never matches a real minute) to force a draw on first render.
-
-**Main event loop** (`src/main.rs`): after each `event::poll(100ms)` call, check `chrono::Local::now().minute()` against `state.last_rendered_minute`. If they differ, update the field and trigger a redraw (the loop already redraws unconditionally, so this just ensures redraws happen even when no key is pressed).
+The main event loop in `src/main.rs` already calls `terminal.draw()` unconditionally on every iteration (every ~100ms), so no new fields or forced-redraw logic are needed. The header render function simply reads `chrono::Local::now()` inline each time it runs.
 
 **Header rendering** (`src/ui/layout.rs`): the date/context line changes from:
 
@@ -129,9 +121,7 @@ User types /start
 | `src/app/command.rs` | Add `Start`, `End`, `Scheduled(String)` variants; parse `/start`, `/end`, `/scheduled` |
 | `src/app/actions.rs` | Dispatch new commands; remove time arg from `add_meeting` call |
 | `src/model/writer.rs` | Remove time param from `add_meeting`; add `set_meeting_time_field` |
-| `src/app/state.rs` | Add `last_rendered_minute: u32` field |
-| `src/main.rs` | Minute-change detection and forced redraw in event loop |
-| `src/ui/layout.rs` | Append current time to header date line |
+| `src/ui/layout.rs` | Append `chrono::Local::now()` as `HH:MM` to header date line |
 
 ## Testing
 
