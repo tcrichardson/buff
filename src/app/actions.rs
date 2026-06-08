@@ -344,10 +344,20 @@ pub fn resume_selected_heading(state: &mut AppState) {
                 state.status.clear();
                 return;
             }
+            SelectableKind::MarkdownHeading => {
+                let level = crate::model::parser::heading_level(&sel.text)
+                    .unwrap_or(4) as u8;
+                let heading_line = sel.lines.start;
+                state.context = Context::Section { heading_line, level };
+                state.update_context_display();
+                state.focus = crate::app::state::Focus::Capture;
+                state.status.clear();
+                return;
+            }
             _ => {}
         }
     }
-    state.status = "not a meeting or note".to_string();
+    state.status = "not a meeting, note, or section".to_string();
 }
 
 pub fn toggle_panel_todo(state: &mut AppState) -> anyhow::Result<()> {
@@ -925,7 +935,7 @@ mod tests {
         state.selected = 0;
         state.focus = crate::app::state::Focus::Navigate;
         resume_selected_heading(&mut state);
-        assert_eq!(state.status, "not a meeting or note");
+        assert_eq!(state.status, "not a meeting, note, or section");
     }
 
     #[test]
@@ -1461,5 +1471,61 @@ mod tests {
         state.context = Context::Section { heading_line: heading_line + 1, level: 4 };
         state.update_context_display();
         assert_eq!(state.context_display, "context: Updates");
+    }
+
+    #[test]
+    fn resume_markdown_heading_sets_section_context() {
+        use crate::model::day::SelectableKind;
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        dispatch(&mut state, Command::Section("Updates".to_string())).unwrap();
+        // Leave the section context
+        dispatch(&mut state, Command::Note(None)).unwrap();
+        assert_eq!(state.context, Context::Notes);
+
+        // Navigate to the #### Updates heading
+        let idx = state
+            .selectables
+            .iter()
+            .position(|s| matches!(s.kind, SelectableKind::MarkdownHeading))
+            .expect("#### Updates should be a MarkdownHeading selectable");
+        state.selected = idx;
+        state.focus = crate::app::state::Focus::Navigate;
+
+        resume_selected_heading(&mut state);
+
+        assert!(
+            matches!(state.context, Context::Section { level: 4, .. }),
+            "expected Section level 4, got {:?}",
+            state.context
+        );
+        assert_eq!(state.focus, crate::app::state::Focus::Capture);
+        assert_eq!(state.context_display, "context: Updates");
+    }
+
+    #[test]
+    fn resume_markdown_heading_entry_routes_under_it() {
+        use crate::model::day::SelectableKind;
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        dispatch(&mut state, Command::Section("Updates".to_string())).unwrap();
+        dispatch(&mut state, Command::Note(None)).unwrap(); // leave context
+
+        let idx = state
+            .selectables
+            .iter()
+            .position(|s| matches!(s.kind, SelectableKind::MarkdownHeading))
+            .expect("section heading should be selectable");
+        state.selected = idx;
+        state.focus = crate::app::state::Focus::Navigate;
+        resume_selected_heading(&mut state);
+
+        dispatch(&mut state, Command::Entry("after resume".to_string())).unwrap();
+        let text = state.doc.to_text();
+        let section_pos = text.find("#### Updates").unwrap();
+        let entry_pos = text.find("after resume").unwrap();
+        assert!(entry_pos > section_pos, "entry should be under section after resume: {}", text);
     }
 }
