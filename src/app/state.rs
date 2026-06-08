@@ -218,6 +218,144 @@ impl AppState {
     }
 }
 
+/// Derive the editing context from a cursor position in the document.
+/// Used to update `state.context` automatically as the vim cursor moves.
+pub fn context_at_line(lines: &[String], cursor_line: usize) -> Context {
+    if lines.is_empty() || cursor_line >= lines.len() {
+        return Context::Notes;
+    }
+
+    // Step 1: walk backward to find the enclosing ## section boundary
+    let boundary = match (0..=cursor_line).rev().find(|&i| lines[i].starts_with("## ")) {
+        Some(b) => b,
+        None => return Context::Notes,
+    };
+
+    let section = &lines[boundary];
+
+    if section == "## To-dos" {
+        return Context::Todos;
+    }
+
+    let in_meetings = section == "## Meetings";
+    let in_notes = section == "## Notes";
+    if !in_meetings && !in_notes {
+        return Context::Notes;
+    }
+
+    // Step 2: walk forward from boundary to cursor_line tracking headings
+    let mut l3_line: Option<usize> = None; // nearest ### heading
+    let mut l4_line: Option<usize> = None; // nearest #### or deeper
+    let mut l4_level: u8 = 0;
+
+    for i in (boundary + 1)..=cursor_line {
+        let line = &lines[i];
+        if line.starts_with("## ") {
+            break; // hit another top-level section — stop
+        } else if line.starts_with("### ") {
+            l3_line = Some(i);
+            l4_line = None; // reset sub-section on new L3 heading
+            l4_level = 0;
+        } else if line.starts_with("#### ")
+            || line.starts_with("##### ")
+            || line.starts_with("###### ")
+        {
+            if l3_line.is_some() {
+                l4_level = line.chars().take_while(|&c| c == '#').count() as u8;
+                l4_line = Some(i);
+            }
+        }
+    }
+
+    // Step 3: return most specific context found
+    if let Some(l4) = l4_line {
+        return Context::Section { heading_line: l4, level: l4_level };
+    }
+
+    if let Some(l3) = l3_line {
+        // Ordinal = number of ### headings from section start to l3, 0-indexed
+        let ordinal = lines[(boundary + 1)..=l3]
+            .iter()
+            .filter(|l| l.starts_with("### "))
+            .count()
+            .saturating_sub(1);
+        return if in_meetings {
+            Context::Meeting(ordinal)
+        } else {
+            Context::NoteBlock(ordinal)
+        };
+    }
+
+    Context::Notes
+}
+
+#[cfg(test)]
+mod context_tests {
+    use super::*;
+
+    fn lines(text: &str) -> Vec<String> {
+        text.lines().map(|l| l.to_string()).collect()
+    }
+
+    #[test]
+    fn cursor_above_all_sections_is_notes() {
+        let ls = lines("# 2026-06-08 (Mon)\n");
+        assert_eq!(context_at_line(&ls, 0), Context::Notes);
+    }
+
+    #[test]
+    fn cursor_in_meetings_no_heading_is_notes() {
+        let ls = lines("# Day\n\n## Meetings\n\n## Notes\n");
+        // line 3 is blank inside ## Meetings
+        assert_eq!(context_at_line(&ls, 3), Context::Notes);
+    }
+
+    #[test]
+    fn cursor_on_meeting_heading_is_meeting_0() {
+        let ls = lines("# Day\n\n## Meetings\n\n### Standup\n\n## Notes\n");
+        // line 4 is "### Standup"
+        assert_eq!(context_at_line(&ls, 4), Context::Meeting(0));
+    }
+
+    #[test]
+    fn cursor_in_second_meeting_is_meeting_1() {
+        let ls = lines(
+            "# Day\n\n## Meetings\n\n### Standup\n- note\n\n### Design Review\n\n## Notes\n",
+        );
+        // line 7 is "### Design Review"
+        assert_eq!(context_at_line(&ls, 7), Context::Meeting(1));
+    }
+
+    #[test]
+    fn cursor_in_section_under_meeting() {
+        let ls = lines("# Day\n\n## Meetings\n\n### Standup\n\n#### Action Items\n\n## Notes\n");
+        // line 6 is "#### Action Items"
+        assert_eq!(
+            context_at_line(&ls, 6),
+            Context::Section { heading_line: 6, level: 4 }
+        );
+    }
+
+    #[test]
+    fn cursor_in_todos_section() {
+        let ls = lines("# Day\n\n## Meetings\n\n## Notes\n\n## To-dos\n\n- [ ] task\n");
+        // line 8 is "- [ ] task"
+        assert_eq!(context_at_line(&ls, 8), Context::Todos);
+    }
+
+    #[test]
+    fn cursor_in_note_block() {
+        let ls = lines("# Day\n\n## Meetings\n\n## Notes\n\n### My Note\n\n## To-dos\n");
+        // line 6 is "### My Note"
+        assert_eq!(context_at_line(&ls, 6), Context::NoteBlock(0));
+    }
+
+    #[test]
+    fn cursor_on_empty_lines_vec() {
+        assert_eq!(context_at_line(&[], 0), Context::Notes);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
