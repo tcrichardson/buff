@@ -14,7 +14,7 @@ The app opens today's note, creating it from a template if it doesn't exist yet.
 
 ### Capture mode (default)
 
-Type at the bottom bar and press **Enter**. Plain text is stored as-is. Use slash commands to route entries into the right section.
+Type at the bottom bar and press **Enter**. Plain text is stored as-is. Use slash commands to route entries into the right section. Press **Esc** to switch to vim normal mode.
 
 | Command | What it does |
 |---|---|
@@ -67,22 +67,52 @@ before committing.
 | `Tab` | Insert indent marker (`->`) at cursor |
 | `Ctrl+.` | Prepend indent marker (`->`) at start of current line |
 
-### Navigate mode
+### Vim normal mode
 
-Press **Esc** to move focus into the document. Use these keys to act on entries:
+Press **Esc** from capture mode to move focus into the document and navigate with vim-style keys. A status line at the bottom shows `-- NORMAL --` and the current context.
 
 | Key | Action |
 |---|---|
-| `j` / `k` or `↑` / `↓` | Move selection up/down |
-| `g` / `G` | Jump to first / last entry |
+| `j` / `k` or `↑` / `↓` | Move cursor up/down |
+| `h` / `l` or `←` / `→` | Move cursor left/right |
+| `g` / `G` | Jump to first / last line |
 | `Space` or `x` | Toggle a to-do done / not done |
-| `e` | Edit the selected entry |
-| `d` then `d` | Delete the selected entry (two-step confirm) |
+| `e` | Edit the current line |
+| `dd` | Delete the current line |
+| `yy` | Yank (copy) the current line |
+| `p` | Paste yanked line after cursor |
+| `u` | Undo last edit |
+| `i` | Enter vim insert mode |
 | `Enter` | Re-enter the selected meeting (when a `### HH:MM Name` heading is selected) |
 | `?` | Open help overlay |
-| `i` or `Esc` | Return to capture mode |
+| `Esc` | Return to capture mode |
 
-All entry types — plain text, bullets, to-dos, meeting headings, and Markdown blocks — are selectable, editable (`e`), and deletable (`dd`).
+### Vim insert mode
+
+Press **i** from normal mode to edit the document directly at the cursor position. The status line shows `-- INSERT --`.
+
+| Key | Action |
+|---|---|
+| `←` / `→` / `↑` / `↓` | Move cursor |
+| `Backspace` | Delete character before cursor |
+| `Enter` | Insert newline |
+| Any character | Insert at cursor |
+| `Esc` | Return to normal mode |
+
+All entry types — plain text, bullets, to-dos, meeting headings, and Markdown blocks — are selectable, editable (`e` or `i`), and deletable (`dd`).
+
+### Focus cycle
+
+`Tab` and `Shift+Tab` cycle focus across the UI:
+
+| From | `Tab` goes to | `Shift+Tab` goes to |
+|---|---|---|
+| Vim normal mode | Capture mode | Right panel |
+| Capture mode | Chat panel (if visible) | Vim normal mode |
+| Chat panel | Right panel | Capture mode |
+| Right panel | Vim normal mode | Chat panel (if visible) |
+
+`Esc` always returns focus to the document in vim normal mode.
 
 ### Right panel
 
@@ -90,7 +120,7 @@ A persistent panel on the right side of the terminal always shows the current mo
 
 | Key | Action |
 |---|---|
-| `Tab` (in navigate mode) | Move focus into the right panel |
+| `Tab` (in vim normal mode) | Move focus into the right panel |
 | `j` / `k` or `↑` / `↓` | Navigate between to-dos in the panel |
 | `Space` or `x` | Toggle the selected to-do done |
 | `Esc` or `Tab` | Return focus to the document |
@@ -106,7 +136,7 @@ A middle panel streams replies from a local LM Studio server (or any OpenAI-comp
 | `Ctrl-L` | Show / hide the chat panel |
 | `/ask <message>` | Send a message; the reply streams token-by-token |
 | `/clear` | Erase the current day's conversation |
-| `Tab` (in navigate mode) | Focus the chat panel (when visible) |
+| `Tab` (in vim normal mode) | Focus the chat panel (when visible) |
 | `j` / `k` or `↑` / `↓` | Scroll the chat history |
 | `Esc` or `Tab` | Return focus to the document |
 
@@ -218,6 +248,7 @@ Requires Rust 1.85+ (edition 2024).
 - **Pure core** (`src/model/`, `src/storage/`, `src/config/`, `src/app/command.rs`, `src/app/actions.rs`) holds all behavior and is unit-tested with string/temp-dir fixtures. No terminal dependency.
 - **TUI layer** (`src/ui/`) is a thin Ratatui front-end that renders state and routes key events into the core. The right panel (`src/ui/right_panel.rs`) is a self-contained module handling calendar rendering, todo collection, and panel display.
 - **Markdown handling** uses an anchored structural model: the file is kept as a `Vec<String>` of lines; mutations splice specific lines and re-index, so untouched lines are preserved verbatim. Saves are atomic (temp file + rename).
+- **Vim editing** is built on top of the line-based model: `VimState` tracks cursor position, undo history, and yank buffer; normal mode provides line-oriented operations (`dd`, `yy`, `p`, `u`) while insert mode allows direct character editing.
 
 ## Future features (not yet implemented)
 
