@@ -420,6 +420,26 @@ impl Document {
         }
     }
 
+    /// Toggle the todo on a specific line by raw line index.
+    /// Returns Ok(()) if the line was a todo, Err if it was not or index is out of bounds.
+    pub fn toggle_todo_at_line(&mut self, line_idx: usize) -> anyhow::Result<()> {
+        let line = self
+            .lines
+            .get(line_idx)
+            .ok_or_else(|| anyhow::anyhow!("line index {} out of bounds", line_idx))?;
+        if line.starts_with("- [ ] ") {
+            let rest = line[6..].to_string();
+            self.lines[line_idx] = format!("- [x] {}", rest);
+            Ok(())
+        } else if line.starts_with("- [x] ") || line.starts_with("- [X] ") {
+            let rest = line[6..].to_string();
+            self.lines[line_idx] = format!("- [ ] {}", rest);
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("line {} is not a todo", line_idx))
+        }
+    }
+
     /// Replace the selected block's line range with `new_lines`.
     pub fn replace_selectable(
         &mut self,
@@ -1265,5 +1285,47 @@ mod tests {
         let notes_pos = text.find("## Notes").unwrap();
         assert!(entry_pos > details_pos, "entry should be after Details");
         assert!(entry_pos < notes_pos, "entry should be before ## Notes");
+    }
+
+    #[test]
+    fn toggle_todo_at_line_unchecked_to_checked() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## To-dos\n\n- [ ] write tests\n",
+        );
+        // line 4 is "- [ ] write tests"
+        doc.toggle_todo_at_line(4).unwrap();
+        assert_eq!(doc.lines[4], "- [x] write tests");
+    }
+
+    #[test]
+    fn toggle_todo_at_line_checked_to_unchecked() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## To-dos\n\n- [x] done task\n",
+        );
+        doc.toggle_todo_at_line(4).unwrap();
+        assert_eq!(doc.lines[4], "- [ ] done task");
+    }
+
+    #[test]
+    fn toggle_todo_at_line_uppercase_x_to_unchecked() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## To-dos\n\n- [X] done task\n",
+        );
+        doc.toggle_todo_at_line(4).unwrap();
+        assert_eq!(doc.lines[4], "- [ ] done task");
+    }
+
+    #[test]
+    fn toggle_todo_at_line_non_todo_returns_err() {
+        let mut doc = Document::from_text("# Day\n\n## Notes\n\n- just a bullet\n");
+        let result = doc.toggle_todo_at_line(4);
+        assert!(result.is_err(), "expected error for non-todo line");
+    }
+
+    #[test]
+    fn toggle_todo_at_line_out_of_bounds_returns_err() {
+        let mut doc = Document::from_text("# Day\n");
+        let result = doc.toggle_todo_at_line(99);
+        assert!(result.is_err());
     }
 }
