@@ -57,6 +57,9 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
                 Context::Notes => EntryTarget::Notes,
                 Context::Meeting(ord) => EntryTarget::Meeting(*ord),
                 Context::NoteBlock(ord) => EntryTarget::NoteBlock(*ord),
+                Context::Section { heading_line, level } => {
+                    EntryTarget::Section { heading_line: *heading_line, level: *level }
+                }
             };
             state.doc.add_block(&target, &block);
             after_doc_mutation(state)?;
@@ -1315,7 +1318,7 @@ mod tests {
     }
 
     #[test]
-    fn clear_empties_messages_and_bumps_request() {
+    fn clear_empties_messages_and_bumps_request_id() {
         use crate::app::state::{ChatMessage, ChatRole};
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
@@ -1328,5 +1331,21 @@ mod tests {
         assert!(state.chat.messages.is_empty());
         assert!(!state.chat.pending);
         assert!(state.chat.active_request > 0);
+    }
+
+    #[test]
+    fn section_context_display_shows_name() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        // Manually set up a doc with a meeting and a section heading, then set context
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        // Manually inject the Section context (dispatch for Section isn't written yet)
+        // Find the line index of ### Standup
+        let heading_line = state.doc.lines.iter().position(|l| l == "### Standup").unwrap();
+        // Insert #### Updates manually
+        state.doc.lines.insert(heading_line + 1, "#### Updates".to_string());
+        state.context = Context::Section { heading_line: heading_line + 1, level: 4 };
+        state.update_context_display();
+        assert_eq!(state.context_display, "context: Updates");
     }
 }

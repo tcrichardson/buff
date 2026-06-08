@@ -32,6 +32,7 @@ pub enum Context {
     Notes,
     Meeting(usize),
     NoteBlock(usize),
+    Section { heading_line: usize, level: u8 },
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -148,6 +149,13 @@ impl AppState {
                     Some(n) => format!("context: {}", n.name),
                     None => "context: Notes".to_string(),
                 }
+            }
+            Context::Section { heading_line, .. } => {
+                let name = self.doc.lines
+                    .get(heading_line)
+                    .map(|l| l.trim_start_matches('#').trim_start())
+                    .unwrap_or("section");
+                format!("context: {}", name)
             }
         };
     }
