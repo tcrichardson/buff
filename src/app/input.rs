@@ -1641,4 +1641,130 @@ mod tests {
         execute_action(&mut state, UiAction::VimClearPendingOp).unwrap();
         assert!(state.vim.pending_op.is_none());
     }
+
+    #[test]
+    fn vim_insert_char_adds_to_line() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimInsert;
+        state.doc.lines = vec!["hello".to_string()];
+        state.vim.cursor_line = 0;
+        state.vim.cursor_col = 5; // end of "hello"
+        execute_action(&mut state, UiAction::VimInsertChar('!')).unwrap();
+        assert_eq!(state.doc.lines[0], "hello!");
+        assert_eq!(state.vim.cursor_col, 6);
+    }
+
+    #[test]
+    fn vim_insert_newline_splits_line() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimInsert;
+        state.doc.lines = vec!["hello world".to_string()];
+        state.vim.cursor_line = 0;
+        state.vim.cursor_col = 5; // between "hello" and " world"
+        execute_action(&mut state, UiAction::VimInsertNewline).unwrap();
+        assert_eq!(state.doc.lines[0], "hello");
+        assert_eq!(state.doc.lines[1], " world");
+        assert_eq!(state.vim.cursor_line, 1);
+        assert_eq!(state.vim.cursor_col, 0);
+    }
+
+    #[test]
+    fn vim_insert_backspace_removes_char() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimInsert;
+        state.doc.lines = vec!["hello".to_string()];
+        state.vim.cursor_line = 0;
+        state.vim.cursor_col = 3; // after "hel"
+        execute_action(&mut state, UiAction::VimInsertBackspace).unwrap();
+        assert_eq!(state.doc.lines[0], "helo");
+        assert_eq!(state.vim.cursor_col, 2);
+    }
+
+    #[test]
+    fn vim_insert_backspace_at_line_start_merges_with_prev() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimInsert;
+        state.doc.lines = vec!["first".to_string(), "second".to_string()];
+        state.vim.cursor_line = 1;
+        state.vim.cursor_col = 0;
+        execute_action(&mut state, UiAction::VimInsertBackspace).unwrap();
+        assert_eq!(state.doc.lines.len(), 1);
+        assert_eq!(state.doc.lines[0], "firstsecond");
+        assert_eq!(state.vim.cursor_line, 0);
+        assert_eq!(state.vim.cursor_col, 5);
+    }
+
+    #[test]
+    fn vim_delete_line_removes_and_yanks() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimNormal;
+        state.doc.lines = vec!["keep".to_string(), "delete me".to_string(), "keep2".to_string()];
+        state.vim.cursor_line = 1;
+        execute_action(&mut state, UiAction::VimDeleteLine).unwrap();
+        assert_eq!(state.doc.lines.len(), 2);
+        assert_eq!(state.doc.lines[0], "keep");
+        assert_eq!(state.vim.yank_buffer, vec!["delete me".to_string()]);
+    }
+
+    #[test]
+    fn vim_yank_line_does_not_delete() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimNormal;
+        state.doc.lines = vec!["yanked".to_string()];
+        state.vim.cursor_line = 0;
+        execute_action(&mut state, UiAction::VimYankLine).unwrap();
+        assert_eq!(state.doc.lines.len(), 1, "line should still be there");
+        assert_eq!(state.vim.yank_buffer, vec!["yanked".to_string()]);
+    }
+
+    #[test]
+    fn vim_paste_below_inserts_after_cursor() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimNormal;
+        state.doc.lines = vec!["line 0".to_string(), "line 2".to_string()];
+        state.vim.yank_buffer = vec!["line 1".to_string()];
+        state.vim.cursor_line = 0;
+        execute_action(&mut state, UiAction::VimPasteBelow).unwrap();
+        assert_eq!(state.doc.lines[1], "line 1");
+        assert_eq!(state.vim.cursor_line, 1);
+    }
+
+    #[test]
+    fn vim_undo_restores_snapshot() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimNormal;
+        state.doc.lines = vec!["original".to_string()];
+        // Simulate entering insert and making a change
+        execute_action(&mut state, UiAction::VimEnterInsert).unwrap(); // pushes snapshot
+        state.doc.lines[0] = "modified".to_string();
+        execute_action(&mut state, UiAction::VimExitInsert).unwrap();
+        // Now undo
+        execute_action(&mut state, UiAction::VimUndo).unwrap();
+        assert_eq!(state.doc.lines[0], "original");
+    }
+
+    #[test]
+    fn vim_toggle_todo_checks_unchecked() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimNormal;
+        state.doc.lines = vec![
+            "# Day".to_string(),
+            String::new(),
+            "## To-dos".to_string(),
+            String::new(),
+            "- [ ] a task".to_string(),
+        ];
+        state.vim.cursor_line = 4;
+        execute_action(&mut state, UiAction::VimToggleTodo).unwrap();
+        assert_eq!(state.doc.lines[4], "- [x] a task");
+    }
 }
