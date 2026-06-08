@@ -80,9 +80,13 @@ impl Default for Config {
 }
 
 pub fn config_path() -> PathBuf {
+    PathBuf::from(shellexpand::tilde("~/.config/buff/config.toml").as_ref())
+}
+
+pub fn platform_config_path() -> PathBuf {
     match directories::ProjectDirs::from("", "", "buff") {
         Some(dirs) => dirs.config_dir().join("config.toml"),
-        None => PathBuf::from(shellexpand::tilde("~/.config/buff/config.toml").as_ref()),
+        None => config_path(),
     }
 }
 
@@ -98,7 +102,13 @@ pub fn default_notes_dir() -> PathBuf {
 pub fn load(cli_notes_dir: Option<String>) -> anyhow::Result<(Config, PathBuf)> {
     let config = match std::fs::read_to_string(config_path()) {
         Ok(contents) => toml::from_str(&contents)?,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Config::default(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            match std::fs::read_to_string(platform_config_path()) {
+                Ok(contents) => toml::from_str(&contents)?,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Config::default(),
+                Err(e) => return Err(e.into()),
+            }
+        }
         Err(e) => return Err(e.into()),
     };
 
@@ -319,4 +329,11 @@ mod tests {
         assert!(config.theme_overrides.heading2.is_none());
         assert!(config.theme_overrides.panel_bg.is_none());
     }
+
+    #[test]
+    fn config_path_uses_xdg_location() {
+        let path = config_path();
+        assert!(path.to_string_lossy().contains(".config/buff/config.toml"));
+    }
 }
+
