@@ -420,7 +420,7 @@ pub fn commit_edit(state: &mut AppState) -> anyhow::Result<()> {
         state.editing = None;
         state.input.clear();
         state.cursor_pos = 0;
-        state.focus = crate::app::state::Focus::Navigate;
+        state.focus = crate::app::state::Focus::VimNormal;
         state.save()?;
         state.dates_with_notes =
             crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
@@ -730,7 +730,7 @@ mod tests {
         assert!(text.contains("new idea\n"), "got: {}", text);
         assert!(!text.contains("\nidea\n"), "old text should be gone");
         assert_eq!(state.editing, None);
-        assert_eq!(state.focus, crate::app::state::Focus::Navigate);
+        assert_eq!(state.focus, crate::app::state::Focus::VimNormal);
         assert!(state.input.is_empty());
         let path = tmp.path().join("2026-06-04-Thu.md");
         let saved = std::fs::read_to_string(&path).unwrap();
@@ -914,7 +914,7 @@ mod tests {
             .position(|s| matches!(s.kind, SelectableKind::MeetingHeading { .. }))
             .expect("meeting heading should be selectable");
         state.selected = idx;
-        state.focus = crate::app::state::Focus::Navigate;
+        state.focus = crate::app::state::Focus::VimNormal;
 
         resume_selected_heading(&mut state);
         assert_eq!(state.context, Context::Meeting(0));
@@ -933,7 +933,7 @@ mod tests {
         let mut state = test_state(&tmp);
         dispatch(&mut state, Command::Entry("idea".to_string())).unwrap();
         state.selected = 0;
-        state.focus = crate::app::state::Focus::Navigate;
+        state.focus = crate::app::state::Focus::VimNormal;
         resume_selected_heading(&mut state);
         assert_eq!(state.status, "not a meeting, note, or section");
     }
@@ -978,7 +978,7 @@ mod tests {
             .position(|s| matches!(s.kind, SelectableKind::NoteHeading { .. }))
             .expect("note heading should be selectable");
         state.selected = idx;
-        state.focus = crate::app::state::Focus::Navigate;
+        state.focus = crate::app::state::Focus::VimNormal;
 
         resume_selected_heading(&mut state);
         assert_eq!(state.context, Context::NoteBlock(0));
@@ -1491,7 +1491,7 @@ mod tests {
             .position(|s| matches!(s.kind, SelectableKind::MarkdownHeading))
             .expect("#### Updates should be a MarkdownHeading selectable");
         state.selected = idx;
-        state.focus = crate::app::state::Focus::Navigate;
+        state.focus = crate::app::state::Focus::VimNormal;
 
         resume_selected_heading(&mut state);
 
@@ -1519,7 +1519,7 @@ mod tests {
             .position(|s| matches!(s.kind, SelectableKind::MarkdownHeading))
             .expect("section heading should be selectable");
         state.selected = idx;
-        state.focus = crate::app::state::Focus::Navigate;
+        state.focus = crate::app::state::Focus::VimNormal;
         resume_selected_heading(&mut state);
 
         dispatch(&mut state, Command::Entry("after resume".to_string())).unwrap();

@@ -53,7 +53,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, theme: &crate::ui::the
     frame.render_widget(meta_widget, title_chunks[1]);
 
     // content_row horizontal split: notes | chat (optional, 50/50)
-    let notes_focused = matches!(app.focus, Focus::Capture | Focus::Navigate);
+    let notes_focused = matches!(app.focus, Focus::Capture | Focus::VimNormal | Focus::VimInsert);
     let chat_focused = app.focus == Focus::Chat;
     let panel_focused = app.focus == Focus::RightPanel;
 
@@ -156,7 +156,6 @@ mod tests {
             should_quit: false,
             selectables,
             context_display: "context: Notes".to_string(),
-            pending_delete: false,
             dates_with_notes: std::collections::BTreeSet::new(),
             right_panel_selected: 0,
             right_panel_scroll: 0,
@@ -252,7 +251,7 @@ mod tests {
         doc.add_todo("First", None);
         doc.add_todo("Second", None);
 
-        let app = test_app(doc, Focus::Navigate, 1);
+        let app = test_app(doc, Focus::VimNormal, 1);
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
@@ -324,7 +323,7 @@ mod tests {
     #[test]
     fn render_help_overlay() {
         let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
-        let mut app = test_app(doc, Focus::Navigate, 0);
+        let mut app = test_app(doc, Focus::VimNormal, 0);
         app.overlay = Overlay::Help;
 
         let backend = TestBackend::new(80, 24);

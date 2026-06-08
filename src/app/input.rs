@@ -24,7 +24,7 @@ pub enum UiAction {
     // Escape handling (context-dependent)
     CancelEdit,
     ExitCaptureMode,
-    ExitNavigateMode,
+    ExitVimNormal,
 
     // Capture mode
     TypeChar(char),
@@ -49,13 +49,10 @@ pub enum UiAction {
     SelectLast,
     ToggleSelected,
     BeginEdit,
-    InitiateDelete,
-    ConfirmDelete,
-    CancelDelete,
     ResumeHeading,
     OpenHelp,
     SwitchToCapture,
-    FocusNavigate,
+    FocusVimNormal,
 
     // Right panel
     FocusRightPanel,
@@ -125,15 +122,9 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     if key.code == KeyCode::Tab {
         return match state.focus {
             Focus::Capture => Some(UiAction::TypeIndent),
-            Focus::Navigate => {
-                if state.chat.visible {
-                    Some(UiAction::FocusChat)
-                } else {
-                    Some(UiAction::FocusRightPanel)
-                }
-            }
+            Focus::VimNormal | Focus::VimInsert => Some(UiAction::SwitchToCapture),
             Focus::Chat => Some(UiAction::FocusRightPanel),
-            Focus::RightPanel => Some(UiAction::FocusNavigate),
+            Focus::RightPanel => Some(UiAction::FocusVimNormal),
         };
     }
 
@@ -141,13 +132,13 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     if key.code == KeyCode::BackTab {
         return match state.focus {
             Focus::Capture => Some(UiAction::RemoveIndent),
-            Focus::Navigate => Some(UiAction::FocusRightPanel),
-            Focus::Chat => Some(UiAction::FocusNavigate),
+            Focus::VimNormal | Focus::VimInsert => Some(UiAction::FocusRightPanel),
+            Focus::Chat => Some(UiAction::FocusVimNormal),
             Focus::RightPanel => {
                 if state.chat.visible {
                     Some(UiAction::FocusChat)
                 } else {
-                    Some(UiAction::FocusNavigate)
+                    Some(UiAction::FocusVimNormal)
                 }
             }
         };
@@ -163,14 +154,14 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
                     Some(UiAction::ExitCaptureMode)
                 }
             }
-            Focus::Navigate => Some(UiAction::ExitNavigateMode),
+            Focus::VimNormal | Focus::VimInsert => Some(UiAction::ExitVimNormal),
             Focus::RightPanel => Some(UiAction::RightPanelBlur),
             Focus::Chat => Some(UiAction::ChatBlur),
         };
     }
 
     // 6. [ and ] day navigation — only when can_navigate
-    let can_navigate = matches!(state.focus, Focus::Navigate)
+    let can_navigate = matches!(state.focus, Focus::VimNormal)
         || (matches!(state.focus, Focus::Capture) && state.input.is_empty());
     if can_navigate {
         match key.code {
@@ -228,16 +219,10 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
             KeyCode::PageUp => Some(UiAction::ChatPageUp),
             _ => None,
         },
-        Focus::Navigate => {
+        Focus::VimNormal => {
             // Ignore all Ctrl combos in navigate mode (Ctrl-C/T already handled above)
             if key.modifiers.contains(KeyModifiers::CONTROL) {
                 return None;
-            }
-            if state.pending_delete {
-                return match key.code {
-                    KeyCode::Char('d') => Some(UiAction::ConfirmDelete),
-                    _ => Some(UiAction::CancelDelete),
-                };
             }
             match key.code {
                 KeyCode::Char('j') | KeyCode::Down => Some(UiAction::SelectNext),
@@ -246,12 +231,14 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
                 KeyCode::Char('G') => Some(UiAction::SelectLast),
                 KeyCode::Char(' ') | KeyCode::Char('x') => Some(UiAction::ToggleSelected),
                 KeyCode::Char('e') => Some(UiAction::BeginEdit),
-                KeyCode::Char('d') => Some(UiAction::InitiateDelete),
                 KeyCode::Enter => Some(UiAction::ResumeHeading),
                 KeyCode::Char('?') => Some(UiAction::OpenHelp),
                 KeyCode::Char('i') => Some(UiAction::SwitchToCapture),
                 _ => None,
             }
+        }
+        Focus::VimInsert => {
+            None
         }
     }
 }
@@ -284,10 +271,9 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
             state.cursor_pos = 0;
         }
         UiAction::ExitCaptureMode => {
-            state.focus = Focus::Navigate;
+            state.focus = Focus::VimNormal;
         }
-        UiAction::ExitNavigateMode => {
-            state.pending_delete = false;
+        UiAction::ExitVimNormal => {
             state.focus = Focus::Capture;
         }
 
@@ -334,9 +320,6 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         UiAction::SubmitInput => {
             let cmd = crate::app::command::parse(&state.input);
             crate::app::actions::dispatch(state, cmd)?;
-            if state.overlay != Overlay::None {
-                state.pending_delete = false;
-            }
             state.input.clear();
             state.cursor_pos = 0;
         }
@@ -386,35 +369,17 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         UiAction::BeginEdit => {
             crate::app::actions::begin_edit_selected(state);
         }
-        UiAction::InitiateDelete => {
-            state.pending_delete = true;
-        }
-        UiAction::ConfirmDelete => {
-            if let Err(e) = crate::app::actions::delete_selected(state) {
-                state.status = e.to_string();
-            }
-            state.pending_delete = false;
-        }
-        UiAction::CancelDelete => {
-            // Key is consumed — user must re-press to take the cancelled action.
-            // This is an intentional UX simplification vs. the original run() which
-            // would fall through and also process the keystroke normally.
-            state.pending_delete = false;
-        }
         UiAction::ResumeHeading => {
             crate::app::actions::resume_selected_heading(state);
         }
         UiAction::OpenHelp => {
-            state.pending_delete = false;
             state.overlay = Overlay::Help;
         }
         UiAction::SwitchToCapture => {
-            state.pending_delete = false;
             state.focus = Focus::Capture;
         }
-        UiAction::FocusNavigate => {
-            state.pending_delete = false;
-            state.focus = Focus::Navigate;
+        UiAction::FocusVimNormal => {
+            state.focus = Focus::VimNormal;
         }
 
         // Right panel
@@ -520,7 +485,7 @@ mod tests {
     fn navigate_j_selects_next() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
-        state.focus = Focus::Navigate;
+        state.focus = Focus::VimNormal;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Char('j'))),
             Some(UiAction::SelectNext)
@@ -531,34 +496,10 @@ mod tests {
     fn navigate_down_selects_next() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
-        state.focus = Focus::Navigate;
+        state.focus = Focus::VimNormal;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Down)),
             Some(UiAction::SelectNext)
-        );
-    }
-
-    #[test]
-    fn navigate_pending_delete_d_confirms() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::Navigate;
-        state.pending_delete = true;
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::Char('d'))),
-            Some(UiAction::ConfirmDelete)
-        );
-    }
-
-    #[test]
-    fn navigate_pending_delete_other_key_cancels() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::Navigate;
-        state.pending_delete = true;
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::Char('j'))),
-            Some(UiAction::CancelDelete)
         );
     }
 
@@ -640,13 +581,13 @@ mod tests {
     }
 
     #[test]
-    fn esc_in_navigate_exits_navigate() {
+    fn esc_in_vimnormal_exits_vimnormal() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
-        state.focus = Focus::Navigate;
+        state.focus = Focus::VimNormal;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Esc)),
-            Some(UiAction::ExitNavigateMode)
+            Some(UiAction::ExitVimNormal)
         );
     }
 
@@ -661,7 +602,7 @@ mod tests {
     fn navigate_ctrl_combo_ignored() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
-        state.focus = Focus::Navigate;
+        state.focus = Focus::VimNormal;
         // Ctrl-X is not a recognized combo — should be None in navigate mode
         assert_eq!(key_to_action(&state, ctrl(KeyCode::Char('x'))), None);
     }
@@ -785,24 +726,6 @@ mod tests {
     }
 
     #[test]
-    fn initiate_delete_sets_pending_delete() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        assert!(!state.pending_delete);
-        execute_action(&mut state, UiAction::InitiateDelete).unwrap();
-        assert!(state.pending_delete);
-    }
-
-    #[test]
-    fn cancel_delete_clears_pending_delete() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.pending_delete = true;
-        execute_action(&mut state, UiAction::CancelDelete).unwrap();
-        assert!(!state.pending_delete);
-    }
-
-    #[test]
     fn cancel_edit_clears_editing_and_input() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
@@ -840,29 +763,34 @@ mod tests {
         let mut state = test_state(&tmp);
         assert_eq!(state.focus, Focus::Capture); // default focus
         execute_action(&mut state, UiAction::ExitCaptureMode).unwrap();
-        assert_eq!(state.focus, Focus::Navigate);
+        assert_eq!(state.focus, Focus::VimNormal);
     }
 
     #[test]
-    fn exit_navigate_mode_switches_focus_to_capture_and_clears_pending() {
+    fn exit_vimnormal_mode_switches_focus_to_capture() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
-        state.focus = Focus::Navigate;
-        state.pending_delete = true;
-        execute_action(&mut state, UiAction::ExitNavigateMode).unwrap();
+        state.focus = Focus::VimNormal;
+        execute_action(&mut state, UiAction::ExitVimNormal).unwrap();
         assert_eq!(state.focus, Focus::Capture);
-        assert!(!state.pending_delete);
     }
 
     #[test]
-    fn open_help_sets_overlay_and_clears_pending() {
+    fn open_help_sets_overlay() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
-        state.focus = Focus::Navigate;
-        state.pending_delete = true;
+        state.focus = Focus::VimNormal;
         execute_action(&mut state, UiAction::OpenHelp).unwrap();
         assert_eq!(state.overlay, Overlay::Help);
-        assert!(!state.pending_delete);
+    }
+
+    #[test]
+    fn switch_to_capture_sets_focus() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimNormal;
+        execute_action(&mut state, UiAction::SwitchToCapture).unwrap();
+        assert_eq!(state.focus, Focus::Capture);
     }
 
     #[test]
@@ -872,17 +800,6 @@ mod tests {
         state.overlay = Overlay::Help;
         execute_action(&mut state, UiAction::CloseHelp).unwrap();
         assert_eq!(state.overlay, Overlay::None);
-    }
-
-    #[test]
-    fn switch_to_capture_sets_focus_and_clears_pending() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::Navigate;
-        state.pending_delete = true;
-        execute_action(&mut state, UiAction::SwitchToCapture).unwrap();
-        assert_eq!(state.focus, Focus::Capture);
-        assert!(!state.pending_delete);
     }
 
     #[test]
@@ -897,14 +814,13 @@ mod tests {
     }
 
     #[test]
-    fn tab_in_navigate_focuses_right_panel() {
+    fn tab_in_vimnormal_switches_to_capture() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
-        state.focus = Focus::Navigate;
-        state.chat.visible = false; // skip chat to reach right panel
+        state.focus = Focus::VimNormal;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Tab)),
-            Some(UiAction::FocusRightPanel)
+            Some(UiAction::SwitchToCapture)
         );
     }
 
@@ -1043,21 +959,21 @@ mod tests {
     }
 
     #[test]
-    fn tab_in_right_panel_wraps_to_navigate() {
+    fn tab_in_right_panel_wraps_to_vimnormal() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::RightPanel;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Tab)),
-            Some(UiAction::FocusNavigate)
+            Some(UiAction::FocusVimNormal)
         );
     }
 
     #[test]
-    fn backtab_in_navigate_wraps_to_right_panel() {
+    fn backtab_in_vimnormal_wraps_to_right_panel() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
-        state.focus = Focus::Navigate;
+        state.focus = Focus::VimNormal;
         let key = KeyEvent {
             code: KeyCode::BackTab,
             modifiers: KeyModifiers::SHIFT,
@@ -1078,7 +994,7 @@ mod tests {
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
         };
-        assert_eq!(key_to_action(&state, key), Some(UiAction::FocusNavigate));
+        assert_eq!(key_to_action(&state, key), Some(UiAction::FocusVimNormal));
     }
 
     #[test]
@@ -1097,7 +1013,7 @@ mod tests {
     }
 
     #[test]
-    fn backtab_in_right_panel_goes_to_navigate_when_chat_hidden() {
+    fn backtab_in_right_panel_goes_to_vimnormal_when_chat_hidden() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::RightPanel;
@@ -1108,26 +1024,18 @@ mod tests {
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
         };
-        assert_eq!(key_to_action(&state, key), Some(UiAction::FocusNavigate));
+        assert_eq!(key_to_action(&state, key), Some(UiAction::FocusVimNormal));
     }
 
     #[test]
-    fn focus_navigate_sets_focus_to_navigate() {
+    fn focus_vimnormal_sets_focus_to_vimnormal() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::RightPanel;
-        execute_action(&mut state, UiAction::FocusNavigate).unwrap();
-        assert_eq!(state.focus, Focus::Navigate);
+        execute_action(&mut state, UiAction::FocusVimNormal).unwrap();
+        assert_eq!(state.focus, Focus::VimNormal);
     }
 
-    #[test]
-    fn focus_navigate_clears_pending_delete() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::RightPanel;
-        state.pending_delete = true;
-        execute_action(&mut state, UiAction::FocusNavigate).unwrap();
-        assert!(!state.pending_delete);
-    }
+
 
 }

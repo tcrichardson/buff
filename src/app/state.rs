@@ -22,7 +22,8 @@ pub struct ChatMessage {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Focus {
     Capture,
-    Navigate,
+    VimNormal,   // was Navigate
+    VimInsert,   // new
     RightPanel,
     Chat,
 }
@@ -85,7 +86,6 @@ pub struct AppState {
     pub should_quit: bool,
     pub selectables: Vec<Selectable>,
     pub context_display: String,
-    pub pending_delete: bool,
     pub dates_with_notes: BTreeSet<NaiveDate>,
     pub right_panel_selected: usize,
     pub right_panel_scroll: usize, // scroll offset for todo list — scroll-follow not yet implemented
@@ -125,7 +125,6 @@ impl AppState {
             should_quit: false,
             selectables,
             context_display,
-            pending_delete: false,
             dates_with_notes,
             right_panel_selected: 0,
             right_panel_scroll: 0,

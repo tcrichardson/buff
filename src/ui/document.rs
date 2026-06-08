@@ -6,7 +6,7 @@ use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::Paragraph;
 
 pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect, theme: &Theme) {
-    let selected_range: Option<std::ops::Range<usize>> = if app.focus == Focus::Navigate {
+    let selected_range: Option<std::ops::Range<usize>> = if app.focus == Focus::VimNormal {
         app.selectables.get(app.selected).map(|s| s.lines.clone())
     } else {
         None
