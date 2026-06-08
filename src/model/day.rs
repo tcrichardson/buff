@@ -13,6 +13,7 @@ pub enum EntryTarget {
     Notes,
     Meeting(usize),
     NoteBlock(usize),
+    Section { heading_line: usize, level: u8 },
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]

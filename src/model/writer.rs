@@ -1,6 +1,6 @@
 use crate::model::day::SectionKind;
 use crate::model::day::{Document, EntryTarget, Meeting, Selectable, SelectableKind};
-use crate::model::parser::{block_insert_index, ensure_section, heading_line, section_end};
+use crate::model::parser::{block_insert_index, ensure_section, heading_level, heading_line, section_end};
 
 /// Strip leading `->` markers and replace each with two spaces.
 /// `->` appearing anywhere other than the very start of the line is preserved.
@@ -153,13 +153,11 @@ impl Document {
         notes
     }
 
-    pub fn add_block(&mut self, target: &EntryTarget, block: &[String]) {
-        let insert_idx = match target {
-            EntryTarget::Notes => {
-                let start = ensure_section(&mut self.lines, SectionKind::Notes);
-                let end = section_end(&self.lines, start);
-                block_insert_index(&self.lines, start, end)
-            }
+    /// Returns the insertion index for `Meeting`, `NoteBlock`, and `Section` targets.
+    /// Panics if called with `EntryTarget::Notes` — that case requires `ensure_section` first.
+    fn insertion_index_for_target(&self, target: &EntryTarget) -> usize {
+        match target {
+            EntryTarget::Notes => panic!("Notes target requires ensure_section; use add_block"),
             EntryTarget::Meeting(ord) => {
                 let meetings = self.meetings();
                 let meeting = meetings.get(*ord).expect("meeting not found");
@@ -188,10 +186,46 @@ impl Document {
                     .unwrap_or(self.lines.len());
                 block_insert_index(&self.lines, start, end)
             }
+            EntryTarget::Section { heading_line, level } => {
+                let start = *heading_line;
+                let end = self
+                    .lines
+                    .iter()
+                    .enumerate()
+                    .skip(start + 1)
+                    .position(|(_, line)| {
+                        heading_level(line).map_or(false, |lv| lv <= *level as usize)
+                    })
+                    .map(|i| start + 1 + i)
+                    .unwrap_or(self.lines.len());
+                block_insert_index(&self.lines, start, end)
+            }
+        }
+    }
+
+    pub fn add_block(&mut self, target: &EntryTarget, block: &[String]) {
+        let insert_idx = match target {
+            EntryTarget::Notes => {
+                let start = ensure_section(&mut self.lines, SectionKind::Notes);
+                let end = section_end(&self.lines, start);
+                block_insert_index(&self.lines, start, end)
+            }
+            other => self.insertion_index_for_target(other),
         };
         for (k, line) in block.iter().enumerate() {
             self.lines.insert(insert_idx + k, line.clone());
         }
+    }
+
+    /// Insert a heading of `level` hashes with the given `name` at the end of `target`'s
+    /// content, and return the line index of the newly inserted heading.
+    /// The returned index is stable: subsequent insertions always go *after* the heading,
+    /// so it never shifts.
+    pub fn add_section_heading(&mut self, target: &EntryTarget, level: u8, name: &str) -> usize {
+        let insert_idx = self.insertion_index_for_target(target);
+        let hashes = "#".repeat(level as usize);
+        self.lines.insert(insert_idx, format!("{} {}", hashes, name));
+        insert_idx
     }
 
     pub fn add_entry(&mut self, target: &EntryTarget, text: &str, time: Option<&str>) {
@@ -1141,5 +1175,95 @@ mod tests {
             format_entry("->- parent\n->->- child", None),
             vec!["  - parent", "    - child"]
         );
+    }
+
+    #[test]
+    fn add_entry_to_section_stays_within_it() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\n\n#### Updates\n\n## Notes\n\n## To-dos\n",
+        );
+        let heading_line = doc.lines.iter().position(|l| l == "#### Updates").unwrap();
+        doc.add_block(
+            &EntryTarget::Section { heading_line, level: 4 },
+            &["- note".to_string()],
+        );
+        let text = doc.to_text();
+        let section_pos = text.find("#### Updates").unwrap();
+        let entry_pos = text.find("- note").unwrap();
+        let notes_pos = text.find("## Notes").unwrap();
+        assert!(entry_pos > section_pos, "entry should be after section heading: {}", text);
+        assert!(entry_pos < notes_pos, "entry should be before ## Notes: {}", text);
+    }
+
+    #[test]
+    fn add_entry_to_section_stops_at_peer_heading() {
+        // A #### section ends before the next ####
+        let mut doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\n\n#### Alice\n\n#### Bob\n\n## Notes\n\n## To-dos\n",
+        );
+        let alice_line = doc.lines.iter().position(|l| l == "#### Alice").unwrap();
+        doc.add_block(
+            &EntryTarget::Section { heading_line: alice_line, level: 4 },
+            &["- alice note".to_string()],
+        );
+        let text = doc.to_text();
+        let alice_pos = text.find("#### Alice").unwrap();
+        let entry_pos = text.find("- alice note").unwrap();
+        let bob_pos = text.find("#### Bob").unwrap();
+        assert!(entry_pos > alice_pos, "entry should be after Alice: {}", text);
+        assert!(entry_pos < bob_pos, "entry should be before Bob: {}", text);
+    }
+
+    #[test]
+    fn add_section_heading_in_meeting_creates_h4_returns_line() {
+        let mut doc = Document::new_for_date(
+            chrono::NaiveDate::from_ymd_opt(2026, 6, 8).unwrap(),
+        );
+        let ord = doc.add_meeting("Standup");
+        let heading_line = doc.add_section_heading(&EntryTarget::Meeting(ord), 4, "Updates");
+        let text = doc.to_text();
+        assert!(text.contains("#### Updates\n"), "got: {}", text);
+        let standup_pos = text.find("### Standup").unwrap();
+        let section_pos = text.find("#### Updates").unwrap();
+        assert!(section_pos > standup_pos, "section should be after meeting heading");
+        assert_eq!(doc.lines[heading_line], "#### Updates", "heading_line should point to the heading");
+    }
+
+    #[test]
+    fn add_section_heading_nested_in_section_creates_h5() {
+        let mut doc = Document::new_for_date(
+            chrono::NaiveDate::from_ymd_opt(2026, 6, 8).unwrap(),
+        );
+        let ord = doc.add_meeting("Standup");
+        let h4_line = doc.add_section_heading(&EntryTarget::Meeting(ord), 4, "Updates");
+        let h5_line = doc.add_section_heading(
+            &EntryTarget::Section { heading_line: h4_line, level: 4 },
+            5,
+            "Details",
+        );
+        let text = doc.to_text();
+        assert!(text.contains("##### Details\n"), "got: {}", text);
+        assert_eq!(doc.lines[h5_line], "##### Details");
+        let updates_pos = text.find("#### Updates").unwrap();
+        let details_pos = text.find("##### Details").unwrap();
+        assert!(details_pos > updates_pos, "Details should be after Updates");
+    }
+
+    #[test]
+    fn add_entry_to_nested_section_stays_within_it() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\n\n#### Updates\n\n##### Details\n\n## Notes\n\n## To-dos\n",
+        );
+        let details_line = doc.lines.iter().position(|l| l == "##### Details").unwrap();
+        doc.add_block(
+            &EntryTarget::Section { heading_line: details_line, level: 5 },
+            &["- detail".to_string()],
+        );
+        let text = doc.to_text();
+        let details_pos = text.find("##### Details").unwrap();
+        let entry_pos = text.find("- detail").unwrap();
+        let notes_pos = text.find("## Notes").unwrap();
+        assert!(entry_pos > details_pos, "entry should be after Details");
+        assert!(entry_pos < notes_pos, "entry should be before ## Notes");
     }
 }
