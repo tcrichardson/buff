@@ -42,7 +42,7 @@ pub enum UiAction {
     MoveCursorLineStart,
     MoveCursorLineEnd,
 
-    // Navigate mode
+    // Navigate mode (legacy placeholders)
     SelectNext,
     SelectPrev,
     SelectFirst,
@@ -53,6 +53,39 @@ pub enum UiAction {
     OpenHelp,
     SwitchToCapture,
     FocusVimNormal,
+
+    // VimNormal actions
+    VimMoveLeft,
+    VimMoveRight,
+    VimMoveUp,
+    VimMoveDown,
+    VimMoveWordForward,
+    VimMoveWordBackward,
+    VimMoveWordEnd,
+    VimMoveLineStart,
+    VimMoveLineEnd,
+    VimMoveFileStart,
+    VimMoveFileEnd,
+    VimSetPendingOp(char),
+    VimClearPendingOp,
+    VimEnterInsert,
+    VimEnterInsertAfter,
+    VimEnterInsertEOL,
+    VimInsertLineBelow,
+    VimInsertLineAbove,
+    VimDeleteChar,
+    VimDeleteLine,
+    VimYankLine,
+    VimPasteBelow,
+    VimPasteAbove,
+    VimUndo,
+    VimToggleTodo,
+    // VimInsert actions
+    VimInsertChar(char),
+    VimInsertNewline,
+    VimInsertBackspace,
+    VimInsertDeleteWordBefore,
+    VimExitInsert,
 
     // Right panel
     FocusRightPanel,
@@ -154,7 +187,8 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
                     Some(UiAction::ExitCaptureMode)
                 }
             }
-            Focus::VimNormal | Focus::VimInsert => Some(UiAction::ExitVimNormal),
+            Focus::VimNormal => None, // Esc is no-op in normal mode
+            Focus::VimInsert => Some(UiAction::VimExitInsert),
             Focus::RightPanel => Some(UiAction::RightPanelBlur),
             Focus::Chat => Some(UiAction::ChatBlur),
         };
@@ -220,25 +254,67 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
             _ => None,
         },
         Focus::VimNormal => {
-            // Ignore all Ctrl combos in navigate mode (Ctrl-C/T already handled above)
             if key.modifiers.contains(KeyModifiers::CONTROL) {
                 return None;
             }
+            // Multi-key pending op
+            if let Some(op) = state.vim.pending_op {
+                return match (op, &key.code) {
+                    ('d', KeyCode::Char('d')) => Some(UiAction::VimDeleteLine),
+                    ('y', KeyCode::Char('y')) => Some(UiAction::VimYankLine),
+                    ('g', KeyCode::Char('g')) => Some(UiAction::VimMoveFileStart),
+                    _ => Some(UiAction::VimClearPendingOp),
+                };
+            }
             match key.code {
-                KeyCode::Char('j') | KeyCode::Down => Some(UiAction::SelectNext),
-                KeyCode::Char('k') | KeyCode::Up => Some(UiAction::SelectPrev),
-                KeyCode::Char('g') => Some(UiAction::SelectFirst),
-                KeyCode::Char('G') => Some(UiAction::SelectLast),
-                KeyCode::Char(' ') | KeyCode::Char('x') => Some(UiAction::ToggleSelected),
-                KeyCode::Char('e') => Some(UiAction::BeginEdit),
-                KeyCode::Enter => Some(UiAction::ResumeHeading),
+                KeyCode::Char('h') | KeyCode::Left  => Some(UiAction::VimMoveLeft),
+                KeyCode::Char('l') | KeyCode::Right => Some(UiAction::VimMoveRight),
+                KeyCode::Char('j') | KeyCode::Down  => Some(UiAction::VimMoveDown),
+                KeyCode::Char('k') | KeyCode::Up    => Some(UiAction::VimMoveUp),
+                KeyCode::Char('w') => Some(UiAction::VimMoveWordForward),
+                KeyCode::Char('b') => Some(UiAction::VimMoveWordBackward),
+                KeyCode::Char('e') => Some(UiAction::VimMoveWordEnd),
+                KeyCode::Char('0') => Some(UiAction::VimMoveLineStart),
+                KeyCode::Char('$') => Some(UiAction::VimMoveLineEnd),
+                KeyCode::Char('G') => Some(UiAction::VimMoveFileEnd),
+                KeyCode::Char('i') => Some(UiAction::VimEnterInsert),
+                KeyCode::Char('a') => Some(UiAction::VimEnterInsertAfter),
+                KeyCode::Char('A') => Some(UiAction::VimEnterInsertEOL),
+                KeyCode::Char('o') => Some(UiAction::VimInsertLineBelow),
+                KeyCode::Char('O') => Some(UiAction::VimInsertLineAbove),
+                KeyCode::Char('x') => Some(UiAction::VimDeleteChar),
+                KeyCode::Char('d') => Some(UiAction::VimSetPendingOp('d')),
+                KeyCode::Char('y') => Some(UiAction::VimSetPendingOp('y')),
+                KeyCode::Char('g') => Some(UiAction::VimSetPendingOp('g')),
+                KeyCode::Char('p') => Some(UiAction::VimPasteBelow),
+                KeyCode::Char('P') => Some(UiAction::VimPasteAbove),
+                KeyCode::Char('u') => Some(UiAction::VimUndo),
+                KeyCode::Char('t') => Some(UiAction::VimToggleTodo),
                 KeyCode::Char('?') => Some(UiAction::OpenHelp),
-                KeyCode::Char('i') => Some(UiAction::SwitchToCapture),
+                KeyCode::Tab       => Some(UiAction::SwitchToCapture),
+                KeyCode::Esc       => None,
                 _ => None,
             }
         }
         Focus::VimInsert => {
-            None
+            match key.code {
+                KeyCode::Esc     => Some(UiAction::VimExitInsert),
+                KeyCode::Enter   => Some(UiAction::VimInsertNewline),
+                KeyCode::Backspace => Some(UiAction::VimInsertBackspace),
+                KeyCode::Left    => Some(UiAction::VimMoveLeft),
+                KeyCode::Right   => Some(UiAction::VimMoveRight),
+                KeyCode::Up      => Some(UiAction::VimMoveUp),
+                KeyCode::Down    => Some(UiAction::VimMoveDown),
+                KeyCode::Char('w') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    Some(UiAction::VimInsertDeleteWordBefore)
+                }
+                KeyCode::Char(c)
+                    if !key.modifiers.contains(KeyModifiers::CONTROL) && !c.is_control() =>
+                {
+                    Some(UiAction::VimInsertChar(c))
+                }
+                _ => None,
+            }
         }
     }
 }
@@ -382,6 +458,38 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
             state.focus = Focus::VimNormal;
         }
 
+        // Vim actions (implemented in Task 6 & 7)
+        UiAction::VimMoveLeft
+        | UiAction::VimMoveRight
+        | UiAction::VimMoveUp
+        | UiAction::VimMoveDown
+        | UiAction::VimMoveWordForward
+        | UiAction::VimMoveWordBackward
+        | UiAction::VimMoveWordEnd
+        | UiAction::VimMoveLineStart
+        | UiAction::VimMoveLineEnd
+        | UiAction::VimMoveFileStart
+        | UiAction::VimMoveFileEnd
+        | UiAction::VimSetPendingOp(_)
+        | UiAction::VimClearPendingOp
+        | UiAction::VimEnterInsert
+        | UiAction::VimEnterInsertAfter
+        | UiAction::VimEnterInsertEOL
+        | UiAction::VimInsertLineBelow
+        | UiAction::VimInsertLineAbove
+        | UiAction::VimDeleteChar
+        | UiAction::VimDeleteLine
+        | UiAction::VimYankLine
+        | UiAction::VimPasteBelow
+        | UiAction::VimPasteAbove
+        | UiAction::VimUndo
+        | UiAction::VimToggleTodo
+        | UiAction::VimInsertChar(_)
+        | UiAction::VimInsertNewline
+        | UiAction::VimInsertBackspace
+        | UiAction::VimInsertDeleteWordBefore
+        | UiAction::VimExitInsert => {}
+
         // Right panel
         UiAction::FocusRightPanel => {
             state.right_panel_selected = 0;
@@ -482,24 +590,24 @@ mod tests {
     }
 
     #[test]
-    fn navigate_j_selects_next() {
+    fn vimnormal_j_moves_down() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Char('j'))),
-            Some(UiAction::SelectNext)
+            Some(UiAction::VimMoveDown)
         );
     }
 
     #[test]
-    fn navigate_down_selects_next() {
+    fn vimnormal_down_moves_down() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Down)),
-            Some(UiAction::SelectNext)
+            Some(UiAction::VimMoveDown)
         );
     }
 
@@ -581,14 +689,11 @@ mod tests {
     }
 
     #[test]
-    fn esc_in_vimnormal_exits_vimnormal() {
+    fn esc_in_vimnormal_is_noop() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::Esc)),
-            Some(UiAction::ExitVimNormal)
-        );
+        assert_eq!(key_to_action(&state, make_key(KeyCode::Esc)), None);
     }
 
     #[test]
@@ -1036,6 +1141,113 @@ mod tests {
         assert_eq!(state.focus, Focus::VimNormal);
     }
 
+    #[test]
+    fn vimnormal_h_moves_left() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimNormal;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Char('h'))),
+            Some(UiAction::VimMoveLeft)
+        );
+    }
 
+    #[test]
+    fn vimnormal_arrow_left_moves_left() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimNormal;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Left)),
+            Some(UiAction::VimMoveLeft)
+        );
+    }
 
+    #[test]
+    fn vimnormal_dd_with_pending_deletes_line() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimNormal;
+        state.vim.pending_op = Some('d');
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Char('d'))),
+            Some(UiAction::VimDeleteLine)
+        );
+    }
+
+    #[test]
+    fn vimnormal_gg_with_pending_moves_file_start() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimNormal;
+        state.vim.pending_op = Some('g');
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Char('g'))),
+            Some(UiAction::VimMoveFileStart)
+        );
+    }
+
+    #[test]
+    fn vimnormal_pending_op_unknown_second_key_clears() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimNormal;
+        state.vim.pending_op = Some('d');
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Char('x'))),
+            Some(UiAction::VimClearPendingOp)
+        );
+    }
+
+    #[test]
+    fn vimnormal_esc_is_noop() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimNormal;
+        assert_eq!(key_to_action(&state, make_key(KeyCode::Esc)), None);
+    }
+
+    #[test]
+    fn viminsert_esc_exits_insert() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimInsert;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Esc)),
+            Some(UiAction::VimExitInsert)
+        );
+    }
+
+    #[test]
+    fn viminsert_char_emits_insert_char() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimInsert;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Char('a'))),
+            Some(UiAction::VimInsertChar('a'))
+        );
+    }
+
+    #[test]
+    fn viminsert_arrow_right_moves_right() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimInsert;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Right)),
+            Some(UiAction::VimMoveRight)
+        );
+    }
+
+    #[test]
+    fn vimnormal_tab_switches_to_capture() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimNormal;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Tab)),
+            Some(UiAction::SwitchToCapture)
+        );
+    }
 }
