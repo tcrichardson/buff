@@ -210,6 +210,33 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
                 after_doc_mutation(state)?;
             }
         }
+        Command::Section(name) => {
+            let current_level: u8 = match &state.context {
+                Context::Meeting(_) | Context::NoteBlock(_) => 3,
+                Context::Section { level, .. } => *level,
+                Context::Notes => {
+                    state.status = "Not in a meeting or note".to_string();
+                    return Ok(());
+                }
+            };
+            if current_level >= 6 {
+                state.status = "/section: already at maximum depth (######)".to_string();
+                return Ok(());
+            }
+            let target = match &state.context {
+                Context::Meeting(ord) => EntryTarget::Meeting(*ord),
+                Context::NoteBlock(ord) => EntryTarget::NoteBlock(*ord),
+                Context::Section { heading_line, level } => {
+                    EntryTarget::Section { heading_line: *heading_line, level: *level }
+                }
+                Context::Notes => unreachable!(),
+            };
+            let next_level = current_level + 1;
+            let heading_line = state.doc.add_section_heading(&target, next_level, &name);
+            state.context = Context::Section { heading_line, level: next_level };
+            state.update_context_display();
+            after_doc_mutation(state)?;
+        }
         Command::Unknown(word) => {
             state.status = format!("Unknown command: /{}", word);
         }
@@ -1331,6 +1358,93 @@ mod tests {
         assert!(state.chat.messages.is_empty());
         assert!(!state.chat.pending);
         assert!(state.chat.active_request > 0);
+    }
+
+    #[test]
+    fn section_in_meeting_creates_h4_and_sets_context() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        dispatch(&mut state, Command::Section("Updates".to_string())).unwrap();
+        let text = state.doc.to_text();
+        assert!(text.contains("#### Updates\n"), "got: {}", text);
+        let standup_pos = text.find("### Standup").unwrap();
+        let section_pos = text.find("#### Updates").unwrap();
+        assert!(section_pos > standup_pos, "section should be after meeting heading");
+        assert!(matches!(state.context, Context::Section { level: 4, .. }));
+        assert_eq!(state.context_display, "context: Updates");
+    }
+
+    #[test]
+    fn entry_after_section_routes_under_section() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        dispatch(&mut state, Command::Section("Updates".to_string())).unwrap();
+        dispatch(&mut state, Command::Entry("my point".to_string())).unwrap();
+        let text = state.doc.to_text();
+        let section_pos = text.find("#### Updates").unwrap();
+        let entry_pos = text.find("my point").unwrap();
+        assert!(entry_pos > section_pos, "entry should be under section: {}", text);
+    }
+
+    #[test]
+    fn section_nested_in_section_creates_h5() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        dispatch(&mut state, Command::Section("Updates".to_string())).unwrap();
+        dispatch(&mut state, Command::Section("Details".to_string())).unwrap();
+        let text = state.doc.to_text();
+        assert!(text.contains("##### Details\n"), "got: {}", text);
+        assert!(matches!(state.context, Context::Section { level: 5, .. }));
+    }
+
+    #[test]
+    fn section_in_noteblock_creates_h4() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Note(Some("Ideas".to_string()))).unwrap();
+        dispatch(&mut state, Command::Section("Sub-topic".to_string())).unwrap();
+        let text = state.doc.to_text();
+        assert!(text.contains("#### Sub-topic\n"), "got: {}", text);
+        assert!(matches!(state.context, Context::Section { level: 4, .. }));
+    }
+
+    #[test]
+    fn section_outside_meeting_sets_status() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        let before = state.doc.to_text();
+        dispatch(&mut state, Command::Section("Foo".to_string())).unwrap();
+        assert_eq!(state.status, "Not in a meeting or note");
+        assert_eq!(state.doc.to_text(), before);
+    }
+
+    #[test]
+    fn section_at_max_depth_sets_status() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        // H3 -> H4 -> H5 -> H6 (three /section calls to reach H6)
+        dispatch(&mut state, Command::Section("A".to_string())).unwrap(); // H4
+        dispatch(&mut state, Command::Section("B".to_string())).unwrap(); // H5
+        dispatch(&mut state, Command::Section("C".to_string())).unwrap(); // H6
+        let before = state.doc.to_text();
+        dispatch(&mut state, Command::Section("D".to_string())).unwrap(); // should fail
+        assert_eq!(state.status, "/section: already at maximum depth (######)");
+        assert_eq!(state.doc.to_text(), before, "doc should not change");
+    }
+
+    #[test]
+    fn section_saves_to_disk() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        dispatch(&mut state, Command::Section("Updates".to_string())).unwrap();
+        let path = tmp.path().join("2026-06-04-Thu.md");
+        let saved = std::fs::read_to_string(&path).unwrap();
+        assert!(saved.contains("#### Updates\n"), "saved: {}", saved);
     }
 
     #[test]

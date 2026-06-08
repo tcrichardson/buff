@@ -15,6 +15,7 @@ pub enum Command {
     Start,
     End,
     Scheduled(String),
+    Section(String),
     Unknown(String),
     InvalidArgs(String),
 }
@@ -102,6 +103,14 @@ pub fn parse(input: &str) -> Command {
                 Command::InvalidArgs("invalid time, use HH:MM".to_string())
             } else {
                 Command::Scheduled(rest.to_string())
+            }
+        }
+        "/section" => {
+            let name = rest.trim_matches('"').trim();
+            if name.is_empty() {
+                Command::InvalidArgs("/section needs a name".to_string())
+            } else {
+                Command::Section(name.to_string())
             }
         }
         _ => {
@@ -229,6 +238,30 @@ mod tests {
     #[test]
     fn parse_summarize() {
         assert_eq!(parse("/summarize"), Command::Summarize);
+    }
+
+    #[test]
+    fn parse_section_unquoted() {
+        assert_eq!(
+            parse("/section Tanner's Update"),
+            Command::Section("Tanner's Update".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_section_quoted() {
+        assert_eq!(
+            parse("/section \"Tanner's Update\""),
+            Command::Section("Tanner's Update".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_section_empty() {
+        assert_eq!(
+            parse("/section"),
+            Command::InvalidArgs("/section needs a name".to_string())
+        );
     }
 
     #[test]
