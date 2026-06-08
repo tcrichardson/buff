@@ -28,6 +28,25 @@ pub fn go_next_day(state: &mut AppState) -> anyhow::Result<()> {
     go_to_date(state, state.date + chrono::Duration::days(1))
 }
 
+/// Re-derive context from the current vim cursor position and update state.context + display.
+pub fn vim_update_context(state: &mut AppState) {
+    use crate::app::state::context_at_line;
+    state.context = context_at_line(&state.doc.lines, state.vim.cursor_line);
+    state.update_context_display();
+}
+
+/// Called whenever insert mode changes the doc.
+pub fn after_vim_edit(state: &mut AppState) -> anyhow::Result<()> {
+    state.selectables = state.doc.selectables();
+    state.save()?;
+    state.dates_with_notes =
+        crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
+    state.panel_todos =
+        crate::ui::right_panel::collect_panel_todos(&state.notes_dir, state.date, &state.config);
+    vim_update_context(state);
+    Ok(())
+}
+
 fn after_doc_mutation(state: &mut AppState) -> anyhow::Result<()> {
     state.selectables = state.doc.selectables();
     state.save()?;
