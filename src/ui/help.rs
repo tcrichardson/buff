@@ -22,6 +22,7 @@ Commands:
   /meeting "Name"  start meeting context
   /note "Name"     start note context
   /note            switch to Notes context
+  /section "Name"  add sub-section (one heading deeper, max ######)
   /todo text       add todo
   /start           record meeting start (current time)
   /end             record meeting end (current time)
