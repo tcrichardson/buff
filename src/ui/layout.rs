@@ -79,7 +79,19 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, theme: &crate::ui::the
         .style(Style::default().bg(theme.notes_panel_bg));
     let notes_inner = notes_block.inner(notes_area);
     frame.render_widget(notes_block, notes_area);
-    super::document::render(frame, app, notes_inner, theme);
+
+    let notes_layout = ratatui::layout::Layout::default()
+        .direction(ratatui::layout::Direction::Vertical)
+        .constraints([
+            ratatui::layout::Constraint::Min(0),
+            ratatui::layout::Constraint::Length(1),
+        ])
+        .split(notes_inner);
+    let notes_content_area = notes_layout[0];
+    let notes_mode_area = notes_layout[1];
+
+    super::document::render(frame, app, notes_content_area, theme);
+    super::document::render_mode_line(frame, app, notes_mode_area, theme);
 
     // Status bar (footer chrome, no border)
     super::capture::render_status(frame, app, status_area);
@@ -563,5 +575,43 @@ mod tests {
                 && cell.style().add_modifier.contains(ratatui::style::Modifier::BOLD)
         });
         assert!(has_h1_color, "expected h1 theme color with BOLD");
+    }
+
+    #[test]
+    fn render_vim_normal_shows_mode_line() {
+        let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let mut app = test_app(doc, Focus::VimNormal, 0);
+        app.vim.cursor_line = 0;
+
+        let backend = TestBackend::new(80, 30);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        assert!(
+            content.contains("NORMAL"),
+            "Expected NORMAL in mode line, got: {}",
+            content
+        );
+    }
+
+    #[test]
+    fn render_vim_insert_shows_insert_mode_line() {
+        let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let mut app = test_app(doc, Focus::VimInsert, 0);
+        app.vim.cursor_line = 0;
+
+        let backend = TestBackend::new(80, 30);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        assert!(
+            content.contains("INSERT"),
+            "Expected INSERT in mode line, got: {}",
+            content
+        );
     }
 }
