@@ -54,7 +54,7 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
             };
             let block = crate::model::writer::format_entry(text, time);
             let target = match &state.context {
-                Context::Notes => EntryTarget::Notes,
+                Context::Notes | Context::Todos => EntryTarget::Notes,
                 Context::Meeting(ord) => EntryTarget::Meeting(*ord),
                 Context::NoteBlock(ord) => EntryTarget::NoteBlock(*ord),
                 Context::Section { heading_line, level } => {
@@ -214,7 +214,7 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
             let current_level: u8 = match &state.context {
                 Context::Meeting(_) | Context::NoteBlock(_) => 3,
                 Context::Section { level, .. } => *level,
-                Context::Notes => {
+                Context::Notes | Context::Todos => {
                     state.status = "Not in a meeting or note".to_string();
                     return Ok(());
                 }
@@ -229,7 +229,7 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
                 Context::Section { heading_line, level } => {
                     EntryTarget::Section { heading_line: *heading_line, level: *level }
                 }
-                Context::Notes => unreachable!(),
+                Context::Notes | Context::Todos => unreachable!(),
             };
             let next_level = current_level + 1;
             let heading_line = state.doc.add_section_heading(&target, next_level, &name);

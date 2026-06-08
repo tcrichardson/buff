@@ -162,6 +162,7 @@ mod tests {
             right_panel_scroll: 0,
             panel_todos: Vec::new(),
             chat: crate::app::state::ChatState::default(),
+            vim: crate::app::state::VimState::default(),
         }
     }
 

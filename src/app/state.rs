@@ -33,6 +33,7 @@ pub enum Context {
     Meeting(usize),
     NoteBlock(usize),
     Section { heading_line: usize, level: u8 },
+    Todos,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -50,6 +51,22 @@ pub struct ChatState {
     pub scroll: usize,
     pub status: Option<String>,
     pub event_tx: Option<std::sync::mpsc::Sender<crate::app::llm::LlmEvent>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct UndoEntry {
+    pub lines: Vec<String>,
+    pub cursor_line: usize,
+    pub cursor_col: usize,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct VimState {
+    pub cursor_line: usize,
+    pub cursor_col: usize,
+    pub pending_op: Option<char>,
+    pub yank_buffer: Vec<String>,
+    pub undo_stack: Vec<UndoEntry>,
 }
 
 pub struct AppState {
@@ -74,6 +91,7 @@ pub struct AppState {
     pub right_panel_scroll: usize, // scroll offset for todo list — scroll-follow not yet implemented
     pub panel_todos: Vec<PanelTodo>,
     pub chat: ChatState,
+    pub vim: VimState,
 }
 
 impl AppState {
@@ -117,6 +135,7 @@ impl AppState {
                 messages: chat_messages,
                 ..Default::default()
             },
+            vim: VimState::default(),
         })
     }
 
@@ -157,6 +176,7 @@ impl AppState {
                     .unwrap_or("section");
                 format!("context: {}", name)
             }
+            Context::Todos => "context: To-dos (use /todo to add)".to_string(),
         };
     }
 
@@ -201,6 +221,24 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn context_todos_display() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut s = AppState::open_day(
+            tmp.path().to_path_buf(),
+            Config::default(),
+            NaiveDate::from_ymd_opt(2026, 6, 5).unwrap(),
+        )
+        .unwrap();
+        s.context = Context::Todos;
+        s.update_context_display();
+        assert!(
+            s.context_display.contains("To-do"),
+            "expected To-do in display, got: {}",
+            s.context_display
+        );
+    }
 
     #[test]
     fn chat_message_json_roundtrip() {
