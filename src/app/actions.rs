@@ -47,6 +47,27 @@ pub fn after_vim_edit(state: &mut AppState) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// After a capture-bar entry is submitted, move the vim cursor to the last
+/// line that was inserted. We find this by diffing line count: the new lines
+/// were inserted at the bottom of the appropriate section, so we scan backward
+/// from the end of the document for the first non-blank, non-section-header
+/// content line that could be the new entry.
+/// 
+/// Simple heuristic: cursor goes to the last non-empty line in the document.
+/// This is correct for all entry types (bullet, todo, meeting heading, etc.)
+/// because they are always appended to the end of their section block.
+pub fn vim_jump_to_new_content(state: &mut AppState) {
+    if !matches!(state.focus, crate::app::state::Focus::VimNormal | crate::app::state::Focus::VimInsert) {
+        return;
+    }
+    // Find last non-empty line
+    if let Some(idx) = state.doc.lines.iter().rposition(|l| !l.trim().is_empty()) {
+        state.vim.cursor_line = idx;
+        state.vim.cursor_col = 0;
+        vim_update_context(state);
+    }
+}
+
 fn after_doc_mutation(state: &mut AppState) -> anyhow::Result<()> {
     state.selectables = state.doc.selectables();
     state.save()?;

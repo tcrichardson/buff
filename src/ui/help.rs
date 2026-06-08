@@ -14,7 +14,7 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect) {
     frame.render_widget(Clear, popup_area);
 
     let help_text = r#"Capture mode:
-  type to enter notes, Enter to submit, Esc to navigate
+  type to enter notes, Enter to submit, Esc to normal mode
   Tab        insert indent (->)
   Ctrl+.     prepend indent at line start
 
@@ -37,14 +37,18 @@ Chat panel:
   Ctrl-L           show/hide chat panel
   Tab              focus chat (then j/k to scroll)
 
-Navigation:
+Vim editor:
+  j/k/↑/↓    move up/down
+  g/G        first/last line
+  Space/x    toggle todo
+  dd         delete line
+  yy         yank line
+  p          paste after
+  u          undo
+  i          insert mode
+  Esc        normal mode
   [ ]        prev/next day
-  j/k        move up/down
-  g/G        first/last
-  Space/x    toggle
-  e          edit
-  d d        delete
-  i/Esc      capture mode
+  e          edit (legacy)
   ?          help
   Ctrl-C     quit
 
