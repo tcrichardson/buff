@@ -272,13 +272,7 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     match state.focus {
         Focus::Capture => capture::key_to_action(state, key),
         Focus::RightPanel => right_panel::key_to_action(state, key),
-        Focus::Chat => match key.code {
-            KeyCode::Down | KeyCode::Char('j') => Some(UiAction::ChatScrollDown),
-            KeyCode::Up | KeyCode::Char('k') => Some(UiAction::ChatScrollUp),
-            KeyCode::PageDown => Some(UiAction::ChatPageDown),
-            KeyCode::PageUp => Some(UiAction::ChatPageUp),
-            _ => None,
-        },
+        Focus::Chat => chat::key_to_action(state, key),
         Focus::VimNormal => vim_normal::key_to_action(state, key),
         Focus::VimInsert => vim_insert::key_to_action(state, key),
     }
@@ -404,18 +398,10 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         UiAction::ChatBlur => {
             state.focus = Focus::Capture;
         }
-        UiAction::ChatScrollUp => {
-            state.chat.scroll += 1;
-        }
-        UiAction::ChatScrollDown => {
-            state.chat.scroll = state.chat.scroll.saturating_sub(1);
-        }
-        UiAction::ChatPageUp => {
-            state.chat.scroll += 10;
-        }
-        UiAction::ChatPageDown => {
-            state.chat.scroll = state.chat.scroll.saturating_sub(10);
-        }
+        UiAction::ChatScrollUp
+        | UiAction::ChatScrollDown
+        | UiAction::ChatPageUp
+        | UiAction::ChatPageDown => return chat::execute_action(state, action),
     }
 
     if state.should_quit {
