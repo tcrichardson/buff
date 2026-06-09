@@ -271,12 +271,7 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     // 7. Mode-specific handling
     match state.focus {
         Focus::Capture => capture::key_to_action(state, key),
-        Focus::RightPanel => match key.code {
-            KeyCode::Down | KeyCode::Char('j') => Some(UiAction::RightPanelDown),
-            KeyCode::Up | KeyCode::Char('k') => Some(UiAction::RightPanelUp),
-            KeyCode::Char(' ') | KeyCode::Char('x') => Some(UiAction::RightPanelToggle),
-            _ => None,
-        },
+        Focus::RightPanel => right_panel::key_to_action(state, key),
         Focus::Chat => match key.code {
             KeyCode::Down | KeyCode::Char('j') => Some(UiAction::ChatScrollDown),
             KeyCode::Up | KeyCode::Char('k') => Some(UiAction::ChatScrollUp),
@@ -392,20 +387,9 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         UiAction::RightPanelBlur => {
             state.focus = Focus::Capture;
         }
-        UiAction::RightPanelUp => {
-            if state.right_panel_selected > 0 {
-                state.right_panel_selected -= 1;
-            }
-        }
-        UiAction::RightPanelDown => {
-            let max = state.panel_todos.len().saturating_sub(1);
-            if state.right_panel_selected < max {
-                state.right_panel_selected += 1;
-            }
-        }
-        UiAction::RightPanelToggle => {
-            crate::app::actions::toggle_panel_todo(state)?;
-        }
+        UiAction::RightPanelUp
+        | UiAction::RightPanelDown
+        | UiAction::RightPanelToggle => return right_panel::execute_action(state, action),
 
         // Chat panel
         UiAction::ToggleChat => {
