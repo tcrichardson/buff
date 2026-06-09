@@ -77,13 +77,13 @@ Press **Esc** from capture mode to move focus into the document and navigate wit
 | `h` / `l` or `←` / `→` | Move cursor left/right |
 | `g` / `G` | Jump to first / last line |
 | `Space` or `x` | Toggle a to-do done / not done |
-| `e` | Edit the current line |
+| `e` | Move to end of word |
 | `dd` | Delete the current line |
 | `yy` | Yank (copy) the current line |
 | `p` | Paste yanked line after cursor |
 | `u` | Undo last edit |
 | `i` | Enter vim insert mode |
-| `Enter` | Re-enter the selected meeting (when a `### HH:MM Name` heading is selected) |
+| `Enter` | Open the current line for editing in the capture box |
 | `?` | Open help overlay |
 | `Esc` | Return to capture mode |
 
@@ -99,7 +99,7 @@ Press **i** from normal mode to edit the document directly at the cursor positio
 | Any character | Insert at cursor |
 | `Esc` | Return to normal mode |
 
-All entry types — plain text, bullets, to-dos, meeting headings, and Markdown blocks — are selectable, editable (`e` or `i`), and deletable (`dd`).
+All entry types — plain text, bullets, to-dos, meeting headings, and Markdown blocks — are selectable, editable (`Enter` or `i`), and deletable (`dd`).
 
 ### Focus cycle
 
