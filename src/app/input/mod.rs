@@ -1,3 +1,9 @@
+mod capture;
+mod chat;
+mod right_panel;
+mod vim_insert;
+mod vim_normal;
+
 use crate::app::state::{AppState, Focus, Overlay};
 use anyhow::Result;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -105,7 +111,7 @@ pub enum UiAction {
 }
 
 /// Step back one Unicode scalar from `pos`. Returns 0 if already at start.
-fn prev_char_boundary(s: &str, pos: usize) -> usize {
+pub(super) fn prev_char_boundary(s: &str, pos: usize) -> usize {
     if pos == 0 {
         return 0;
     }
@@ -117,7 +123,7 @@ fn prev_char_boundary(s: &str, pos: usize) -> usize {
 }
 
 /// Step forward one Unicode scalar from `pos`. Returns `s.len()` if already at end.
-fn next_char_boundary(s: &str, pos: usize) -> usize {
+pub(super) fn next_char_boundary(s: &str, pos: usize) -> usize {
     if pos >= s.len() {
         return s.len();
     }
@@ -130,7 +136,7 @@ fn next_char_boundary(s: &str, pos: usize) -> usize {
 
 /// Clamp `col` to a valid char boundary within `line`, respecting vim normal-mode
 /// convention that the cursor must land on a character (not past the last one).
-fn vim_clamp_col(line: &str, col: usize) -> usize {
+pub(super) fn vim_clamp_col(line: &str, col: usize) -> usize {
     if line.is_empty() {
         return 0;
     }
@@ -145,7 +151,7 @@ fn vim_clamp_col(line: &str, col: usize) -> usize {
 }
 
 /// Find the byte offset of the start of the next word on `line` from `col`.
-fn next_word_start(line: &str, col: usize) -> usize {
+pub(super) fn next_word_start(line: &str, col: usize) -> usize {
     let chars: Vec<char> = line[col..].chars().collect();
     let mut i = 0;
     // skip current word chars (non-whitespace)
@@ -156,7 +162,7 @@ fn next_word_start(line: &str, col: usize) -> usize {
 }
 
 /// Find the byte offset of the start of the previous word on `line` from `col`.
-fn prev_word_start(line: &str, col: usize) -> usize {
+pub(super) fn prev_word_start(line: &str, col: usize) -> usize {
     let before: Vec<char> = line[..col].chars().collect();
     let mut i = before.len();
     // skip whitespace going backward
@@ -167,7 +173,7 @@ fn prev_word_start(line: &str, col: usize) -> usize {
 }
 
 /// Find the byte offset of the end of the current/next word on `line` from `col`.
-fn word_end(line: &str, col: usize) -> usize {
+pub(super) fn word_end(line: &str, col: usize) -> usize {
     let chars: Vec<char> = line[col..].chars().collect();
     let mut i = 0;
     // skip one char if at a non-whitespace (to find NEXT end)
@@ -264,115 +270,11 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
 
     // 7. Mode-specific handling
     match state.focus {
-        Focus::Capture => match key.code {
-            KeyCode::Enter => {
-                if state.editing.is_some() {
-                    Some(UiAction::CommitEdit)
-                } else {
-                    Some(UiAction::SubmitInput)
-                }
-            }
-            KeyCode::Backspace => Some(UiAction::DeleteChar),
-            KeyCode::Char('j') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                Some(UiAction::TypeNewline)
-            }
-            KeyCode::Char(c)
-                if !key.modifiers.contains(KeyModifiers::CONTROL) && !c.is_control() =>
-            {
-                Some(UiAction::TypeChar(c))
-            }
-            KeyCode::Left => Some(UiAction::MoveCursorLeft),
-            KeyCode::Right => Some(UiAction::MoveCursorRight),
-            KeyCode::Home => Some(UiAction::MoveCursorLineStart),
-            KeyCode::End => Some(UiAction::MoveCursorLineEnd),
-            KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                Some(UiAction::MoveCursorLineStart)
-            }
-            KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                Some(UiAction::MoveCursorLineEnd)
-            }
-            KeyCode::Char('.') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                Some(UiAction::PrependIndent)
-            }
-            KeyCode::Up | KeyCode::Down => None, // ignored in capture mode
-            _ => None,
-        },
-        Focus::RightPanel => match key.code {
-            KeyCode::Down | KeyCode::Char('j') => Some(UiAction::RightPanelDown),
-            KeyCode::Up | KeyCode::Char('k') => Some(UiAction::RightPanelUp),
-            KeyCode::Char(' ') | KeyCode::Char('x') => Some(UiAction::RightPanelToggle),
-            _ => None,
-        },
-        Focus::Chat => match key.code {
-            KeyCode::Down | KeyCode::Char('j') => Some(UiAction::ChatScrollDown),
-            KeyCode::Up | KeyCode::Char('k') => Some(UiAction::ChatScrollUp),
-            KeyCode::PageDown => Some(UiAction::ChatPageDown),
-            KeyCode::PageUp => Some(UiAction::ChatPageUp),
-            _ => None,
-        },
-        Focus::VimNormal => {
-            if key.modifiers.contains(KeyModifiers::CONTROL) {
-                return None;
-            }
-            // Multi-key pending op
-            if let Some(op) = state.vim.pending_op {
-                return match (op, &key.code) {
-                    ('d', KeyCode::Char('d')) => Some(UiAction::VimDeleteLine),
-                    ('y', KeyCode::Char('y')) => Some(UiAction::VimYankLine),
-                    ('g', KeyCode::Char('g')) => Some(UiAction::VimMoveFileStart),
-                    _ => Some(UiAction::VimClearPendingOp),
-                };
-            }
-            match key.code {
-                KeyCode::Char('h') | KeyCode::Left  => Some(UiAction::VimMoveLeft),
-                KeyCode::Char('l') | KeyCode::Right => Some(UiAction::VimMoveRight),
-                KeyCode::Char('j') | KeyCode::Down  => Some(UiAction::VimMoveDown),
-                KeyCode::Char('k') | KeyCode::Up    => Some(UiAction::VimMoveUp),
-                KeyCode::Char('w') => Some(UiAction::VimMoveWordForward),
-                KeyCode::Char('b') => Some(UiAction::VimMoveWordBackward),
-                KeyCode::Char('e') => Some(UiAction::VimMoveWordEnd),
-                KeyCode::Char('0') => Some(UiAction::VimMoveLineStart),
-                KeyCode::Char('$') => Some(UiAction::VimMoveLineEnd),
-                KeyCode::Char('G') => Some(UiAction::VimMoveFileEnd),
-                KeyCode::Char('i') => Some(UiAction::VimEnterInsert),
-                KeyCode::Char('a') => Some(UiAction::VimEnterInsertAfter),
-                KeyCode::Char('A') => Some(UiAction::VimEnterInsertEOL),
-                KeyCode::Char('o') => Some(UiAction::VimInsertLineBelow),
-                KeyCode::Char('O') => Some(UiAction::VimInsertLineAbove),
-                KeyCode::Char('x') => Some(UiAction::VimDeleteChar),
-                KeyCode::Char('d') => Some(UiAction::VimSetPendingOp('d')),
-                KeyCode::Char('y') => Some(UiAction::VimSetPendingOp('y')),
-                KeyCode::Char('g') => Some(UiAction::VimSetPendingOp('g')),
-                KeyCode::Char('p') => Some(UiAction::VimPasteBelow),
-                KeyCode::Char('P') => Some(UiAction::VimPasteAbove),
-                KeyCode::Char('u') => Some(UiAction::VimUndo),
-                KeyCode::Char('t') => Some(UiAction::VimToggleTodo),
-                KeyCode::Char('?') => Some(UiAction::OpenHelp),
-                KeyCode::Tab       => Some(UiAction::SwitchToCapture),
-                KeyCode::Esc       => None,
-                _ => None,
-            }
-        }
-        Focus::VimInsert => {
-            match key.code {
-                KeyCode::Esc     => Some(UiAction::VimExitInsert),
-                KeyCode::Enter   => Some(UiAction::VimInsertNewline),
-                KeyCode::Backspace => Some(UiAction::VimInsertBackspace),
-                KeyCode::Left    => Some(UiAction::VimMoveLeft),
-                KeyCode::Right   => Some(UiAction::VimMoveRight),
-                KeyCode::Up      => Some(UiAction::VimMoveUp),
-                KeyCode::Down    => Some(UiAction::VimMoveDown),
-                KeyCode::Char('w') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    Some(UiAction::VimInsertDeleteWordBefore)
-                }
-                KeyCode::Char(c)
-                    if !key.modifiers.contains(KeyModifiers::CONTROL) && !c.is_control() =>
-                {
-                    Some(UiAction::VimInsertChar(c))
-                }
-                _ => None,
-            }
-        }
+        Focus::Capture => capture::key_to_action(state, key),
+        Focus::RightPanel => right_panel::key_to_action(state, key),
+        Focus::Chat => chat::key_to_action(state, key),
+        Focus::VimNormal => vim_normal::key_to_action(state, key),
+        Focus::VimInsert => vim_insert::key_to_action(state, key),
     }
 }
 
@@ -410,102 +312,26 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
             state.focus = Focus::Capture;
         }
 
-        // Capture mode
-        UiAction::TypeChar(c) => {
-            state.input.insert(state.cursor_pos, c);
-            state.cursor_pos += c.len_utf8();
-        }
-        UiAction::DeleteChar => {
-            if state.cursor_pos > 0 {
-                let prev = prev_char_boundary(&state.input, state.cursor_pos);
-                state.input.remove(prev);
-                state.cursor_pos = prev;
-            }
-        }
-        UiAction::TypeNewline => {
-            state.input.insert(state.cursor_pos, '\n');
-            state.cursor_pos += 1;
-        }
-        UiAction::TypeIndent => {
-            state.input.insert_str(state.cursor_pos, "->");
-            state.cursor_pos += 2;
-        }
-        UiAction::PrependIndent => {
-            let line_start = match state.input[..state.cursor_pos].rfind('\n') {
-                Some(nl) => nl + 1,
-                None => 0,
-            };
-            state.input.insert_str(line_start, "->");
-            state.cursor_pos += 2;
-        }
-        UiAction::RemoveIndent => {
-            let line_start = match state.input[..state.cursor_pos].rfind('\n') {
-                Some(nl) => nl + 1,
-                None => 0,
-            };
-            if state.input[line_start..].starts_with("->") {
-                state.input.drain(line_start..line_start + 2);
-                if state.cursor_pos > line_start {
-                    state.cursor_pos = state.cursor_pos.saturating_sub(2).max(line_start);
-                }
-            }
-        }
-        UiAction::SubmitInput => {
-            let cmd = crate::app::command::parse(&state.input);
-            crate::app::actions::dispatch(state, cmd)?;
-            state.input.clear();
-            state.cursor_pos = 0;
-            crate::app::actions::vim_jump_to_new_content(state);
-        }
-        UiAction::CommitEdit => {
-            crate::app::actions::commit_edit(state)?;
-            // Note: commit_edit clears state.input internally (see actions.rs)
-        }
-
-        // Capture mode — cursor movement
-        UiAction::MoveCursorLeft => {
-            state.cursor_pos = prev_char_boundary(&state.input, state.cursor_pos);
-        }
-        UiAction::MoveCursorRight => {
-            state.cursor_pos = next_char_boundary(&state.input, state.cursor_pos);
-        }
-        UiAction::MoveCursorLineStart => {
-            let before = &state.input[..state.cursor_pos];
-            state.cursor_pos = match before.rfind('\n') {
-                Some(nl_pos) => nl_pos + 1,
-                None => 0,
-            };
-        }
-        UiAction::MoveCursorLineEnd => {
-            let after = &state.input[state.cursor_pos..];
-            state.cursor_pos = match after.find('\n') {
-                Some(nl_offset) => state.cursor_pos + nl_offset,
-                None => state.input.len(),
-            };
-        }
-
-        // Navigate mode
-        UiAction::SelectNext => {
-            crate::app::actions::select_next(state);
-        }
-        UiAction::SelectPrev => {
-            crate::app::actions::select_prev(state);
-        }
-        UiAction::SelectFirst => {
-            crate::app::actions::select_first(state);
-        }
-        UiAction::SelectLast => {
-            crate::app::actions::select_last(state);
-        }
-        UiAction::ToggleSelected => {
-            crate::app::actions::toggle_selected(state);
-        }
-        UiAction::BeginEdit => {
-            crate::app::actions::begin_edit_selected(state);
-        }
-        UiAction::ResumeHeading => {
-            crate::app::actions::resume_selected_heading(state);
-        }
+        // Capture mode actions
+        UiAction::TypeChar(_)
+        | UiAction::DeleteChar
+        | UiAction::TypeNewline
+        | UiAction::TypeIndent
+        | UiAction::PrependIndent
+        | UiAction::RemoveIndent
+        | UiAction::SubmitInput
+        | UiAction::CommitEdit
+        | UiAction::MoveCursorLeft
+        | UiAction::MoveCursorRight
+        | UiAction::MoveCursorLineStart
+        | UiAction::MoveCursorLineEnd
+        | UiAction::SelectNext
+        | UiAction::SelectPrev
+        | UiAction::SelectFirst
+        | UiAction::SelectLast
+        | UiAction::ToggleSelected
+        | UiAction::BeginEdit
+        | UiAction::ResumeHeading => return capture::execute_action(state, action),
         UiAction::OpenHelp => {
             state.overlay = Overlay::Help;
         }
@@ -516,283 +342,36 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
             state.focus = Focus::VimNormal;
         }
 
-        UiAction::VimMoveLeft => {
-            let col = state.vim.cursor_col;
-            if col > 0 {
-                state.vim.cursor_col = prev_char_boundary(
-                    &state.doc.lines[state.vim.cursor_line],
-                    col,
-                );
-            }
-            crate::app::actions::vim_update_context(state);
-        }
-        UiAction::VimMoveRight => {
-            let line = &state.doc.lines[state.vim.cursor_line];
-            let col = state.vim.cursor_col;
-            let next = next_char_boundary(line, col);
-            // Normal mode: cannot move past last character
-            if next < line.len() {
-                state.vim.cursor_col = next;
-            }
-            crate::app::actions::vim_update_context(state);
-        }
-        UiAction::VimMoveDown => {
-            let n = state.doc.lines.len();
-            if state.vim.cursor_line + 1 < n {
-                state.vim.cursor_line += 1;
-                state.vim.cursor_col = vim_clamp_col(
-                    &state.doc.lines[state.vim.cursor_line],
-                    state.vim.cursor_col,
-                );
-                crate::app::actions::vim_update_context(state);
-            }
-        }
-        UiAction::VimMoveUp => {
-            if state.vim.cursor_line > 0 {
-                state.vim.cursor_line -= 1;
-                state.vim.cursor_col = vim_clamp_col(
-                    &state.doc.lines[state.vim.cursor_line],
-                    state.vim.cursor_col,
-                );
-                crate::app::actions::vim_update_context(state);
-            }
-        }
-        UiAction::VimMoveLineStart => {
-            state.vim.cursor_col = 0;
-            crate::app::actions::vim_update_context(state);
-        }
-        UiAction::VimMoveLineEnd => {
-            let line = &state.doc.lines[state.vim.cursor_line];
-            state.vim.cursor_col = if line.is_empty() {
-                0
-            } else {
-                prev_char_boundary(line, line.len())
-            };
-            crate::app::actions::vim_update_context(state);
-        }
-        UiAction::VimMoveFileStart => {
-            state.vim.pending_op = None;
-            state.vim.cursor_line = 0;
-            state.vim.cursor_col = 0;
-            crate::app::actions::vim_update_context(state);
-        }
-        UiAction::VimMoveFileEnd => {
-            let n = state.doc.lines.len();
-            state.vim.pending_op = None;
-            state.vim.cursor_line = n.saturating_sub(1);
-            state.vim.cursor_col = vim_clamp_col(
-                &state.doc.lines[state.vim.cursor_line],
-                state.vim.cursor_col,
-            );
-            crate::app::actions::vim_update_context(state);
-        }
-        UiAction::VimSetPendingOp(op) => {
-            state.vim.pending_op = Some(op);
-        }
-        UiAction::VimClearPendingOp => {
-            state.vim.pending_op = None;
-        }
-        UiAction::VimMoveWordForward => {
-            let line = &state.doc.lines[state.vim.cursor_line];
-            let new_col = next_word_start(line, state.vim.cursor_col);
-            state.vim.cursor_col = vim_clamp_col(line, new_col);
-        }
-        UiAction::VimMoveWordBackward => {
-            let line = &state.doc.lines[state.vim.cursor_line];
-            state.vim.cursor_col = prev_word_start(line, state.vim.cursor_col);
-        }
-        UiAction::VimMoveWordEnd => {
-            let line = &state.doc.lines[state.vim.cursor_line];
-            state.vim.cursor_col = word_end(line, state.vim.cursor_col);
-        }
-        UiAction::VimEnterInsert => {
-            // Save undo snapshot
-            state.vim.undo_stack.push(crate::app::state::UndoEntry {
-                lines: state.doc.lines.clone(),
-                cursor_line: state.vim.cursor_line,
-                cursor_col: state.vim.cursor_col,
-            });
-            state.vim.pending_op = None;
-            state.focus = Focus::VimInsert;
-        }
-        UiAction::VimEnterInsertAfter => {
-            state.vim.undo_stack.push(crate::app::state::UndoEntry {
-                lines: state.doc.lines.clone(),
-                cursor_line: state.vim.cursor_line,
-                cursor_col: state.vim.cursor_col,
-            });
-            state.vim.pending_op = None;
-            // advance cursor one (insert after)
-            let line = &state.doc.lines[state.vim.cursor_line];
-            let next = next_char_boundary(line, state.vim.cursor_col);
-            state.vim.cursor_col = next.min(line.len()); // insert mode can be at end
-            state.focus = Focus::VimInsert;
-        }
-        UiAction::VimEnterInsertEOL => {
-            state.vim.undo_stack.push(crate::app::state::UndoEntry {
-                lines: state.doc.lines.clone(),
-                cursor_line: state.vim.cursor_line,
-                cursor_col: state.vim.cursor_col,
-            });
-            state.vim.pending_op = None;
-            state.vim.cursor_col = state.doc.lines[state.vim.cursor_line].len(); // past last char
-            state.focus = Focus::VimInsert;
-        }
-        UiAction::VimExitInsert => {
-            // Move cursor left one (vim convention: exit insert lands on last typed char)
-            let col = state.vim.cursor_col;
-            let line = &state.doc.lines[state.vim.cursor_line];
-            if col > 0 {
-                state.vim.cursor_col = prev_char_boundary(line, col);
-            }
-            state.vim.cursor_col = vim_clamp_col(
-                &state.doc.lines[state.vim.cursor_line],
-                state.vim.cursor_col,
-            );
-            state.vim.pending_op = None;
-            state.focus = Focus::VimNormal;
-            let _ = crate::app::actions::after_vim_edit(state);
-        }
-        UiAction::VimInsertLineBelow => {
-            // Save undo snapshot
-            state.vim.undo_stack.push(crate::app::state::UndoEntry {
-                lines: state.doc.lines.clone(),
-                cursor_line: state.vim.cursor_line,
-                cursor_col: state.vim.cursor_col,
-            });
-            state.vim.pending_op = None;
-            let insert_at = state.vim.cursor_line + 1;
-            state.doc.lines.insert(insert_at, String::new());
-            state.vim.cursor_line = insert_at;
-            state.vim.cursor_col = 0;
-            state.focus = Focus::VimInsert;
-        }
-        UiAction::VimInsertLineAbove => {
-            state.vim.undo_stack.push(crate::app::state::UndoEntry {
-                lines: state.doc.lines.clone(),
-                cursor_line: state.vim.cursor_line,
-                cursor_col: state.vim.cursor_col,
-            });
-            state.vim.pending_op = None;
-            state.doc.lines.insert(state.vim.cursor_line, String::new());
-            state.vim.cursor_col = 0;
-            state.focus = Focus::VimInsert;
-        }
-        UiAction::VimDeleteChar => {
-            let line = &state.doc.lines[state.vim.cursor_line];
-            if line.is_empty() {
-                // nothing to delete
-            } else {
-                let col = state.vim.cursor_col;
-                let end = next_char_boundary(line, col);
-                let line = &mut state.doc.lines[state.vim.cursor_line];
-                line.drain(col..end);
-                // Clamp cursor after deletion
-                let line_len = state.doc.lines[state.vim.cursor_line].len();
-                if col > 0 && col >= line_len {
-                    state.vim.cursor_col = prev_char_boundary(
-                        &state.doc.lines[state.vim.cursor_line],
-                        line_len,
-                    );
-                }
-                let _ = crate::app::actions::after_vim_edit(state);
-            }
-        }
-        UiAction::VimDeleteLine => {
-            state.vim.pending_op = None;
-            let n = state.doc.lines.len();
-            if n == 0 { /* nothing */ } else {
-                let removed = state.doc.lines.remove(state.vim.cursor_line);
-                state.vim.yank_buffer = vec![removed];
-                // Clamp cursor_line
-                let new_n = state.doc.lines.len();
-                if state.vim.cursor_line >= new_n && new_n > 0 {
-                    state.vim.cursor_line = new_n - 1;
-                }
-                if !state.doc.lines.is_empty() {
-                    state.vim.cursor_col = vim_clamp_col(
-                        &state.doc.lines[state.vim.cursor_line],
-                        state.vim.cursor_col,
-                    );
-                }
-                let _ = crate::app::actions::after_vim_edit(state);
-            }
-        }
-        UiAction::VimYankLine => {
-            state.vim.pending_op = None;
-            let line = state.doc.lines[state.vim.cursor_line].clone();
-            state.vim.yank_buffer = vec![line];
-        }
-        UiAction::VimPasteBelow => {
-            if !state.vim.yank_buffer.is_empty() {
-                let insert_at = state.vim.cursor_line + 1;
-                for (i, line) in state.vim.yank_buffer.clone().into_iter().enumerate() {
-                    state.doc.lines.insert(insert_at + i, line);
-                }
-                state.vim.cursor_line = insert_at;
-                state.vim.cursor_col = 0;
-                let _ = crate::app::actions::after_vim_edit(state);
-            }
-        }
-        UiAction::VimPasteAbove => {
-            if !state.vim.yank_buffer.is_empty() {
-                let insert_at = state.vim.cursor_line;
-                for (i, line) in state.vim.yank_buffer.clone().into_iter().enumerate() {
-                    state.doc.lines.insert(insert_at + i, line);
-                }
-                state.vim.cursor_col = 0;
-                let _ = crate::app::actions::after_vim_edit(state);
-            }
-        }
-        UiAction::VimUndo => {
-            if let Some(entry) = state.vim.undo_stack.pop() {
-                state.doc.lines = entry.lines;
-                state.vim.cursor_line = entry.cursor_line;
-                state.vim.cursor_col = entry.cursor_col;
-                let _ = crate::app::actions::after_vim_edit(state);
-            }
-        }
-        UiAction::VimToggleTodo => {
-            let line_idx = state.vim.cursor_line;
-            if state.doc.toggle_todo_at_line(line_idx).is_ok() {
-                let _ = crate::app::actions::after_vim_edit(state);
-            }
-        }
-        UiAction::VimInsertChar(c) => {
-            let line = &mut state.doc.lines[state.vim.cursor_line];
-            line.insert(state.vim.cursor_col, c);
-            state.vim.cursor_col += c.len_utf8();
-        }
-        UiAction::VimInsertNewline => {
-            let tail = state.doc.lines[state.vim.cursor_line][state.vim.cursor_col..].to_string();
-            state.doc.lines[state.vim.cursor_line].truncate(state.vim.cursor_col);
-            state.vim.cursor_line += 1;
-            state.doc.lines.insert(state.vim.cursor_line, tail);
-            state.vim.cursor_col = 0;
-        }
-        UiAction::VimInsertBackspace => {
-            let col = state.vim.cursor_col;
-            if col > 0 {
-                // Delete char before cursor on current line
-                let prev = prev_char_boundary(&state.doc.lines[state.vim.cursor_line], col);
-                state.doc.lines[state.vim.cursor_line].remove(prev);
-                state.vim.cursor_col = prev;
-            } else if state.vim.cursor_line > 0 {
-                // Merge with previous line
-                let current = state.doc.lines.remove(state.vim.cursor_line);
-                state.vim.cursor_line -= 1;
-                let prev_len = state.doc.lines[state.vim.cursor_line].len();
-                state.doc.lines[state.vim.cursor_line].push_str(&current);
-                state.vim.cursor_col = prev_len;
-            }
-        }
-        UiAction::VimInsertDeleteWordBefore => {
-            let col = state.vim.cursor_col;
-            let new_col = prev_word_start(&state.doc.lines[state.vim.cursor_line], col);
-            let line = &mut state.doc.lines[state.vim.cursor_line];
-            line.drain(new_col..col);
-            state.vim.cursor_col = new_col;
-        }
+        UiAction::VimMoveLeft
+        | UiAction::VimMoveRight
+        | UiAction::VimMoveUp
+        | UiAction::VimMoveDown
+        | UiAction::VimMoveLineStart
+        | UiAction::VimMoveLineEnd
+        | UiAction::VimMoveFileStart
+        | UiAction::VimMoveFileEnd
+        | UiAction::VimMoveWordForward
+        | UiAction::VimMoveWordBackward
+        | UiAction::VimMoveWordEnd
+        | UiAction::VimSetPendingOp(_)
+        | UiAction::VimClearPendingOp
+        | UiAction::VimEnterInsert
+        | UiAction::VimEnterInsertAfter
+        | UiAction::VimEnterInsertEOL
+        | UiAction::VimInsertLineBelow
+        | UiAction::VimInsertLineAbove
+        | UiAction::VimDeleteChar
+        | UiAction::VimDeleteLine
+        | UiAction::VimYankLine
+        | UiAction::VimPasteBelow
+        | UiAction::VimPasteAbove
+        | UiAction::VimUndo
+        | UiAction::VimToggleTodo => return vim_normal::execute_action(state, action),
+        UiAction::VimInsertChar(_)
+        | UiAction::VimInsertNewline
+        | UiAction::VimInsertBackspace
+        | UiAction::VimInsertDeleteWordBefore
+        | UiAction::VimExitInsert => return vim_insert::execute_action(state, action),
 
         // Right panel
         UiAction::FocusRightPanel => {
@@ -802,20 +381,9 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         UiAction::RightPanelBlur => {
             state.focus = Focus::Capture;
         }
-        UiAction::RightPanelUp => {
-            if state.right_panel_selected > 0 {
-                state.right_panel_selected -= 1;
-            }
-        }
-        UiAction::RightPanelDown => {
-            let max = state.panel_todos.len().saturating_sub(1);
-            if state.right_panel_selected < max {
-                state.right_panel_selected += 1;
-            }
-        }
-        UiAction::RightPanelToggle => {
-            crate::app::actions::toggle_panel_todo(state)?;
-        }
+        UiAction::RightPanelUp
+        | UiAction::RightPanelDown
+        | UiAction::RightPanelToggle => return right_panel::execute_action(state, action),
 
         // Chat panel
         UiAction::ToggleChat => {
@@ -830,18 +398,10 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         UiAction::ChatBlur => {
             state.focus = Focus::Capture;
         }
-        UiAction::ChatScrollUp => {
-            state.chat.scroll += 1;
-        }
-        UiAction::ChatScrollDown => {
-            state.chat.scroll = state.chat.scroll.saturating_sub(1);
-        }
-        UiAction::ChatPageUp => {
-            state.chat.scroll += 10;
-        }
-        UiAction::ChatPageDown => {
-            state.chat.scroll = state.chat.scroll.saturating_sub(10);
-        }
+        UiAction::ChatScrollUp
+        | UiAction::ChatScrollDown
+        | UiAction::ChatPageUp
+        | UiAction::ChatPageDown => return chat::execute_action(state, action),
     }
 
     if state.should_quit {

@@ -1,6 +1,6 @@
 use crate::app::command::Command;
 use crate::app::state::{AppState, Context};
-use crate::model::day::{EntryTarget, SelectableKind};
+use crate::model::day::SelectableKind;
 
 pub fn go_to_date(state: &mut AppState, date: chrono::NaiveDate) -> anyhow::Result<()> {
     state.save()?;
@@ -81,221 +81,211 @@ fn after_doc_mutation(state: &mut AppState) -> anyhow::Result<()> {
 
 pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
     match cmd {
-        Command::Entry(text) => {
-            let text = text.trim();
-            if text.is_empty() {
-                return Ok(());
-            }
-            let time_str = state.current_time_hhmm();
-            let time = if state.config.timestamp_entries {
-                Some(time_str.as_str())
-            } else {
-                None
-            };
-            let block = crate::model::writer::format_entry(text, time);
-            let target = match &state.context {
-                Context::Notes | Context::Todos => EntryTarget::Notes,
-                Context::Meeting(ord) => EntryTarget::Meeting(*ord),
-                Context::NoteBlock(ord) => EntryTarget::NoteBlock(*ord),
-                Context::Section { heading_line, level } => {
-                    EntryTarget::Section { heading_line: *heading_line, level: *level }
-                }
-            };
-            state.doc.add_block(&target, &block);
-            after_doc_mutation(state)?;
-        }
-        Command::Meeting(name) => {
-            let ord = state.doc.add_meeting(&name);
-            state.context = Context::Meeting(ord);
-            state.update_context_display();
-            after_doc_mutation(state)?;
-        }
-        Command::Note(name) => {
-            if let Some(n) = name {
-                let ord = state.doc.add_note_heading(&n);
-                state.context = Context::NoteBlock(ord);
-                state.update_context_display();
-                after_doc_mutation(state)?;
-            } else {
-                state.context = Context::Notes;
-                state.update_context_display();
-                state.status.clear();
-            }
-        }
-        Command::Todo(text) => {
-            let meeting_name = match &state.context {
-                Context::Meeting(ord) => state.doc.meetings().get(*ord).map(|m| m.name.clone()),
-                Context::NoteBlock(ord) => {
-                    state.doc.note_headings().get(*ord).map(|n| n.name.clone())
-                }
-                _ => None,
-            };
-            state.doc.add_todo(&text, meeting_name.as_deref());
-            after_doc_mutation(state)?;
-        }
-        Command::Leave => {
-            state.context = Context::Notes;
-            state.update_context_display();
-            state.status.clear();
-        }
-        Command::Help => {
-            state.overlay = crate::app::state::Overlay::Help;
-        }
-        Command::Quit => {
-            state.should_quit = true;
-        }
-        Command::Summarize => {
-            state.status = "summarize is not implemented yet".to_string();
-        }
-        Command::Ask(text) => {
-            let Some(tx) = state.chat.event_tx.clone() else {
-                state.chat.status = Some("LLM channel unavailable".to_string());
-                return Ok(());
-            };
-            state.chat.visible = true;
-            state.chat.status = None;
-            state.chat.scroll = 0;
-            state.chat.messages.push(crate::app::state::ChatMessage {
-                role: crate::app::state::ChatRole::User,
-                content: text.clone(),
-            });
-            // Persist the user message before the reply streams in.
-            let _ = state.save_chat();
-
-            let request_messages = state.chat.messages.clone();
-            let id = crate::app::llm::next_request_id();
-            state.chat.active_request = id;
-            state.chat.pending = true;
-            // Empty assistant placeholder that tokens append into.
-            state.chat.messages.push(crate::app::state::ChatMessage {
-                role: crate::app::state::ChatRole::Assistant,
-                content: String::new(),
-            });
-
-            let system = if state.config.llm_system_prompt.is_empty() {
-                None
-            } else {
-                Some(state.config.llm_system_prompt.clone())
-            };
-            let req = crate::app::llm::ChatRequest {
-                id,
-                base_url: state.config.llm_base_url.clone(),
-                model: state.config.llm_model.clone(),
-                system,
-                messages: request_messages,
-            };
-            crate::app::llm::spawn(req, tx);
-        }
-        Command::Clear => {
-            state.chat.messages.clear();
-            state.chat.active_request = crate::app::llm::next_request_id();
-            state.chat.pending = false;
-            state.chat.status = None;
-            state.chat.scroll = 0;
-            let _ = state.save_chat();
-        }
-        Command::Start => {
-            let ord = match &state.context {
-                Context::Meeting(ord) => *ord,
-                _ => {
-                    state.status = "Not in a meeting".to_string();
-                    return Ok(());
-                }
-            };
-            if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
-                let time = state.current_time_hhmm();
-                crate::model::writer::set_meeting_time_field(
-                    &mut state.doc.lines,
-                    heading,
-                    "Started",
-                    &time,
-                );
-                after_doc_mutation(state)?;
-            }
-        }
-        Command::End => {
-            let ord = match &state.context {
-                Context::Meeting(ord) => *ord,
-                _ => {
-                    state.status = "Not in a meeting".to_string();
-                    return Ok(());
-                }
-            };
-            if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
-                let time = state.current_time_hhmm();
-                crate::model::writer::set_meeting_time_field(
-                    &mut state.doc.lines,
-                    heading,
-                    "Ended",
-                    &time,
-                );
-                after_doc_mutation(state)?;
-            }
-        }
-        Command::Scheduled(time) => {
-            let ord = match &state.context {
-                Context::Meeting(ord) => *ord,
-                _ => {
-                    state.status = "Not in a meeting".to_string();
-                    return Ok(());
-                }
-            };
-            if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
-                crate::model::writer::set_meeting_time_field(
-                    &mut state.doc.lines,
-                    heading,
-                    "Scheduled",
-                    &time,
-                );
-                after_doc_mutation(state)?;
-            }
-        }
-        Command::Section(name) => {
-            let current_level: u8 = match &state.context {
-                Context::Meeting(_) | Context::NoteBlock(_) => 3,
-                Context::Section { level, .. } => *level,
-                Context::Notes | Context::Todos => {
-                    state.status = "Not in a meeting or note".to_string();
-                    return Ok(());
-                }
-            };
-            if current_level >= 6 {
-                state.status = "/section: already at maximum depth (######)".to_string();
-                return Ok(());
-            }
-            let target = match &state.context {
-                Context::Meeting(ord) => EntryTarget::Meeting(*ord),
-                Context::NoteBlock(ord) => EntryTarget::NoteBlock(*ord),
-                Context::Section { heading_line, level } => {
-                    EntryTarget::Section { heading_line: *heading_line, level: *level }
-                }
-                Context::Notes | Context::Todos => unreachable!(),
-            };
-            let next_level = current_level + 1;
-            let heading_line = state.doc.add_section_heading(&target, next_level, &name);
-            state.context = Context::Section { heading_line, level: next_level };
-            state.update_context_display();
-            after_doc_mutation(state)?;
-        }
-        Command::Unknown(word) => {
-            state.status = format!("Unknown command: /{}", word);
-        }
-        Command::InvalidArgs(msg) => {
-            state.status = msg;
-        }
-        Command::Today => {
-            go_today(state)?;
-            state.status.clear();
-        }
-        Command::Goto(Some(date)) => {
-            go_to_date(state, date)?;
-            state.status.clear();
-        }
-        Command::Goto(None) => {
-            state.status = "usage: /goto YYYY-MM-DD".to_string();
-        }
+        Command::Entry(text)       => handle_entry(state, &text)?,
+        Command::Meeting(name)     => handle_meeting(state, &name)?,
+        Command::Note(name)        => handle_note(state, name)?,
+        Command::Todo(text)        => handle_todo(state, &text)?,
+        Command::Leave             => handle_leave(state),
+        Command::Help              => state.overlay = crate::app::state::Overlay::Help,
+        Command::Quit              => state.should_quit = true,
+        Command::Summarize         => handle_summarize(state),
+        Command::Ask(text)         => handle_ask(state, &text)?,
+        Command::Clear             => handle_clear(state)?,
+        Command::Start             => handle_start(state)?,
+        Command::End               => handle_end(state)?,
+        Command::Scheduled(time)   => handle_scheduled(state, &time)?,
+        Command::Section(name)     => handle_section(state, &name)?,
+        Command::Unknown(word)     => state.status = format!("Unknown command: /{}", word),
+        Command::InvalidArgs(msg)  => state.status = msg,
+        Command::Today             => { go_today(state)?; state.status.clear(); }
+        Command::Goto(Some(date))  => { go_to_date(state, date)?; state.status.clear(); }
+        Command::Goto(None)        => state.status = "usage: /goto YYYY-MM-DD".to_string(),
     }
     Ok(())
+}
+
+fn handle_entry(state: &mut AppState, text: &str) -> anyhow::Result<()> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Ok(());
+    }
+    let time_str = state.current_time_hhmm();
+    let time = if state.config.timestamp_entries {
+        Some(time_str.as_str())
+    } else {
+        None
+    };
+    let block = crate::model::writer::format_entry(text, time);
+    let target = match &state.context {
+        Context::Notes | Context::Todos => crate::model::day::EntryTarget::Notes,
+        Context::Meeting(ord) => crate::model::day::EntryTarget::Meeting(*ord),
+        Context::NoteBlock(ord) => crate::model::day::EntryTarget::NoteBlock(*ord),
+        Context::Section { heading_line, level } => {
+            crate::model::day::EntryTarget::Section { heading_line: *heading_line, level: *level }
+        }
+    };
+    state.doc.add_block(&target, &block);
+    after_doc_mutation(state)
+}
+
+fn handle_meeting(state: &mut AppState, name: &str) -> anyhow::Result<()> {
+    let ord = state.doc.add_meeting(name);
+    state.context = Context::Meeting(ord);
+    state.update_context_display();
+    after_doc_mutation(state)
+}
+
+fn handle_note(state: &mut AppState, name: Option<String>) -> anyhow::Result<()> {
+    if let Some(n) = name {
+        let ord = state.doc.add_note_heading(&n);
+        state.context = Context::NoteBlock(ord);
+        state.update_context_display();
+        after_doc_mutation(state)
+    } else {
+        state.context = Context::Notes;
+        state.update_context_display();
+        state.status.clear();
+        Ok(())
+    }
+}
+
+fn handle_todo(state: &mut AppState, text: &str) -> anyhow::Result<()> {
+    let meeting_name = match &state.context {
+        Context::Meeting(ord) => state.doc.meetings().get(*ord).map(|m| m.name.clone()),
+        Context::NoteBlock(ord) => state.doc.note_headings().get(*ord).map(|n| n.name.clone()),
+        _ => None,
+    };
+    state.doc.add_todo(text, meeting_name.as_deref());
+    after_doc_mutation(state)
+}
+
+fn handle_leave(state: &mut AppState) {
+    state.context = Context::Notes;
+    state.update_context_display();
+    state.status.clear();
+}
+
+fn handle_summarize(state: &mut AppState) {
+    state.status = "summarize is not implemented yet".to_string();
+}
+
+fn handle_ask(state: &mut AppState, text: &str) -> anyhow::Result<()> {
+    let Some(tx) = state.chat.event_tx.clone() else {
+        state.chat.status = Some("LLM channel unavailable".to_string());
+        return Ok(());
+    };
+    state.chat.visible = true;
+    state.chat.status = None;
+    state.chat.scroll = 0;
+    state.chat.messages.push(crate::app::state::ChatMessage {
+        role: crate::app::state::ChatRole::User,
+        content: text.to_string(),
+    });
+    let _ = state.save_chat();
+    let request_messages = state.chat.messages.clone();
+    let id = crate::app::llm::next_request_id();
+    state.chat.active_request = id;
+    state.chat.pending = true;
+    state.chat.messages.push(crate::app::state::ChatMessage {
+        role: crate::app::state::ChatRole::Assistant,
+        content: String::new(),
+    });
+    let system = if state.config.llm_system_prompt.is_empty() {
+        None
+    } else {
+        Some(state.config.llm_system_prompt.clone())
+    };
+    let req = crate::app::llm::ChatRequest {
+        id,
+        base_url: state.config.llm_base_url.clone(),
+        model: state.config.llm_model.clone(),
+        system,
+        messages: request_messages,
+    };
+    crate::app::llm::spawn(req, tx);
+    Ok(())
+}
+
+fn handle_clear(state: &mut AppState) -> anyhow::Result<()> {
+    state.chat.messages.clear();
+    state.chat.active_request = crate::app::llm::next_request_id();
+    state.chat.pending = false;
+    state.chat.status = None;
+    state.chat.scroll = 0;
+    let _ = state.save_chat();
+    Ok(())
+}
+
+fn handle_start(state: &mut AppState) -> anyhow::Result<()> {
+    let ord = match &state.context {
+        Context::Meeting(ord) => *ord,
+        _ => { state.status = "Not in a meeting".to_string(); return Ok(()); }
+    };
+    if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
+        let time = state.current_time_hhmm();
+        crate::model::writer::set_meeting_time_field(
+            &mut state.doc.lines, heading, "Started", &time,
+        );
+        after_doc_mutation(state)?;
+    }
+    Ok(())
+}
+
+fn handle_end(state: &mut AppState) -> anyhow::Result<()> {
+    let ord = match &state.context {
+        Context::Meeting(ord) => *ord,
+        _ => { state.status = "Not in a meeting".to_string(); return Ok(()); }
+    };
+    if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
+        let time = state.current_time_hhmm();
+        crate::model::writer::set_meeting_time_field(
+            &mut state.doc.lines, heading, "Ended", &time,
+        );
+        after_doc_mutation(state)?;
+    }
+    Ok(())
+}
+
+fn handle_scheduled(state: &mut AppState, time: &str) -> anyhow::Result<()> {
+    let ord = match &state.context {
+        Context::Meeting(ord) => *ord,
+        _ => { state.status = "Not in a meeting".to_string(); return Ok(()); }
+    };
+    if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
+        crate::model::writer::set_meeting_time_field(
+            &mut state.doc.lines, heading, "Scheduled", time,
+        );
+        after_doc_mutation(state)?;
+    }
+    Ok(())
+}
+
+fn handle_section(state: &mut AppState, name: &str) -> anyhow::Result<()> {
+    let current_level: u8 = match &state.context {
+        Context::Meeting(_) | Context::NoteBlock(_) => 3,
+        Context::Section { level, .. } => *level,
+        Context::Notes | Context::Todos => {
+            state.status = "Not in a meeting or note".to_string();
+            return Ok(());
+        }
+    };
+    if current_level >= 6 {
+        state.status = "/section: already at maximum depth (######)".to_string();
+        return Ok(());
+    }
+    let target = match &state.context {
+        Context::Meeting(ord) => crate::model::day::EntryTarget::Meeting(*ord),
+        Context::NoteBlock(ord) => crate::model::day::EntryTarget::NoteBlock(*ord),
+        Context::Section { heading_line, level } => {
+            crate::model::day::EntryTarget::Section { heading_line: *heading_line, level: *level }
+        }
+        Context::Notes | Context::Todos => unreachable!(),
+    };
+    let next_level = current_level + 1;
+    let heading_line = state.doc.add_section_heading(&target, next_level, name);
+    state.context = Context::Section { heading_line, level: next_level };
+    state.update_context_display();
+    after_doc_mutation(state)
 }
 
 pub fn select_next(state: &mut AppState) {
