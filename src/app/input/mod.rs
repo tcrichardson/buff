@@ -86,6 +86,7 @@ pub enum UiAction {
     VimPasteAbove,
     VimUndo,
     VimToggleTodo,
+    VimBeginEditLine,
     // VimInsert actions
     VimInsertChar(char),
     VimInsertNewline,
@@ -360,7 +361,8 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         | UiAction::VimPasteBelow
         | UiAction::VimPasteAbove
         | UiAction::VimUndo
-        | UiAction::VimToggleTodo => return vim_normal::execute_action(state, action),
+        | UiAction::VimToggleTodo
+        | UiAction::VimBeginEditLine => return vim_normal::execute_action(state, action),
         UiAction::VimInsertChar(_)
         | UiAction::VimInsertNewline
         | UiAction::VimInsertBackspace
@@ -467,6 +469,17 @@ mod tests {
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Down)),
             Some(UiAction::VimMoveDown)
+        );
+    }
+
+    #[test]
+    fn vimnormal_enter_emits_begin_edit_line() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimNormal;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Enter)),
+            Some(UiAction::VimBeginEditLine)
         );
     }
 

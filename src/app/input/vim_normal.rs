@@ -41,6 +41,7 @@ pub(super) fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction>
         KeyCode::Char('t') => Some(UiAction::VimToggleTodo),
         KeyCode::Char('?') => Some(UiAction::OpenHelp),
         KeyCode::Tab       => Some(UiAction::SwitchToCapture),
+        KeyCode::Enter     => Some(UiAction::VimBeginEditLine),
         KeyCode::Esc       => None,
         _ => None,
     }
@@ -73,6 +74,7 @@ pub(super) fn execute_action(state: &mut AppState, action: UiAction) -> Result<E
         UiAction::VimPasteAbove       => paste_above(state),
         UiAction::VimUndo             => undo(state),
         UiAction::VimToggleTodo       => toggle_todo(state),
+        UiAction::VimBeginEditLine    => { /* TODO: implement in Task 2 */ }
         _ => unreachable!("vim_normal::execute_action called with non-vim-normal action: {:?}", action),
     }
     Ok(EventOutcome::Continue)
