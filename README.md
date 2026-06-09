@@ -69,7 +69,7 @@ before committing.
 
 ### Vim normal mode
 
-Press **Esc** from capture mode to move focus into the document and navigate with vim-style keys. A status line at the bottom shows `-- NORMAL --` and the current context.
+Press **Esc** from capture mode to move focus into the document and navigate with vim-style keys. A status line at the bottom shows `-- NORMAL --` and the current context. The current line is highlighted and the cursor is shown as a solid block.
 
 | Key | Action |
 |---|---|
@@ -89,7 +89,7 @@ Press **Esc** from capture mode to move focus into the document and navigate wit
 
 ### Vim insert mode
 
-Press **i** from normal mode to edit the document directly at the cursor position. The status line shows `-- INSERT --`.
+Press **i** from normal mode to edit the document directly at the cursor position. The status line shows `-- INSERT --` and the cursor is shown as a vertical bar.
 
 | Key | Action |
 |---|---|
@@ -107,12 +107,11 @@ All entry types — plain text, bullets, to-dos, meeting headings, and Markdown 
 
 | From | `Tab` goes to | `Shift+Tab` goes to |
 |---|---|---|
-| Vim normal mode | Capture mode | Right panel |
-| Capture mode | Chat panel (if visible) | Vim normal mode |
-| Chat panel | Right panel | Capture mode |
-| Right panel | Vim normal mode | Chat panel (if visible) |
+| Vim normal mode | Right panel | Right panel |
+| Chat panel | Right panel | Vim normal mode |
+| Right panel | Vim normal mode | Vim normal mode |
 
-`Esc` always returns focus to the document in vim normal mode.
+`Esc` returns to vim normal mode from most contexts; from vim normal mode it switches back to capture mode.
 
 ### Right panel
 
@@ -136,7 +135,6 @@ A middle panel streams replies from a local LM Studio server (or any OpenAI-comp
 | `Ctrl-L` | Show / hide the chat panel |
 | `/ask <message>` | Send a message; the reply streams token-by-token |
 | `/clear` | Erase the current day's conversation |
-| `Tab` (in vim normal mode) | Focus the chat panel (when visible) |
 | `j` / `k` or `↑` / `↓` | Scroll the chat history |
 | `Esc` or `Tab` | Return focus to the document |
 
@@ -206,6 +204,7 @@ Set the theme with the `theme` config field. You can override any individual col
 | `code` | `darkgray` | `"gray"`, `"#616161"` |
 | `todo_done` | `green` | `"lightgreen"`, `"#66bb6a"` |
 | `todo_overdue` | `red` | `"lightred"`, `"#ef5350"` |
+| `vim_cursor_line` | `#dbeafe` | `"lightgray"`, `"#e3f2fd"` |
 
 Colors can be specified as:
 - **Named colors**: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`, `darkgray`, `white`, `reset`

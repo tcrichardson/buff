@@ -237,4 +237,16 @@ mod tests {
         let theme = resolve_theme("light", &overrides);
         assert_eq!(theme.border_focused, Color::Rgb(255, 0, 0));
     }
+
+    #[test]
+    fn light_theme_has_vim_cursor_line() {
+        let theme = light();
+        assert_eq!(theme.vim_cursor_line, Color::Rgb(219, 234, 254));
+    }
+
+    #[test]
+    fn dark_theme_has_vim_cursor_line() {
+        let theme = dark();
+        assert_eq!(theme.vim_cursor_line, Color::Rgb(40, 44, 52));
+    }
 }
