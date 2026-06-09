@@ -218,7 +218,7 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     if key.code == KeyCode::Tab {
         return match state.focus {
             Focus::Capture => Some(UiAction::TypeIndent),
-            Focus::VimNormal | Focus::VimInsert => Some(UiAction::SwitchToCapture),
+            Focus::VimNormal | Focus::VimInsert => Some(UiAction::FocusRightPanel),
             Focus::Chat => Some(UiAction::FocusRightPanel),
             Focus::RightPanel => Some(UiAction::FocusVimNormal),
         };
@@ -230,13 +230,7 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
             Focus::Capture => Some(UiAction::RemoveIndent),
             Focus::VimNormal | Focus::VimInsert => Some(UiAction::FocusRightPanel),
             Focus::Chat => Some(UiAction::FocusVimNormal),
-            Focus::RightPanel => {
-                if state.chat.visible {
-                    Some(UiAction::FocusChat)
-                } else {
-                    Some(UiAction::FocusVimNormal)
-                }
-            }
+            Focus::RightPanel => Some(UiAction::FocusVimNormal),
         };
     }
 
@@ -250,7 +244,7 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
                     Some(UiAction::ExitCaptureMode)
                 }
             }
-            Focus::VimNormal => None, // Esc is no-op in normal mode
+            Focus::VimNormal => Some(UiAction::SwitchToCapture),
             Focus::VimInsert => Some(UiAction::VimExitInsert),
             Focus::RightPanel => Some(UiAction::RightPanelBlur),
             Focus::Chat => Some(UiAction::ChatBlur),
@@ -554,11 +548,11 @@ mod tests {
     }
 
     #[test]
-    fn esc_in_vimnormal_is_noop() {
+    fn esc_in_vimnormal_switches_to_capture() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
-        assert_eq!(key_to_action(&state, make_key(KeyCode::Esc)), None);
+        assert_eq!(key_to_action(&state, make_key(KeyCode::Esc)), Some(UiAction::SwitchToCapture));
     }
 
     #[test]
@@ -784,13 +778,13 @@ mod tests {
     }
 
     #[test]
-    fn tab_in_vimnormal_switches_to_capture() {
+    fn tab_in_vimnormal_focuses_right_panel() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Tab)),
-            Some(UiAction::SwitchToCapture)
+            Some(UiAction::FocusRightPanel)
         );
     }
 
@@ -968,26 +962,11 @@ mod tests {
     }
 
     #[test]
-    fn backtab_in_right_panel_goes_to_chat_when_visible() {
+    fn backtab_in_right_panel_goes_to_vimnormal() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::RightPanel;
         state.chat.visible = true;
-        let key = KeyEvent {
-            code: KeyCode::BackTab,
-            modifiers: KeyModifiers::SHIFT,
-            kind: KeyEventKind::Press,
-            state: KeyEventState::NONE,
-        };
-        assert_eq!(key_to_action(&state, key), Some(UiAction::FocusChat));
-    }
-
-    #[test]
-    fn backtab_in_right_panel_goes_to_vimnormal_when_chat_hidden() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::RightPanel;
-        state.chat.visible = false;
         let key = KeyEvent {
             code: KeyCode::BackTab,
             modifiers: KeyModifiers::SHIFT,
@@ -1065,14 +1044,6 @@ mod tests {
     }
 
     #[test]
-    fn vimnormal_esc_is_noop() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::VimNormal;
-        assert_eq!(key_to_action(&state, make_key(KeyCode::Esc)), None);
-    }
-
-    #[test]
     fn viminsert_esc_exits_insert() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
@@ -1102,17 +1073,6 @@ mod tests {
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Right)),
             Some(UiAction::VimMoveRight)
-        );
-    }
-
-    #[test]
-    fn vimnormal_tab_switches_to_capture() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut state = test_state(&tmp);
-        state.focus = Focus::VimNormal;
-        assert_eq!(
-            key_to_action(&state, make_key(KeyCode::Tab)),
-            Some(UiAction::SwitchToCapture)
         );
     }
 
