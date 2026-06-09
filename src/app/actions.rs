@@ -442,6 +442,23 @@ pub fn toggle_panel_todo(state: &mut AppState) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub fn vim_begin_edit_line(state: &mut AppState) -> anyhow::Result<()> {
+    let cursor_line = state.vim.cursor_line;
+    let found = state
+        .selectables
+        .iter()
+        .enumerate()
+        .find(|(_, sel)| sel.lines.contains(&cursor_line));
+    if let Some((idx, sel)) = found {
+        let text = state.doc.lines[sel.lines.clone()].join("\n");
+        state.input = text;
+        state.editing = Some(idx);
+        state.cursor_pos = state.input.len();
+        state.focus = crate::app::state::Focus::Capture;
+    }
+    Ok(())
+}
+
 pub fn commit_edit(state: &mut AppState) -> anyhow::Result<()> {
     if let Some(idx) = state.editing {
         let new_lines = crate::model::writer::format_entry(&state.input, None);
@@ -1557,5 +1574,46 @@ mod tests {
         let section_pos = text.find("#### Updates").unwrap();
         let entry_pos = text.find("after resume").unwrap();
         assert!(entry_pos > section_pos, "entry should be under section after resume: {}", text);
+    }
+
+    #[test]
+    fn vim_begin_edit_line_on_selectable_populates_input_and_editing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = crate::app::state::Focus::VimNormal;
+        state.doc.lines = vec![
+            "# Day".to_string(),
+            String::new(),
+            "## Notes".to_string(),
+            "- a bullet".to_string(),
+        ];
+        state.selectables = state.doc.selectables();
+        state.vim.cursor_line = 3; // on "- a bullet"
+
+        vim_begin_edit_line(&mut state).unwrap();
+
+        assert_eq!(state.input, "- a bullet");
+        assert!(state.editing.is_some());
+        assert_eq!(state.cursor_pos, "- a bullet".len());
+        assert_eq!(state.focus, crate::app::state::Focus::Capture);
+    }
+
+    #[test]
+    fn vim_begin_edit_line_on_empty_line_is_noop() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = crate::app::state::Focus::VimNormal;
+        state.doc.lines = vec![
+            "# Day".to_string(),
+            String::new(),
+        ];
+        state.selectables = state.doc.selectables();
+        state.vim.cursor_line = 1; // empty line — not a selectable
+
+        vim_begin_edit_line(&mut state).unwrap();
+
+        assert!(state.input.is_empty());
+        assert!(state.editing.is_none());
+        assert_eq!(state.focus, crate::app::state::Focus::VimNormal);
     }
 }
