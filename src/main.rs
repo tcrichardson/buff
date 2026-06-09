@@ -1,5 +1,7 @@
 use anyhow::{Context, Result};
 use ratatui::crossterm::event::{Event, KeyEventKind};
+use ratatui::crossterm::{execute, cursor::SetCursorStyle};
+use buff::app::state::Focus;
 
 fn main() {
     if let Err(e) = run() {
@@ -79,6 +81,19 @@ fn run() -> Result<()> {
         terminal.draw(|frame| {
             buff::ui::render(frame, &app, &theme);
         })?;
+
+        // Set cursor shape to match the current vim mode.
+        match app.focus {
+            Focus::VimNormal => {
+                execute!(std::io::stdout(), SetCursorStyle::SteadyBlock)?;
+            }
+            Focus::VimInsert => {
+                execute!(std::io::stdout(), SetCursorStyle::SteadyBar)?;
+            }
+            _ => {
+                execute!(std::io::stdout(), SetCursorStyle::DefaultUserShape)?;
+            }
+        }
 
         // Drain any LLM events that arrived since the last iteration.
         while let Ok(event) = llm_rx.try_recv() {

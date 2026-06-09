@@ -614,4 +614,26 @@ mod tests {
             content
         );
     }
+
+    #[test]
+    fn render_vim_normal_cursor_line_uses_vim_cursor_line_bg() {
+        use ratatui::style::Color;
+        let doc = Document::from_text("cursor line\nother line\n");
+        let mut app = test_app(doc, Focus::VimNormal, 0);
+        app.vim.cursor_line = 0;
+
+        let backend = TestBackend::new(80, 30);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        // light theme vim_cursor_line = Color::Rgb(219, 234, 254)
+        let has_highlight = buffer.content.iter().any(|cell| {
+            cell.style().bg == Some(Color::Rgb(219, 234, 254))
+        });
+        assert!(
+            has_highlight,
+            "expected vim_cursor_line background on the cursor line, got none"
+        );
+    }
 }
