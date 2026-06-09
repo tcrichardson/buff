@@ -24,7 +24,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect, theme: &Th
             if vim_active && i == cursor_line {
                 in_code = false; // reset; raw line shown anyway
                 let bg_style = Style::default()
-                    .bg(theme.notes_panel_bg); // subtle tint via bg; cursor cell highlighted separately
+                    .bg(theme.vim_cursor_line);
                 return Line::from(Span::styled(line.as_str(), bg_style));
             }
 
