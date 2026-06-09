@@ -30,7 +30,7 @@ pub fn go_next_day(state: &mut AppState) -> anyhow::Result<()> {
 
 /// Re-derive context from the current vim cursor position and update state.context + display.
 pub fn vim_update_context(state: &mut AppState) {
-    use crate::app::state::context_at_line;
+    use crate::app::context::context_at_line;
     state.context = context_at_line(&state.doc.lines, state.vim.cursor_line);
     state.update_context_display();
 }
