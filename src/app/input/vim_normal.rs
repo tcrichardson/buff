@@ -74,7 +74,7 @@ pub(super) fn execute_action(state: &mut AppState, action: UiAction) -> Result<E
         UiAction::VimPasteAbove       => paste_above(state),
         UiAction::VimUndo             => undo(state),
         UiAction::VimToggleTodo       => toggle_todo(state),
-        UiAction::VimBeginEditLine    => { /* TODO: implement in Task 2 */ }
+        UiAction::VimBeginEditLine    => { crate::app::actions::vim_begin_edit_line(state)?; }
         _ => unreachable!("vim_normal::execute_action called with non-vim-normal action: {:?}", action),
     }
     Ok(EventOutcome::Continue)
