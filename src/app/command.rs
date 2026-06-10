@@ -15,6 +15,8 @@ pub enum Command {
     Start,
     End,
     Scheduled(String),
+    Purpose(String),
+    Topic(String),
     Section(String),
     Unknown(String),
     InvalidArgs(String),
@@ -103,6 +105,20 @@ pub fn parse(input: &str) -> Command {
                 Command::InvalidArgs("invalid time, use HH:MM".to_string())
             } else {
                 Command::Scheduled(rest.to_string())
+            }
+        }
+        "/purpose" => {
+            if rest.is_empty() {
+                Command::InvalidArgs("/purpose needs text".to_string())
+            } else {
+                Command::Purpose(rest.to_string())
+            }
+        }
+        "/topic" => {
+            if rest.is_empty() {
+                Command::InvalidArgs("/topic needs text".to_string())
+            } else {
+                Command::Topic(rest.to_string())
             }
         }
         "/section" => {
@@ -331,6 +347,38 @@ mod tests {
         assert_eq!(
             parse("/scheduled 12:60"),
             Command::InvalidArgs("invalid time, use HH:MM".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_purpose_with_text() {
+        assert_eq!(
+            parse("/purpose kick off Q3"),
+            Command::Purpose("kick off Q3".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_purpose_empty_is_invalid() {
+        assert_eq!(
+            parse("/purpose"),
+            Command::InvalidArgs("/purpose needs text".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_topic_with_text() {
+        assert_eq!(
+            parse("/topic API design for v2"),
+            Command::Topic("API design for v2".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_topic_empty_is_invalid() {
+        assert_eq!(
+            parse("/topic"),
+            Command::InvalidArgs("/topic needs text".to_string())
         );
     }
 

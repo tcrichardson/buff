@@ -26,6 +26,9 @@ enum LineKind<'a> {
     Bullet(&'a str, &'a str),
     /// Ordered list item — shown verbatim.
     Ordered(&'a str),
+    /// Metadata line stored with `meta:` prefix. Contains the text after stripping `meta:`.
+    /// Example: `meta:Purpose: kick off Q3` → `MetaField("Purpose: kick off Q3")`.
+    MetaField(&'a str),
     /// Plain text — shown verbatim.
     Plain(&'a str),
 }
@@ -93,6 +96,10 @@ fn classify_line<'a>(line: &'a str, in_code: &mut bool, vim_cursor: bool) -> Lin
 
     if crate::model::parser::is_ordered(line) {
         return LineKind::Ordered(line);
+    }
+
+    if let Some(rest) = line.strip_prefix("meta:") {
+        return LineKind::MetaField(rest);
     }
 
     LineKind::Plain(line)
@@ -168,6 +175,12 @@ fn render_line_kind<'a>(kind: LineKind<'a>, theme: &Theme) -> Line<'a> {
             Line::from(spans)
         }
         LineKind::Ordered(line) => Line::from(Span::raw(line)),
+        LineKind::MetaField(rest) => Line::from(Span::styled(
+            rest,
+            Style::default()
+                .fg(theme.metadata)
+                .add_modifier(Modifier::ITALIC),
+        )),
         LineKind::Plain(line) => Line::from(line),
     }
 }
@@ -725,5 +738,59 @@ mod tests {
     fn render_plain_verbatim() {
         let line = render_line_kind(LineKind::Plain("just text"), &th());
         assert_eq!(line, Line::from("just text"));
+    }
+
+    #[test]
+    fn classify_meta_field_strips_prefix() {
+        let mut in_code = false;
+        let result = classify_line("meta:Purpose: kick off Q3", &mut in_code, false);
+        assert_eq!(result, LineKind::MetaField("Purpose: kick off Q3"));
+    }
+
+    #[test]
+    fn classify_meta_field_scheduled() {
+        let mut in_code = false;
+        let result = classify_line("meta:Scheduled: 09:00", &mut in_code, false);
+        assert_eq!(result, LineKind::MetaField("Scheduled: 09:00"));
+    }
+
+    #[test]
+    fn classify_meta_field_on_cursor_line_shows_raw() {
+        // vim cursor always shows raw text, even for meta: lines
+        let mut in_code = false;
+        let result = classify_line("meta:Purpose: kick off Q3", &mut in_code, true);
+        assert_eq!(result, LineKind::VimCursor("meta:Purpose: kick off Q3"));
+    }
+
+    #[test]
+    fn render_meta_field_italic_metadata_color() {
+        let t = th();
+        let line = render_line_kind(LineKind::MetaField("Purpose: kick off Q3"), &t);
+        assert_eq!(
+            line,
+            Line::from(Span::styled(
+                "Purpose: kick off Q3",
+                Style::default()
+                    .fg(t.metadata)
+                    .add_modifier(Modifier::ITALIC),
+            ))
+        );
+    }
+
+    #[test]
+    fn style_line_meta_field_round_trip() {
+        // style_line is the public-facing function — verify end-to-end
+        let t = th();
+        let mut in_code = false;
+        let result = style_line("meta:Started: 09:05", &mut in_code, false, &t);
+        assert_eq!(
+            result,
+            Line::from(Span::styled(
+                "Started: 09:05",
+                Style::default()
+                    .fg(t.metadata)
+                    .add_modifier(Modifier::ITALIC),
+            ))
+        );
     }
 }

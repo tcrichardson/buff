@@ -20,6 +20,7 @@ pub struct Theme {
     pub todo_overdue: Color,
     pub vim_cursor_line: Color,
     pub capture_bg: Color,
+    pub metadata: Color,
 }
 
 pub fn light() -> Theme {
@@ -41,6 +42,7 @@ pub fn light() -> Theme {
         todo_overdue: Color::Red,
         vim_cursor_line: Color::Rgb(219, 234, 254),
         capture_bg: Color::Reset,
+        metadata: Color::DarkGray,
     }
 }
 
@@ -63,6 +65,7 @@ pub fn dark() -> Theme {
         todo_overdue: Color::Red,
         vim_cursor_line: Color::Rgb(40, 44, 52),
         capture_bg: Color::Reset,
+        metadata: Color::Gray,
     }
 }
 
@@ -139,6 +142,7 @@ pub fn resolve_theme(name: &str, overrides: &ThemeOverrides) -> Theme {
     apply!(todo_overdue);
     apply!(vim_cursor_line);
     apply!(capture_bg);
+    apply!(metadata);
 
     theme
 }
@@ -256,5 +260,26 @@ mod tests {
     fn dark_theme_has_vim_cursor_line() {
         let theme = dark();
         assert_eq!(theme.vim_cursor_line, Color::Rgb(40, 44, 52));
+    }
+
+    #[test]
+    fn light_theme_has_metadata_color() {
+        let theme = light();
+        // metadata should be a dim/dark color distinguishable from normal text
+        assert_ne!(theme.metadata, Color::Reset);
+    }
+
+    #[test]
+    fn dark_theme_has_metadata_color() {
+        let theme = dark();
+        assert_ne!(theme.metadata, Color::Reset);
+    }
+
+    #[test]
+    fn resolve_applies_metadata_override() {
+        let mut overrides = ThemeOverrides::default();
+        overrides.metadata = Some("cyan".to_string());
+        let theme = resolve_theme("light", &overrides);
+        assert_eq!(theme.metadata, Color::Cyan);
     }
 }

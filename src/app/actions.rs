@@ -103,6 +103,8 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
         Command::Start             => handle_start(state)?,
         Command::End               => handle_end(state)?,
         Command::Scheduled(time)   => handle_scheduled(state, &time)?,
+        Command::Purpose(text)     => handle_purpose(state, &text)?,
+        Command::Topic(text)       => handle_topic(state, &text)?,
         Command::Section(name)     => handle_section(state, &name)?,
         Command::Unknown(word)     => state.status = format!("Unknown command: /{}", word),
         Command::InvalidArgs(msg)  => state.status = msg,
@@ -232,7 +234,7 @@ fn handle_start(state: &mut AppState) -> anyhow::Result<()> {
     };
     if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
         let time = state.current_time_hhmm();
-        crate::model::writer::set_meeting_time_field(
+        crate::model::writer::set_metadata_field(
             &mut state.doc.lines, heading, "Started", &time,
         );
         after_doc_mutation(state)?;
@@ -247,7 +249,7 @@ fn handle_end(state: &mut AppState) -> anyhow::Result<()> {
     };
     if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
         let time = state.current_time_hhmm();
-        crate::model::writer::set_meeting_time_field(
+        crate::model::writer::set_metadata_field(
             &mut state.doc.lines, heading, "Ended", &time,
         );
         after_doc_mutation(state)?;
@@ -261,8 +263,42 @@ fn handle_scheduled(state: &mut AppState, time: &str) -> anyhow::Result<()> {
         _ => { state.status = "Not in a meeting".to_string(); return Ok(()); }
     };
     if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
-        crate::model::writer::set_meeting_time_field(
+        crate::model::writer::set_metadata_field(
             &mut state.doc.lines, heading, "Scheduled", time,
+        );
+        after_doc_mutation(state)?;
+    }
+    Ok(())
+}
+
+fn handle_purpose(state: &mut AppState, text: &str) -> anyhow::Result<()> {
+    let ord = match &state.context {
+        Context::Meeting(ord) => *ord,
+        _ => {
+            state.status = "Not in a meeting".to_string();
+            return Ok(());
+        }
+    };
+    if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
+        crate::model::writer::set_metadata_field(
+            &mut state.doc.lines, heading, "Purpose", text,
+        );
+        after_doc_mutation(state)?;
+    }
+    Ok(())
+}
+
+fn handle_topic(state: &mut AppState, text: &str) -> anyhow::Result<()> {
+    let ord = match &state.context {
+        Context::NoteBlock(ord) => *ord,
+        _ => {
+            state.status = "Not in a note block".to_string();
+            return Ok(());
+        }
+    };
+    if let Some(heading) = state.doc.note_headings().get(ord).map(|n| n.heading_line) {
+        crate::model::writer::set_metadata_field(
+            &mut state.doc.lines, heading, "Topic", text,
         );
         after_doc_mutation(state)?;
     }
@@ -1312,15 +1348,15 @@ mod tests {
         dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
         dispatch(&mut state, Command::Start).unwrap();
         let text = state.doc.to_text();
-        // line format is "Started: HH:MM" — just verify prefix since time varies
+        // line format is "meta:Started: HH:MM" — just verify prefix since time varies
         assert!(
-            text.contains("Started: "),
+            text.contains("meta:Started: "),
             "Started line missing: {}",
             text
         );
         // Started should appear between the heading and any notes
         let heading_pos = text.find("### Standup").unwrap();
-        let started_pos = text.find("Started: ").unwrap();
+        let started_pos = text.find("meta:Started: ").unwrap();
         assert!(started_pos > heading_pos, "Started should be after heading");
     }
 
@@ -1331,7 +1367,7 @@ mod tests {
         dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
         dispatch(&mut state, Command::End).unwrap();
         let text = state.doc.to_text();
-        assert!(text.contains("Ended: "), "Ended line missing: {}", text);
+        assert!(text.contains("meta:Ended: "), "Ended line missing: {}", text);
     }
 
     #[test]
@@ -1342,7 +1378,7 @@ mod tests {
         dispatch(&mut state, Command::Scheduled("09:00".to_string())).unwrap();
         let text = state.doc.to_text();
         assert!(
-            text.contains("Scheduled: 09:00\n"),
+            text.contains("meta:Scheduled: 09:00\n"),
             "Scheduled line missing: {}",
             text
         );
@@ -1368,9 +1404,88 @@ mod tests {
         dispatch(&mut state, Command::Start).unwrap();
         dispatch(&mut state, Command::Start).unwrap();
         let text = state.doc.to_text();
-        // Only one "Started:" line should exist
-        let count = text.matches("Started: ").count();
+        // Only one "meta:Started:" line should exist
+        let count = text.matches("meta:Started: ").count();
         assert_eq!(count, 1, "should have exactly one Started line: {}", text);
+    }
+
+    #[test]
+    fn purpose_in_meeting_inserts_meta_line() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        dispatch(&mut state, Command::Purpose("align team".to_string())).unwrap();
+        let text = state.doc.to_text();
+        assert!(
+            text.contains("meta:Purpose: align team\n"),
+            "Purpose line missing: {}",
+            text
+        );
+        let heading_pos = text.find("### Standup").unwrap();
+        let purpose_pos = text.find("meta:Purpose:").unwrap();
+        assert!(purpose_pos > heading_pos, "Purpose should be after heading");
+    }
+
+    #[test]
+    fn purpose_outside_meeting_sets_status() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        let before = state.doc.to_text();
+        dispatch(&mut state, Command::Purpose("oops".to_string())).unwrap();
+        assert_eq!(state.status, "Not in a meeting");
+        assert_eq!(state.doc.to_text(), before);
+    }
+
+    #[test]
+    fn purpose_replaces_existing_value() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        dispatch(&mut state, Command::Purpose("first goal".to_string())).unwrap();
+        dispatch(&mut state, Command::Purpose("revised goal".to_string())).unwrap();
+        let text = state.doc.to_text();
+        assert!(text.contains("meta:Purpose: revised goal\n"), "got: {}", text);
+        assert!(!text.contains("meta:Purpose: first goal\n"), "old should be gone: {}", text);
+    }
+
+    #[test]
+    fn topic_in_note_block_inserts_meta_line() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Note(Some("Design".to_string()))).unwrap();
+        dispatch(&mut state, Command::Topic("API v2".to_string())).unwrap();
+        let text = state.doc.to_text();
+        assert!(
+            text.contains("meta:Topic: API v2\n"),
+            "Topic line missing: {}",
+            text
+        );
+        let heading_pos = text.find("### Design").unwrap();
+        let topic_pos = text.find("meta:Topic:").unwrap();
+        assert!(topic_pos > heading_pos, "Topic should be after heading");
+    }
+
+    #[test]
+    fn topic_outside_note_block_sets_status() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        // Notes context (not a NoteBlock)
+        let before = state.doc.to_text();
+        dispatch(&mut state, Command::Topic("oops".to_string())).unwrap();
+        assert_eq!(state.status, "Not in a note block");
+        assert_eq!(state.doc.to_text(), before);
+    }
+
+    #[test]
+    fn topic_outside_meeting_sets_status() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        let before = state.doc.to_text();
+        // In Meeting context, not NoteBlock — topic should fail
+        dispatch(&mut state, Command::Topic("oops".to_string())).unwrap();
+        assert_eq!(state.status, "Not in a note block");
+        assert_eq!(state.doc.to_text(), before);
     }
 
     #[test]

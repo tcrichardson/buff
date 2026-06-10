@@ -107,13 +107,17 @@ impl Document {
         let mut result = Vec::new();
         for meeting in self.meetings() {
             for line in &self.lines[meeting.heading_line + 1..] {
-                if let Some(value) = line.strip_prefix("Scheduled: ") {
-                    if !value.is_empty() {
-                        result.push((value.to_string(), meeting.name.clone()));
+                // Accept both new `meta:Scheduled: HH:MM` and legacy `Scheduled: HH:MM`.
+                let value = line.strip_prefix("meta:Scheduled: ")
+                    .or_else(|| line.strip_prefix("Scheduled: "));
+                if let Some(v) = value {
+                    if !v.is_empty() {
+                        result.push((v.to_string(), meeting.name.clone()));
                     }
                     break;
                 }
-                if !is_time_field_line(line) {
+                // Stop scanning if neither a meta: line nor a legacy time-field line.
+                if !is_metadata_line(line) && !is_legacy_time_field_line(line) {
                     break;
                 }
             }
@@ -488,38 +492,50 @@ impl Document {
     }
 }
 
-const TIME_FIELD_ORDER: &[&str] = &["Scheduled", "Started", "Ended"];
+const METADATA_FIELD_ORDER: &[&str] = &["Purpose", "Topic", "Scheduled", "Started", "Ended"];
 
-fn is_time_field_line(line: &str) -> bool {
-    TIME_FIELD_ORDER
+/// Legacy bare time-field keys written before the `meta:` prefix was introduced.
+const LEGACY_TIME_KEYS: &[&str] = &["Scheduled", "Started", "Ended"];
+
+/// True if the line begins with the `meta:` storage prefix that identifies a metadata line.
+fn is_metadata_line(line: &str) -> bool {
+    line.starts_with("meta:")
+}
+
+/// True if the line is a legacy (pre-migration) bare time-field: `Scheduled: `, `Started: `, `Ended: `.
+fn is_legacy_time_field_line(line: &str) -> bool {
+    LEGACY_TIME_KEYS
         .iter()
         .any(|k| line.starts_with(&format!("{}: ", k)))
 }
 
-/// Insert or replace a labeled time line (`Key: HH:MM`) in the meeting's
-/// metadata block — the consecutive `Key: HH:MM` lines immediately after the
-/// `### heading` line. The block is always rewritten in canonical order:
-/// Scheduled, Started, Ended.
+/// Insert or replace a metadata field (`meta:Key: value`) in the block immediately
+/// after the heading at `heading_line`.
 ///
-/// `heading_line` is the index in `lines` of the `### Name` heading.
-pub fn set_meeting_time_field(
+/// The metadata block is any consecutive run of `meta:` lines (or legacy bare
+/// time-field lines, which are transparently migrated to `meta:` format on write).
+/// The block is always rewritten in the canonical order defined by `METADATA_FIELD_ORDER`.
+pub fn set_metadata_field(
     lines: &mut Vec<String>,
     heading_line: usize,
     key: &str,
     value: &str,
 ) {
-    // Find the end of the existing metadata block.
+    // Find the end of the existing metadata block (supports both formats).
     let mut meta_end = heading_line + 1;
-    while meta_end < lines.len() && is_time_field_line(&lines[meta_end]) {
+    while meta_end < lines.len()
+        && (is_metadata_line(&lines[meta_end]) || is_legacy_time_field_line(&lines[meta_end]))
+    {
         meta_end += 1;
     }
 
-    // Parse existing fields into a map.
+    // Parse existing fields into a map, stripping `meta:` prefix when present.
     let mut fields: std::collections::HashMap<String, String> =
         lines[heading_line + 1..meta_end]
             .iter()
             .filter_map(|line| {
-                let mut parts = line.splitn(2, ": ");
+                let data = line.strip_prefix("meta:").unwrap_or(line.as_str());
+                let mut parts = data.splitn(2, ": ");
                 let k = parts.next()?.to_string();
                 let v = parts.next()?.to_string();
                 Some((k, v))
@@ -529,10 +545,10 @@ pub fn set_meeting_time_field(
     // Insert or overwrite the target key.
     fields.insert(key.to_string(), value.to_string());
 
-    // Rebuild in canonical order (only keys that exist).
-    let new_lines: Vec<String> = TIME_FIELD_ORDER
+    // Rebuild in canonical order with `meta:` prefix (only keys that are present).
+    let new_lines: Vec<String> = METADATA_FIELD_ORDER
         .iter()
-        .filter_map(|k| fields.get(*k).map(|v| format!("{}: {}", k, v)))
+        .filter_map(|k| fields.get(*k).map(|v| format!("meta:{}: {}", k, v)))
         .collect();
 
     // Replace the old metadata range with the new lines.
@@ -1089,81 +1105,178 @@ mod tests {
     }
 
     #[test]
-    fn set_time_field_inserts_started_when_absent() {
+    fn set_metadata_field_inserts_started_when_absent() {
         let mut doc = Document::from_text(
             "# Day\n\n## Meetings\n\n### Standup\n- note\n\n## Notes\n\n## To-dos\n",
         );
         let heading = doc.meetings()[0].heading_line;
-        set_meeting_time_field(&mut doc.lines, heading, "Started", "09:15");
+        set_metadata_field(&mut doc.lines, heading, "Started", "09:15");
         let text = doc.to_text();
         let heading_pos = text.find("### Standup").unwrap();
-        let started_pos = text.find("Started: 09:15").unwrap();
+        let started_pos = text.find("meta:Started: 09:15").unwrap();
         let note_pos = text.find("- note").unwrap();
         assert!(started_pos > heading_pos, "Started should be after heading");
         assert!(started_pos < note_pos, "Started should be before note");
     }
 
     #[test]
-    fn set_time_field_overwrites_existing_started() {
+    fn set_metadata_field_overwrites_existing_started() {
         let mut doc = Document::from_text(
-            "# Day\n\n## Meetings\n\n### Standup\nStarted: 09:00\n- note\n\n## Notes\n\n## To-dos\n",
+            "# Day\n\n## Meetings\n\n### Standup\nmeta:Started: 09:00\n- note\n\n## Notes\n\n## To-dos\n",
         );
         let heading = doc.meetings()[0].heading_line;
-        set_meeting_time_field(&mut doc.lines, heading, "Started", "09:15");
+        set_metadata_field(&mut doc.lines, heading, "Started", "09:15");
         let text = doc.to_text();
-        assert!(text.contains("Started: 09:15\n"), "should have new time: {}", text);
-        assert!(!text.contains("Started: 09:00\n"), "old time should be gone: {}", text);
+        assert!(text.contains("meta:Started: 09:15\n"), "should have new time: {}", text);
+        assert!(!text.contains("meta:Started: 09:00\n"), "old time should be gone: {}", text);
     }
 
     #[test]
-    fn set_time_field_canonical_order() {
-        // Add Ended first, then Started, then Scheduled — result should be Scheduled, Started, Ended
+    fn set_metadata_field_canonical_order() {
+        // Add Ended first, then Started, then Scheduled — result should be Purpose, Scheduled, Started, Ended
         let mut doc = Document::from_text(
             "# Day\n\n## Meetings\n\n### Standup\n\n## Notes\n\n## To-dos\n",
         );
         let heading = doc.meetings()[0].heading_line;
-        set_meeting_time_field(&mut doc.lines, heading, "Ended", "10:00");
-        set_meeting_time_field(&mut doc.lines, heading, "Started", "09:15");
+        set_metadata_field(&mut doc.lines, heading, "Ended", "10:00");
+        set_metadata_field(&mut doc.lines, heading, "Started", "09:15");
 
         // re-fetch heading_line since lines shifted
         let heading = doc.meetings()[0].heading_line;
-        set_meeting_time_field(&mut doc.lines, heading, "Scheduled", "09:00");
+        set_metadata_field(&mut doc.lines, heading, "Scheduled", "09:00");
 
         let text = doc.to_text();
-        let scheduled_pos = text.find("Scheduled: 09:00").unwrap();
-        let started_pos = text.find("Started: 09:15").unwrap();
-        let ended_pos = text.find("Ended: 10:00").unwrap();
+        let scheduled_pos = text.find("meta:Scheduled: 09:00").unwrap();
+        let started_pos = text.find("meta:Started: 09:15").unwrap();
+        let ended_pos = text.find("meta:Ended: 10:00").unwrap();
         assert!(scheduled_pos < started_pos, "Scheduled before Started");
         assert!(started_pos < ended_pos, "Started before Ended");
     }
 
     #[test]
-    fn set_time_field_does_not_eat_note_content() {
+    fn set_metadata_field_does_not_eat_note_content() {
         let mut doc = Document::from_text(
             "# Day\n\n## Meetings\n\n### Standup\n- note one\n- note two\n\n## Notes\n\n## To-dos\n",
         );
         let heading = doc.meetings()[0].heading_line;
-        set_meeting_time_field(&mut doc.lines, heading, "Started", "09:15");
+        set_metadata_field(&mut doc.lines, heading, "Started", "09:15");
         let text = doc.to_text();
         assert!(text.contains("- note one\n"), "note one should remain: {}", text);
         assert!(text.contains("- note two\n"), "note two should remain: {}", text);
     }
 
     #[test]
-    fn set_time_field_all_three_fields() {
+    fn set_metadata_field_all_three_fields() {
         let mut doc = Document::from_text(
             "# Day\n\n## Meetings\n\n### Standup\n\n## Notes\n\n## To-dos\n",
         );
         let heading = doc.meetings()[0].heading_line;
-        set_meeting_time_field(&mut doc.lines, heading, "Scheduled", "09:00");
+        set_metadata_field(&mut doc.lines, heading, "Scheduled", "09:00");
         let heading = doc.meetings()[0].heading_line;
-        set_meeting_time_field(&mut doc.lines, heading, "Started", "09:05");
+        set_metadata_field(&mut doc.lines, heading, "Started", "09:05");
         let heading = doc.meetings()[0].heading_line;
-        set_meeting_time_field(&mut doc.lines, heading, "Ended", "09:45");
+        set_metadata_field(&mut doc.lines, heading, "Ended", "09:45");
         let text = doc.to_text();
-        assert!(text.contains("Scheduled: 09:00\n"), "got: {}", text);
-        assert!(text.contains("Started: 09:05\n"), "got: {}", text);
-        assert!(text.contains("Ended: 09:45\n"), "got: {}", text);
+        assert!(text.contains("meta:Scheduled: 09:00\n"), "got: {}", text);
+        assert!(text.contains("meta:Started: 09:05\n"), "got: {}", text);
+        assert!(text.contains("meta:Ended: 09:45\n"), "got: {}", text);
+    }
+
+    #[test]
+    fn is_metadata_line_recognizes_meta_prefix() {
+        assert!(is_metadata_line("meta:Scheduled: 09:00"));
+        assert!(is_metadata_line("meta:Purpose: kick off Q3"));
+        assert!(!is_metadata_line("Scheduled: 09:00"));
+        assert!(!is_metadata_line("- bullet"));
+        assert!(!is_metadata_line(""));
+    }
+
+    #[test]
+    fn set_metadata_field_inserts_purpose_when_absent() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\n- note\n\n## Notes\n\n## To-dos\n",
+        );
+        let heading = doc.meetings()[0].heading_line;
+        set_metadata_field(&mut doc.lines, heading, "Purpose", "align team");
+        let text = doc.to_text();
+        assert!(text.contains("meta:Purpose: align team\n"), "got: {}", text);
+        let purpose_pos = text.find("meta:Purpose:").unwrap();
+        let note_pos = text.find("- note").unwrap();
+        assert!(purpose_pos < note_pos, "Purpose should precede body");
+    }
+
+    #[test]
+    fn set_metadata_field_inserts_topic_in_note_block() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## Notes\n\n### Design\n- note\n\n## To-dos\n",
+        );
+        let heading = doc.note_headings()[0].heading_line;
+        set_metadata_field(&mut doc.lines, heading, "Topic", "API v2");
+        let text = doc.to_text();
+        assert!(text.contains("meta:Topic: API v2\n"), "got: {}", text);
+    }
+
+    #[test]
+    fn set_metadata_field_overwrites_existing() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\nmeta:Purpose: old\n- note\n\n## Notes\n\n## To-dos\n",
+        );
+        let heading = doc.meetings()[0].heading_line;
+        set_metadata_field(&mut doc.lines, heading, "Purpose", "new");
+        let text = doc.to_text();
+        assert!(text.contains("meta:Purpose: new\n"), "got: {}", text);
+        assert!(!text.contains("meta:Purpose: old\n"), "old should be gone: {}", text);
+    }
+
+    #[test]
+    fn set_metadata_field_migrates_legacy_time_fields() {
+        // Old-format file has bare "Scheduled: HH:MM" — set_metadata_field should rewrite it
+        let mut doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\nScheduled: 09:00\n- note\n\n## Notes\n\n## To-dos\n",
+        );
+        let heading = doc.meetings()[0].heading_line;
+        set_metadata_field(&mut doc.lines, heading, "Started", "09:05");
+        let text = doc.to_text();
+        // Legacy Scheduled line should be rewritten to meta: prefix
+        assert!(text.contains("meta:Scheduled: 09:00\n"), "legacy migrated: {}", text);
+        assert!(text.contains("meta:Started: 09:05\n"), "new field written: {}", text);
+        assert!(!text.contains("Scheduled: 09:00\n") || text.contains("meta:Scheduled:"), "legacy gone: {}", text);
+    }
+
+    #[test]
+    fn set_metadata_field_canonical_order_with_purpose() {
+        // Purpose, Topic, Scheduled, Started, Ended — regardless of insertion order
+        let mut doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\n\n## Notes\n\n## To-dos\n",
+        );
+        let heading = doc.meetings()[0].heading_line;
+        set_metadata_field(&mut doc.lines, heading, "Ended", "10:00");
+        let heading = doc.meetings()[0].heading_line;
+        set_metadata_field(&mut doc.lines, heading, "Started", "09:05");
+        let heading = doc.meetings()[0].heading_line;
+        set_metadata_field(&mut doc.lines, heading, "Scheduled", "09:00");
+        let heading = doc.meetings()[0].heading_line;
+        set_metadata_field(&mut doc.lines, heading, "Purpose", "sync");
+        let text = doc.to_text();
+        let purpose_pos = text.find("meta:Purpose:").unwrap();
+        let sched_pos = text.find("meta:Scheduled:").unwrap();
+        let started_pos = text.find("meta:Started:").unwrap();
+        let ended_pos = text.find("meta:Ended:").unwrap();
+        assert!(purpose_pos < sched_pos, "Purpose before Scheduled");
+        assert!(sched_pos < started_pos, "Scheduled before Started");
+        assert!(started_pos < ended_pos, "Started before Ended");
+    }
+
+    #[test]
+    fn set_metadata_field_does_not_eat_note_content_again() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\n- note one\n- note two\n\n## Notes\n\n## To-dos\n",
+        );
+        let heading = doc.meetings()[0].heading_line;
+        set_metadata_field(&mut doc.lines, heading, "Started", "09:15");
+        let text = doc.to_text();
+        assert!(text.contains("- note one\n"), "note one should remain: {}", text);
+        assert!(text.contains("- note two\n"), "note two should remain: {}", text);
     }
 
     #[test]
