@@ -28,32 +28,32 @@ fn style_line<'a>(line: &'a str, in_code: &mut bool, vim_cursor: bool, theme: &T
 
     if let Some(rest) = line.strip_prefix("###### ") {
         Line::from(Span::styled(
-            format!("###### {}", rest),
+            rest,
             Style::default().fg(theme.heading6).add_modifier(Modifier::BOLD),
         ))
     } else if let Some(rest) = line.strip_prefix("##### ") {
         Line::from(Span::styled(
-            format!("##### {}", rest),
+            rest,
             Style::default().fg(theme.heading5).add_modifier(Modifier::BOLD),
         ))
     } else if let Some(rest) = line.strip_prefix("#### ") {
         Line::from(Span::styled(
-            format!("#### {}", rest),
+            rest,
             Style::default().fg(theme.heading4).add_modifier(Modifier::BOLD),
         ))
     } else if let Some(rest) = line.strip_prefix("### ") {
         Line::from(Span::styled(
-            format!("### {}", rest),
+            rest,
             Style::default().fg(theme.heading3).add_modifier(Modifier::BOLD),
         ))
     } else if let Some(rest) = line.strip_prefix("## ") {
         Line::from(Span::styled(
-            format!("## {}", rest),
+            rest,
             Style::default().fg(theme.heading2).add_modifier(Modifier::BOLD),
         ))
     } else if let Some(rest) = line.strip_prefix("# ") {
         Line::from(Span::styled(
-            format!("# {}", rest),
+            rest,
             Style::default().fg(theme.heading1).add_modifier(Modifier::BOLD),
         ))
     } else if let Some(rest) = line.strip_prefix("- [ ] ") {
@@ -169,4 +169,109 @@ pub fn render_mode_line(
     ]);
     let widget = ratatui::widgets::Paragraph::new(line);
     frame.render_widget(widget, area);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::theme;
+    use ratatui::style::{Modifier, Style};
+    use ratatui::text::{Line, Span};
+
+    fn th() -> theme::Theme {
+        theme::light()
+    }
+
+    // --- Change 1: headings should not display the # prefix ---
+
+    #[test]
+    fn heading1_hides_hash() {
+        let mut in_code = false;
+        let result = style_line("# My Note", &mut in_code, false, &th());
+        assert_eq!(
+            result,
+            Line::from(Span::styled(
+                "My Note",
+                Style::default().fg(th().heading1).add_modifier(Modifier::BOLD),
+            ))
+        );
+    }
+
+    #[test]
+    fn heading2_hides_hashes() {
+        let mut in_code = false;
+        let result = style_line("## Notes", &mut in_code, false, &th());
+        assert_eq!(
+            result,
+            Line::from(Span::styled(
+                "Notes",
+                Style::default().fg(th().heading2).add_modifier(Modifier::BOLD),
+            ))
+        );
+    }
+
+    #[test]
+    fn heading3_hides_hashes() {
+        let mut in_code = false;
+        let result = style_line("### Sub", &mut in_code, false, &th());
+        assert_eq!(
+            result,
+            Line::from(Span::styled(
+                "Sub",
+                Style::default().fg(th().heading3).add_modifier(Modifier::BOLD),
+            ))
+        );
+    }
+
+    #[test]
+    fn heading4_hides_hashes() {
+        let mut in_code = false;
+        let result = style_line("#### Deep", &mut in_code, false, &th());
+        assert_eq!(
+            result,
+            Line::from(Span::styled(
+                "Deep",
+                Style::default().fg(th().heading4).add_modifier(Modifier::BOLD),
+            ))
+        );
+    }
+
+    #[test]
+    fn heading5_hides_hashes() {
+        let mut in_code = false;
+        let result = style_line("##### Five", &mut in_code, false, &th());
+        assert_eq!(
+            result,
+            Line::from(Span::styled(
+                "Five",
+                Style::default().fg(th().heading5).add_modifier(Modifier::BOLD),
+            ))
+        );
+    }
+
+    #[test]
+    fn heading6_hides_hashes() {
+        let mut in_code = false;
+        let result = style_line("###### Six", &mut in_code, false, &th());
+        assert_eq!(
+            result,
+            Line::from(Span::styled(
+                "Six",
+                Style::default().fg(th().heading6).add_modifier(Modifier::BOLD),
+            ))
+        );
+    }
+
+    #[test]
+    fn heading_on_cursor_line_shows_raw() {
+        let mut in_code = false;
+        let result = style_line("# My Note", &mut in_code, true, &th());
+        assert_eq!(
+            result,
+            Line::from(Span::styled(
+                "# My Note",
+                Style::default().bg(th().vim_cursor_line),
+            ))
+        );
+    }
 }
