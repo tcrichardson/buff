@@ -18,6 +18,19 @@ pub fn chat_path_for(notes_dir: &Path, date: NaiveDate, date_format: &str) -> Pa
     notes_dir.join(format!("{}.chat.json", date.format(date_format)))
 }
 
+pub fn meeting_chat_path_for(
+    notes_dir: &Path,
+    date: NaiveDate,
+    date_format: &str,
+    ordinal: usize,
+) -> PathBuf {
+    notes_dir.join(format!(
+        "{}-meeting{}.chat.json",
+        date.format(date_format),
+        ordinal
+    ))
+}
+
 pub fn load_chat(path: &Path) -> Vec<crate::app::state::ChatMessage> {
     match std::fs::read_to_string(path) {
         Ok(text) => serde_json::from_str(&text).unwrap_or_default(),
@@ -156,6 +169,20 @@ mod tests {
         fs::create_dir(tmp.path().join("2026-06-04-Thu.md")).unwrap();
         let dates = dates_with_notes(tmp.path(), "%Y-%m-%d-%a");
         assert!(dates.is_empty());
+    }
+
+    #[test]
+    fn meeting_chat_path_for_uses_meeting_suffix() {
+        let date = NaiveDate::from_ymd_opt(2026, 6, 10).unwrap();
+        let dir = std::path::PathBuf::from("/tmp/notes");
+        assert_eq!(
+            meeting_chat_path_for(&dir, date, "%Y-%m-%d-%a", 0),
+            std::path::PathBuf::from("/tmp/notes/2026-06-10-Wed-meeting0.chat.json")
+        );
+        assert_eq!(
+            meeting_chat_path_for(&dir, date, "%Y-%m-%d-%a", 2),
+            std::path::PathBuf::from("/tmp/notes/2026-06-10-Wed-meeting2.chat.json")
+        );
     }
 
     #[test]
