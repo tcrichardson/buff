@@ -117,6 +117,46 @@ fn heading_color(level: u8, theme: &Theme) -> ratatui::style::Color {
     }
 }
 
+/// Parse inline bold markers (`**text**` and `__text__`) in `text`, applying
+/// `base_style` to non-bold spans and `base_style` + `Modifier::BOLD` to bold spans.
+fn parse_inline_bold<'a>(text: &'a str, base_style: Style) -> Vec<Span<'a>> {
+    let mut spans = Vec::new();
+    let mut rest = text;
+
+    while !rest.is_empty() {
+        let star_pos = rest.find("**");
+        let under_pos = rest.find("__");
+
+        let start = match (star_pos, under_pos) {
+            (Some(s), Some(u)) => s.min(u),
+            (Some(s), None) => s,
+            (None, Some(u)) => u,
+            (None, None) => break,
+        };
+
+        let marker = if star_pos == Some(start) { "**" } else { "__" };
+
+        let after_open = &rest[start + 2..];
+        if let Some(end) = after_open.find(marker) {
+            if start > 0 {
+                spans.push(Span::styled(&rest[..start], base_style));
+            }
+            let bold_text = &after_open[..end];
+            spans.push(Span::styled(bold_text, base_style.add_modifier(Modifier::BOLD)));
+            rest = &after_open[end + 2..];
+        } else {
+            // Unmatched opening marker — treat remaining text as plain
+            break;
+        }
+    }
+
+    if !rest.is_empty() {
+        spans.push(Span::styled(rest, base_style));
+    }
+
+    spans
+}
+
 /// Converts a classified `LineKind` into a styled ratatui `Line`.
 /// No branching logic lives here — only span construction.
 fn render_line_kind<'a>(kind: LineKind<'a>, theme: &Theme) -> Line<'a> {
@@ -139,7 +179,7 @@ fn render_line_kind<'a>(kind: LineKind<'a>, theme: &Theme) -> Line<'a> {
                 spans.push(Span::raw(indent));
             }
             spans.push(Span::raw("☐ "));
-            spans.push(Span::raw(rest));
+            spans.extend(parse_inline_bold(rest, Style::default()));
             Line::from(spans)
         }
         LineKind::TodoDone(indent, rest) => {
@@ -148,40 +188,39 @@ fn render_line_kind<'a>(kind: LineKind<'a>, theme: &Theme) -> Line<'a> {
                 spans.push(Span::raw(indent));
             }
             spans.push(Span::styled("☑ ", Style::default().fg(theme.todo_done)));
-            spans.push(Span::styled(
-                rest,
-                Style::default()
-                    .fg(theme.todo_done)
-                    .add_modifier(Modifier::CROSSED_OUT),
-            ));
+            let base_style = Style::default()
+                .fg(theme.todo_done)
+                .add_modifier(Modifier::CROSSED_OUT);
+            spans.extend(parse_inline_bold(rest, base_style));
             Line::from(spans)
         }
-        LineKind::Quote(rest) => Line::from(vec![
-            Span::styled(
+        LineKind::Quote(rest) => {
+            let mut spans: Vec<Span> = vec![Span::styled(
                 "│ ",
                 Style::default()
                     .fg(theme.quote_marker)
                     .add_modifier(Modifier::ITALIC),
-            ),
-            Span::styled(rest, Style::default().add_modifier(Modifier::ITALIC)),
-        ]),
+            )];
+            spans.extend(parse_inline_bold(rest, Style::default().add_modifier(Modifier::ITALIC)));
+            Line::from(spans)
+        }
         LineKind::Bullet(indent, rest) => {
             let mut spans = Vec::with_capacity(3);
             if !indent.is_empty() {
                 spans.push(Span::raw(indent));
             }
             spans.push(Span::raw("• "));
-            spans.push(Span::raw(rest));
+            spans.extend(parse_inline_bold(rest, Style::default()));
             Line::from(spans)
         }
-        LineKind::Ordered(line) => Line::from(Span::raw(line)),
-        LineKind::MetaField(rest) => Line::from(Span::styled(
+        LineKind::Ordered(line) => Line::from(parse_inline_bold(line, Style::default())),
+        LineKind::MetaField(rest) => Line::from(parse_inline_bold(
             rest,
             Style::default()
                 .fg(theme.metadata)
                 .add_modifier(Modifier::ITALIC),
         )),
-        LineKind::Plain(line) => Line::from(line),
+        LineKind::Plain(line) => Line::from(parse_inline_bold(line, Style::default())),
     }
 }
 
@@ -786,6 +825,168 @@ mod tests {
                     .fg(t.metadata)
                     .add_modifier(Modifier::ITALIC),
             ))
+        );
+    }
+
+    // --- parse_inline_bold tests ---
+
+    #[test]
+    fn parse_inline_bold_no_markers_returns_plain() {
+        let spans = parse_inline_bold("just text", Style::default());
+        assert_eq!(spans, vec![Span::raw("just text")]);
+    }
+
+    #[test]
+    fn parse_inline_bold_double_stars() {
+        let spans = parse_inline_bold("hello **world**", Style::default());
+        assert_eq!(
+            spans,
+            vec![
+                Span::raw("hello "),
+                Span::styled("world", Style::default().add_modifier(Modifier::BOLD)),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_inline_bold_double_underscores() {
+        let spans = parse_inline_bold("hello __world__", Style::default());
+        assert_eq!(
+            spans,
+            vec![
+                Span::raw("hello "),
+                Span::styled("world", Style::default().add_modifier(Modifier::BOLD)),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_inline_bold_multiple_markers() {
+        let spans = parse_inline_bold("**a** and **b**", Style::default());
+        assert_eq!(
+            spans,
+            vec![
+                Span::styled("a", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(" and "),
+                Span::styled("b", Style::default().add_modifier(Modifier::BOLD)),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_inline_bold_unmatched_marker_is_plain() {
+        let spans = parse_inline_bold("hello **world", Style::default());
+        assert_eq!(spans, vec![Span::raw("hello **world")]);
+    }
+
+    #[test]
+    fn parse_inline_bold_preserves_base_style() {
+        let base = Style::default().fg(ratatui::style::Color::Red).add_modifier(Modifier::ITALIC);
+        let spans = parse_inline_bold("plain **bold**", base);
+        assert_eq!(
+            spans,
+            vec![
+                Span::styled("plain ", base),
+                Span::styled("bold", base.add_modifier(Modifier::BOLD)),
+            ]
+        );
+    }
+
+    #[test]
+    fn render_plain_with_inline_bold() {
+        let t = th();
+        let line = render_line_kind(LineKind::Plain("hello **world**"), &t);
+        assert_eq!(
+            line,
+            Line::from(vec![
+                Span::raw("hello "),
+                Span::styled("world", Style::default().add_modifier(Modifier::BOLD)),
+            ])
+        );
+    }
+
+    #[test]
+    fn render_bullet_with_inline_bold() {
+        let line = render_line_kind(LineKind::Bullet("", "hello **world**"), &th());
+        assert_eq!(
+            line,
+            Line::from(vec![
+                Span::raw("• "),
+                Span::raw("hello "),
+                Span::styled("world", Style::default().add_modifier(Modifier::BOLD)),
+            ])
+        );
+    }
+
+    #[test]
+    fn render_todo_unchecked_with_inline_bold() {
+        let line = render_line_kind(LineKind::TodoUnchecked("", "hello **world**"), &th());
+        assert_eq!(
+            line,
+            Line::from(vec![
+                Span::raw("☐ "),
+                Span::raw("hello "),
+                Span::styled("world", Style::default().add_modifier(Modifier::BOLD)),
+            ])
+        );
+    }
+
+    #[test]
+    fn render_todo_done_with_inline_bold() {
+        let t = th();
+        let line = render_line_kind(LineKind::TodoDone("", "hello **world**"), &t);
+        let base = Style::default().fg(t.todo_done).add_modifier(Modifier::CROSSED_OUT);
+        assert_eq!(
+            line,
+            Line::from(vec![
+                Span::styled("☑ ", Style::default().fg(t.todo_done)),
+                Span::styled("hello ", base),
+                Span::styled("world", base.add_modifier(Modifier::BOLD)),
+            ])
+        );
+    }
+
+    #[test]
+    fn render_quote_with_inline_bold() {
+        let t = th();
+        let line = render_line_kind(LineKind::Quote("hello **world**"), &t);
+        let base = Style::default().add_modifier(Modifier::ITALIC);
+        assert_eq!(
+            line,
+            Line::from(vec![
+                Span::styled(
+                    "│ ",
+                    Style::default().fg(t.quote_marker).add_modifier(Modifier::ITALIC),
+                ),
+                Span::styled("hello ", base),
+                Span::styled("world", base.add_modifier(Modifier::BOLD)),
+            ])
+        );
+    }
+
+    #[test]
+    fn render_ordered_with_inline_bold() {
+        let line = render_line_kind(LineKind::Ordered("1. hello **world**"), &th());
+        assert_eq!(
+            line,
+            Line::from(vec![
+                Span::raw("1. hello "),
+                Span::styled("world", Style::default().add_modifier(Modifier::BOLD)),
+            ])
+        );
+    }
+
+    #[test]
+    fn render_meta_field_with_inline_bold() {
+        let t = th();
+        let line = render_line_kind(LineKind::MetaField("hello **world**"), &t);
+        let base = Style::default().fg(t.metadata).add_modifier(Modifier::ITALIC);
+        assert_eq!(
+            line,
+            Line::from(vec![
+                Span::styled("hello ", base),
+                Span::styled("world", base.add_modifier(Modifier::BOLD)),
+            ])
         );
     }
 }

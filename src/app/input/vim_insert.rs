@@ -8,6 +8,7 @@ pub(super) fn key_to_action(_state: &AppState, key: KeyEvent) -> Option<UiAction
         KeyCode::Esc       => Some(UiAction::VimExitInsert),
         KeyCode::Enter     => Some(UiAction::VimInsertNewline),
         KeyCode::Backspace => Some(UiAction::VimInsertBackspace),
+        KeyCode::Tab       => Some(UiAction::VimInsertTab),
         KeyCode::Left      => Some(UiAction::VimMoveLeft),
         KeyCode::Right     => Some(UiAction::VimMoveRight),
         KeyCode::Up        => Some(UiAction::VimMoveUp),
@@ -31,6 +32,7 @@ pub(super) fn execute_action(state: &mut AppState, action: UiAction) -> Result<E
         UiAction::VimInsertNewline          => insert_newline(state),
         UiAction::VimInsertBackspace        => insert_backspace(state),
         UiAction::VimInsertDeleteWordBefore => delete_word_before(state),
+        UiAction::VimInsertTab             => insert_tab(state),
         _ => unreachable!("vim_insert::execute_action called with non-vim-insert action: {:?}", action),
     }
     Ok(EventOutcome::Continue)
@@ -88,4 +90,10 @@ fn delete_word_before(state: &mut AppState) {
     let line = &mut state.doc.lines[state.vim.cursor_line];
     line.drain(new_col..col);
     state.vim.cursor_col = new_col;
+}
+
+fn insert_tab(state: &mut AppState) {
+    let line = &mut state.doc.lines[state.vim.cursor_line];
+    line.insert_str(state.vim.cursor_col, "  ");
+    state.vim.cursor_col += 2;
 }

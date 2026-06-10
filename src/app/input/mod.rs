@@ -92,6 +92,7 @@ pub enum UiAction {
     VimInsertNewline,
     VimInsertBackspace,
     VimInsertDeleteWordBefore,
+    VimInsertTab,
     VimExitInsert,
 
     // Right panel
@@ -217,11 +218,12 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
 
     // 4. Tab — focus cycle (or indent in capture mode)
     if key.code == KeyCode::Tab {
-        return match state.focus {
-            Focus::Capture => Some(UiAction::TypeIndent),
-            Focus::VimNormal | Focus::VimInsert => Some(UiAction::FocusRightPanel),
-            Focus::Chat => Some(UiAction::FocusRightPanel),
-            Focus::RightPanel => Some(UiAction::FocusVimNormal),
+        match state.focus {
+            Focus::Capture => return Some(UiAction::TypeIndent),
+            Focus::VimNormal => return Some(UiAction::FocusRightPanel),
+            Focus::VimInsert => {} // fall through to vim_insert::key_to_action
+            Focus::Chat => return Some(UiAction::FocusRightPanel),
+            Focus::RightPanel => return Some(UiAction::FocusVimNormal),
         };
     }
 
@@ -373,6 +375,7 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         | UiAction::VimInsertNewline
         | UiAction::VimInsertBackspace
         | UiAction::VimInsertDeleteWordBefore
+        | UiAction::VimInsertTab
         | UiAction::VimExitInsert => return vim_insert::execute_action(state, action),
 
         // Right panel
@@ -1060,6 +1063,30 @@ mod tests {
             key_to_action(&state, make_key(KeyCode::Char('x'))),
             Some(UiAction::VimClearPendingOp)
         );
+    }
+
+    #[test]
+    fn tab_in_viminsert_inserts_tab() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimInsert;
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Tab)),
+            Some(UiAction::VimInsertTab)
+        );
+    }
+
+    #[test]
+    fn vim_insert_tab_inserts_two_spaces() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.focus = Focus::VimInsert;
+        state.doc.lines = vec!["hello".to_string()];
+        state.vim.cursor_line = 0;
+        state.vim.cursor_col = 5;
+        execute_action(&mut state, UiAction::VimInsertTab).unwrap();
+        assert_eq!(state.doc.lines[0], "hello  ");
+        assert_eq!(state.vim.cursor_col, 7);
     }
 
     #[test]

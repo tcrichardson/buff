@@ -85,7 +85,7 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &cr
         render_calendar(frame, chunks[0], app, theme);
         render_todo_list(frame, chunks[1], app, theme);
     } else {
-        let agenda_height = 1 + app.panel_agenda.len() as u16; // header(1) + items
+        let agenda_height = 2 + app.panel_agenda.len() as u16; // header(1) + items + blank line
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
