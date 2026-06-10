@@ -121,7 +121,10 @@ fn submit_input(state: &mut AppState) -> Result<()> {
     crate::app::actions::dispatch(state, cmd)?;
     state.input.clear();
     state.cursor_pos = 0;
-    crate::app::actions::vim_jump_to_new_content(state);
+    // After any submission, anchor to the current context heading so the section
+    // stays near the top of the viewport as entries accumulate below it.
+    state.doc_anchor_line =
+        crate::app::context::context_heading_line(&state.doc.lines, &state.context);
     Ok(())
 }
 
