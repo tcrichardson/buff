@@ -47,7 +47,17 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &cr
         ])
         .split(inner);
 
-    let header = Paragraph::new("Chat").style(
+    let header_text = if let Some(ord) = app.chat.meeting_ordinal {
+        let meetings = app.doc.meetings();
+        if let Some(m) = meetings.get(ord) {
+            format!("Chat [{}]", m.name)
+        } else {
+            "Chat".to_string()
+        }
+    } else {
+        "Chat".to_string()
+    };
+    let header = Paragraph::new(header_text).style(
         Style::default()
             .bg(theme.chat_panel_bg)
             .add_modifier(Modifier::BOLD),
@@ -182,5 +192,62 @@ mod tests {
             .iter()
             .any(|cell| cell.style().bg == Some(Color::Rgb(1, 2, 3)));
         assert!(has_bg, "expected custom chat_panel_bg color from theme");
+    }
+
+    #[test]
+    fn render_shows_meeting_name_in_header_when_in_meeting_mode() {
+        let tmp = tempfile::tempdir().unwrap();
+        let config = crate::config::Config::default();
+        let date = chrono::NaiveDate::from_ymd_opt(2026, 6, 10).unwrap();
+        let mut app = AppState::open_day(tmp.path().to_path_buf(), config, date).unwrap();
+
+        // Set up a meeting in the document
+        app.doc = crate::model::day::Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\n\n## Notes\n\n## To-dos\n",
+        );
+        app.chat.visible = true;
+        app.chat.meeting_ordinal = Some(0);
+
+        let backend = TestBackend::new(40, 20);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| render(f, f.area(), &app, &crate::ui::theme::light()))
+            .unwrap();
+        let content: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|c| c.symbol())
+            .collect();
+        assert!(
+            content.contains("Chat [Standup]"),
+            "header should show meeting name, got: {}",
+            content
+        );
+    }
+
+    #[test]
+    fn render_shows_plain_chat_header_outside_meeting_mode() {
+        let app = app_with_messages(vec![]);
+        // meeting_ordinal is None by default
+        let backend = TestBackend::new(40, 20);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| render(f, f.area(), &app, &crate::ui::theme::light()))
+            .unwrap();
+        let content: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|c| c.symbol())
+            .collect();
+        assert!(content.contains("Chat"), "header should show 'Chat': {}", content);
+        assert!(
+            !content.contains("Chat ["),
+            "should not show meeting bracket outside meeting mode: {}",
+            content
+        );
     }
 }
