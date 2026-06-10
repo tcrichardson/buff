@@ -214,15 +214,10 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect, theme: &Th
         .collect();
 
     // Scroll: use doc_anchor_line for both vim and capture modes.
-    // Vim mode: anchor follows cursor; keeps cursor near bottom of viewport.
-    // Capture mode: anchor is context heading or last inserted line; shown near top.
+    // Both modes: anchor is shown ~3 lines from the top of the viewport so that
+    // toggling between Capture and VimNormal keeps the visible note position stable.
     let doc_anchor = app.doc_anchor_line;
-    let visible_height = area.height as usize;
-    let scroll_offset: usize = if vim_active {
-        doc_anchor.saturating_sub(visible_height.saturating_sub(1))
-    } else {
-        doc_anchor.saturating_sub(3)
-    };
+    let scroll_offset: usize = doc_anchor.saturating_sub(3);
 
     let paragraph = Paragraph::new(Text::from(text_lines)).scroll((scroll_offset as u16, 0));
     frame.render_widget(paragraph, area);

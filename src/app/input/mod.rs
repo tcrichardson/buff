@@ -302,6 +302,10 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         }
         UiAction::ExitCaptureMode => {
             state.focus = Focus::VimNormal;
+            // Sync the vim cursor to the document anchor so the cursor starts
+            // at the same line that was visible at the top in Capture mode.
+            state.vim.cursor_line = state.doc_anchor_line;
+            state.vim.cursor_col = 0;
         }
         UiAction::ExitVimNormal => {
             state.focus = Focus::Capture;
