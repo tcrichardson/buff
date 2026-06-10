@@ -147,6 +147,7 @@ mod tests {
             right_panel_selected: 0,
             right_panel_scroll: 0,
             panel_todos: Vec::new(),
+            panel_agenda: Vec::new(),
             chat: crate::app::state::ChatState::default(),
             vim: crate::app::state::VimState::default(),
         }

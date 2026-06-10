@@ -100,6 +100,28 @@ impl Document {
         meetings
     }
 
+    /// Returns `(scheduled_time, meeting_name)` pairs for all meetings that
+    /// have a `Scheduled: HH:MM` metadata line immediately after the heading.
+    /// Sorted by time ascending (lexicographic HH:MM sort is correct for 24h).
+    pub fn meetings_with_scheduled(&self) -> Vec<(String, String)> {
+        let mut result = Vec::new();
+        for meeting in self.meetings() {
+            for line in &self.lines[meeting.heading_line + 1..] {
+                if let Some(value) = line.strip_prefix("Scheduled: ") {
+                    if !value.is_empty() {
+                        result.push((value.to_string(), meeting.name.clone()));
+                    }
+                    break;
+                }
+                if !is_time_field_line(line) {
+                    break;
+                }
+            }
+        }
+        result.sort_by(|a, b| a.0.cmp(&b.0));
+        result
+    }
+
     pub fn add_meeting(&mut self, name: &str) -> usize {
         let start = ensure_section(&mut self.lines, SectionKind::Meetings);
         let end = section_end(&self.lines, start);
@@ -1327,5 +1349,85 @@ mod tests {
         let mut doc = Document::from_text("# Day\n");
         let result = doc.toggle_todo_at_line(99);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn meetings_with_scheduled_empty_when_no_meetings_section() {
+        let doc = Document::from_text("# Day\n\n## Notes\n\n## To-dos\n");
+        assert!(doc.meetings_with_scheduled().is_empty());
+    }
+
+    #[test]
+    fn meetings_with_scheduled_excludes_meeting_without_scheduled() {
+        let doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\n\n## Notes\n\n## To-dos\n",
+        );
+        let result = doc.meetings_with_scheduled();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn meetings_with_scheduled_includes_meeting_with_scheduled() {
+        let doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\nScheduled: 09:30\n\n## Notes\n\n## To-dos\n",
+        );
+        let result = doc.meetings_with_scheduled();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0, "09:30");
+        assert_eq!(result[0].1, "Standup");
+    }
+
+    #[test]
+    fn meetings_with_scheduled_extracts_only_scheduled_from_multiple_fields() {
+        let doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\nScheduled: 09:00\nStarted: 09:05\nEnded: 09:45\n\n## Notes\n\n## To-dos\n",
+        );
+        let result = doc.meetings_with_scheduled();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].0, "09:00");
+        assert_eq!(result[0].1, "Standup");
+    }
+
+    #[test]
+    fn meetings_with_scheduled_returns_only_meetings_with_scheduled() {
+        let doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\nScheduled: 09:30\n\n### Review\n\n### Design\nScheduled: 14:00\n\n## Notes\n\n## To-dos\n",
+        );
+        let result = doc.meetings_with_scheduled();
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].0, "09:30");
+        assert_eq!(result[0].1, "Standup");
+        assert_eq!(result[1].0, "14:00");
+        assert_eq!(result[1].1, "Design");
+    }
+
+    #[test]
+    fn meetings_with_scheduled_sorted_by_time() {
+        let doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Afternoon\nScheduled: 14:00\n\n### Morning\nScheduled: 09:00\n\n### Noon\nScheduled: 12:00\n\n## Notes\n\n## To-dos\n",
+        );
+        let result = doc.meetings_with_scheduled();
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].0, "09:00");
+        assert_eq!(result[1].0, "12:00");
+        assert_eq!(result[2].0, "14:00");
+    }
+
+    #[test]
+    fn meetings_with_scheduled_skips_malformed_scheduled() {
+        let doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\nScheduled:\n\n## Notes\n\n## To-dos\n",
+        );
+        let result = doc.meetings_with_scheduled();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn meetings_with_scheduled_skips_heading_with_embedded_time() {
+        let doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### 09:30 Standup\n\n## Notes\n\n## To-dos\n",
+        );
+        let result = doc.meetings_with_scheduled();
+        assert!(result.is_empty());
     }
 }

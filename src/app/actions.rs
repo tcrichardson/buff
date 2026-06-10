@@ -43,6 +43,8 @@ pub fn after_vim_edit(state: &mut AppState) -> anyhow::Result<()> {
         crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
     state.panel_todos =
         crate::ui::right_panel::collect_panel_todos(&state.notes_dir, state.date, &state.config);
+    state.panel_agenda =
+        crate::ui::right_panel::collect_agenda_items(&state.doc);
     vim_update_context(state);
     Ok(())
 }
@@ -75,6 +77,8 @@ fn after_doc_mutation(state: &mut AppState) -> anyhow::Result<()> {
         crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
     state.panel_todos =
         crate::ui::right_panel::collect_panel_todos(&state.notes_dir, state.date, &state.config);
+    state.panel_agenda =
+        crate::ui::right_panel::collect_agenda_items(&state.doc);
     state.status.clear();
     Ok(())
 }
@@ -324,6 +328,8 @@ pub fn toggle_selected(state: &mut AppState) {
                 crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
             state.panel_todos =
                 crate::ui::right_panel::collect_panel_todos(&state.notes_dir, state.date, &state.config);
+            state.panel_agenda =
+                crate::ui::right_panel::collect_agenda_items(&state.doc);
         }
         Err(e) => {
             state.status = e.to_string();
@@ -402,6 +408,8 @@ pub fn toggle_panel_todo(state: &mut AppState) -> anyhow::Result<()> {
             // File was removed since panel was loaded — refresh and return
             state.panel_todos =
                 crate::ui::right_panel::collect_panel_todos(&state.notes_dir, state.date, &state.config);
+            state.panel_agenda =
+                crate::ui::right_panel::collect_agenda_items(&state.doc);
             return Ok(());
         }
         Err(e) => return Err(e.into()),
@@ -426,6 +434,8 @@ pub fn toggle_panel_todo(state: &mut AppState) -> anyhow::Result<()> {
     // Rebuild panel_todos (the toggled item is now done, drops off the list)
     state.panel_todos =
         crate::ui::right_panel::collect_panel_todos(&state.notes_dir, state.date, &state.config);
+    state.panel_agenda =
+        crate::ui::right_panel::collect_agenda_items(&state.doc);
 
     // Refresh dates_with_notes after writing the file
     state.dates_with_notes =
@@ -1331,6 +1341,18 @@ mod tests {
             "Scheduled line missing: {}",
             text
         );
+    }
+
+    #[test]
+    fn scheduled_in_meeting_updates_panel_agenda() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        assert!(state.panel_agenda.is_empty(), "panel_agenda should start empty");
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        dispatch(&mut state, Command::Scheduled("09:00".to_string())).unwrap();
+        assert_eq!(state.panel_agenda.len(), 1);
+        assert_eq!(state.panel_agenda[0].0, "09:00");
+        assert_eq!(state.panel_agenda[0].1, "Standup");
     }
 
     #[test]

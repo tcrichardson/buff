@@ -90,6 +90,7 @@ pub struct AppState {
     pub right_panel_selected: usize,
     pub right_panel_scroll: usize, // scroll offset for todo list — scroll-follow not yet implemented
     pub panel_todos: Vec<PanelTodo>,
+    pub panel_agenda: Vec<(String, String)>, // (scheduled_time, meeting_name)
     pub chat: ChatState,
     pub vim: VimState,
 }
@@ -107,6 +108,7 @@ impl AppState {
         let context_display = "context: Notes".to_string();
         let dates_with_notes = storage::dates_with_notes(&notes_dir, &config.date_format);
         let panel_todos = right_panel::collect_panel_todos(&notes_dir, date, &config);
+        let panel_agenda = right_panel::collect_agenda_items(&doc);
         let chat_path = storage::chat_path_for(&notes_dir, date, &config.date_format);
         let chat_messages = storage::load_chat(&chat_path);
         Ok(Self {
@@ -129,6 +131,7 @@ impl AppState {
             right_panel_selected: 0,
             right_panel_scroll: 0,
             panel_todos,
+            panel_agenda,
             chat: ChatState {
                 visible: config.chat_visible,
                 messages: chat_messages,

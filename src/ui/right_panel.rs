@@ -60,6 +60,12 @@ pub fn collect_panel_todos(notes_dir: &Path, date: NaiveDate, config: &Config) -
     todos
 }
 
+/// Thin wrapper around `doc.meetings_with_scheduled()`, kept here for
+/// symmetry with `collect_panel_todos`.
+pub fn collect_agenda_items(doc: &Document) -> Vec<(String, String)> {
+    doc.meetings_with_scheduled()
+}
+
 pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &crate::ui::theme::Theme) {
     // Fill panel background with padding inset
     let bg_block = Block::default()
@@ -68,15 +74,31 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &cr
     let inner = bg_block.inner(area);
     frame.render_widget(bg_block, area);
 
-    // Split the inner area: calendar top (fixed 9 lines) + todo list (rest)
+    // Split the inner area: calendar top (fixed 9 lines) + agenda (variable) + todo list (rest)
     let calendar_height = 9u16; // header(1) + day-names(1) + weeks grid(7)
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([Constraint::Length(calendar_height), Constraint::Min(0)])
-        .split(inner);
+    if app.panel_agenda.is_empty() {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(calendar_height), Constraint::Min(0)])
+            .split(inner);
 
-    render_calendar(frame, chunks[0], app, theme);
-    render_todo_list(frame, chunks[1], app, theme);
+        render_calendar(frame, chunks[0], app, theme);
+        render_todo_list(frame, chunks[1], app, theme);
+    } else {
+        let agenda_height = 1 + app.panel_agenda.len() as u16; // header(1) + items
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(calendar_height),
+                Constraint::Length(agenda_height),
+                Constraint::Min(0),
+            ])
+            .split(inner);
+
+        render_calendar(frame, chunks[0], app, theme);
+        render_agenda(frame, chunks[1], app, theme);
+        render_todo_list(frame, chunks[2], app, theme);
+    }
 }
 
 fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &crate::ui::theme::Theme) {
@@ -154,6 +176,16 @@ fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme
     let table = Table::new(rows, [Constraint::Length(3); 7])
         .style(Style::default().bg(theme.panel_bg));
     frame.render_widget(table, cal_chunks[2]);
+}
+
+fn render_agenda(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &crate::ui::theme::Theme) {
+    let mut lines: Vec<Line> = Vec::new();
+    lines.push(Line::styled("Agenda", Style::default().add_modifier(Modifier::BOLD)));
+    for (time, name) in &app.panel_agenda {
+        lines.push(Line::styled(format!("{} - {}", time, name), Style::default()));
+    }
+    let widget = Paragraph::new(lines).style(Style::default().bg(theme.panel_bg));
+    frame.render_widget(widget, area);
 }
 
 fn render_todo_list(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &crate::ui::theme::Theme) {
@@ -238,6 +270,7 @@ mod tests {
             right_panel_selected: 0,
             right_panel_scroll: 0,
             panel_todos: Vec::new(),
+            panel_agenda: Vec::new(),
             chat: crate::app::state::ChatState::default(),
             vim: crate::app::state::VimState::default(),
         };
@@ -293,6 +326,7 @@ mod tests {
             right_panel_selected: 0,
             right_panel_scroll: 0,
             panel_todos,
+            panel_agenda: Vec::new(),
             chat: crate::app::state::ChatState::default(),
             vim: crate::app::state::VimState::default(),
         };
@@ -347,6 +381,7 @@ mod tests {
             right_panel_selected: 0,
             right_panel_scroll: 0,
             panel_todos,
+            panel_agenda: Vec::new(),
             chat: crate::app::state::ChatState::default(),
             vim: crate::app::state::VimState::default(),
         };
@@ -551,6 +586,7 @@ mod tests {
             right_panel_selected: 0,
             right_panel_scroll: 0,
             panel_todos,
+            panel_agenda: Vec::new(),
             chat: crate::app::state::ChatState::default(),
             vim: crate::app::state::VimState::default(),
         };
@@ -603,6 +639,7 @@ mod tests {
             right_panel_selected: 0,
             right_panel_scroll: 0,
             panel_todos: Vec::new(),
+            panel_agenda: Vec::new(),
             chat: crate::app::state::ChatState::default(),
             vim: crate::app::state::VimState::default(),
         };
@@ -620,5 +657,175 @@ mod tests {
             .iter()
             .any(|cell| cell.style().bg == Some(Color::Rgb(221, 232, 245)));
         assert!(has_panel_bg, "expected light theme panel_bg color in right panel");
+    }
+
+    #[test]
+    fn render_agenda_not_present_when_empty() {
+        use crate::app::state::{AppState, Context, Focus, Overlay};
+        use crate::config::Config;
+        use crate::model::day::Document;
+        use chrono::NaiveDate;
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        use std::path::PathBuf;
+
+        let date = NaiveDate::from_ymd_opt(2026, 6, 5).unwrap();
+        let doc = Document::new_for_date(date);
+        let selectables = doc.selectables();
+        let app = AppState {
+            doc,
+            date,
+            notes_dir: PathBuf::from("/tmp"),
+            config: Config::default(),
+            context: Context::Notes,
+            focus: Focus::Capture,
+            selected: 0,
+            status: String::new(),
+            input: String::new(),
+            cursor_pos: 0,
+            overlay: Overlay::None,
+            editing: None,
+            should_quit: false,
+            selectables,
+            context_display: "context: Notes".to_string(),
+            dates_with_notes: std::collections::BTreeSet::new(),
+            right_panel_selected: 0,
+            right_panel_scroll: 0,
+            panel_todos: Vec::new(),
+            panel_agenda: Vec::new(),
+            chat: crate::app::state::ChatState::default(),
+            vim: crate::app::state::VimState::default(),
+        };
+
+        let backend = TestBackend::new(30, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| render(frame, frame.area(), &app, &test_theme()))
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        assert!(!content.contains("Agenda"), "Agenda should not appear when empty");
+    }
+
+    #[test]
+    fn render_agenda_shows_header_and_items() {
+        use crate::app::state::{AppState, Context, Focus, Overlay};
+        use crate::config::Config;
+        use crate::model::day::Document;
+        use chrono::NaiveDate;
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        use std::path::PathBuf;
+
+        let date = NaiveDate::from_ymd_opt(2026, 6, 5).unwrap();
+        let doc = Document::new_for_date(date);
+        let selectables = doc.selectables();
+        let panel_agenda = vec![
+            ("09:30".to_string(), "Standup".to_string()),
+            ("14:00".to_string(), "Design Review".to_string()),
+        ];
+        let app = AppState {
+            doc,
+            date,
+            notes_dir: PathBuf::from("/tmp"),
+            config: Config::default(),
+            context: Context::Notes,
+            focus: Focus::Capture,
+            selected: 0,
+            status: String::new(),
+            input: String::new(),
+            cursor_pos: 0,
+            overlay: Overlay::None,
+            editing: None,
+            should_quit: false,
+            selectables,
+            context_display: "context: Notes".to_string(),
+            dates_with_notes: std::collections::BTreeSet::new(),
+            right_panel_selected: 0,
+            right_panel_scroll: 0,
+            panel_todos: Vec::new(),
+            panel_agenda,
+            chat: crate::app::state::ChatState::default(),
+            vim: crate::app::state::VimState::default(),
+        };
+
+        let backend = TestBackend::new(30, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| render(frame, frame.area(), &app, &test_theme()))
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        assert!(content.contains("Agenda"), "expected 'Agenda' header, got: {}", content);
+        assert!(content.contains("09:30 - Standup"), "expected first agenda item, got: {}", content);
+        assert!(
+            content.contains("14:00 - Design Review"),
+            "expected second agenda item, got: {}",
+            content
+        );
+    }
+
+    #[test]
+    fn render_agenda_items_appear_above_todos_header() {
+        use crate::app::state::{AppState, Context, Focus, Overlay};
+        use crate::config::Config;
+        use crate::model::day::Document;
+        use chrono::NaiveDate;
+        use ratatui::Terminal;
+        use ratatui::backend::TestBackend;
+        use std::path::PathBuf;
+
+        let date = NaiveDate::from_ymd_opt(2026, 6, 5).unwrap();
+        let doc = Document::new_for_date(date);
+        let selectables = doc.selectables();
+        let panel_agenda = vec![("09:30".to_string(), "Standup".to_string())];
+        let panel_todos = vec![PanelTodo {
+            date,
+            text: "buy milk".to_string(),
+            todo_index: 0,
+        }];
+        let app = AppState {
+            doc,
+            date,
+            notes_dir: PathBuf::from("/tmp"),
+            config: Config::default(),
+            context: Context::Notes,
+            focus: Focus::Capture,
+            selected: 0,
+            status: String::new(),
+            input: String::new(),
+            cursor_pos: 0,
+            overlay: Overlay::None,
+            editing: None,
+            should_quit: false,
+            selectables,
+            context_display: "context: Notes".to_string(),
+            dates_with_notes: std::collections::BTreeSet::new(),
+            right_panel_selected: 0,
+            right_panel_scroll: 0,
+            panel_todos,
+            panel_agenda,
+            chat: crate::app::state::ChatState::default(),
+            vim: crate::app::state::VimState::default(),
+        };
+
+        let backend = TestBackend::new(30, 30);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| render(frame, frame.area(), &app, &test_theme()))
+            .unwrap();
+
+        let buffer = terminal.backend().buffer();
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        let agenda_pos = content.find("Agenda").expect("Agenda should be present");
+        let todos_pos = content.find("To-dos").expect("To-dos should be present");
+        assert!(
+            agenda_pos < todos_pos,
+            "Agenda should appear above To-dos: agenda={}, todos={}",
+            agenda_pos,
+            todos_pos
+        );
     }
 }
