@@ -60,14 +60,18 @@ pub fn after_vim_edit(state: &mut AppState) -> anyhow::Result<()> {
 /// This is correct for all entry types (bullet, todo, meeting heading, etc.)
 /// because they are always appended to the end of their section block.
 pub fn vim_jump_to_new_content(state: &mut AppState) {
-    if !matches!(state.focus, crate::app::state::Focus::VimNormal | crate::app::state::Focus::VimInsert) {
-        return;
-    }
-    // Find last non-empty line
     if let Some(idx) = state.doc.lines.iter().rposition(|l| !l.trim().is_empty()) {
-        state.vim.cursor_line = idx;
-        state.vim.cursor_col = 0;
-        vim_update_context(state);
+        if matches!(
+            state.focus,
+            crate::app::state::Focus::VimNormal | crate::app::state::Focus::VimInsert
+        ) {
+            state.vim.cursor_line = idx;
+            state.vim.cursor_col = 0;
+            vim_update_context(state); // also sets doc_anchor_line = idx
+        } else {
+            // Capture mode: update anchor so document scrolls to new content
+            state.doc_anchor_line = idx;
+        }
     }
 }
 
@@ -1654,5 +1658,32 @@ mod tests {
         state.vim.cursor_line = 4;
         vim_update_context(&mut state);
         assert_eq!(state.doc_anchor_line, 4);
+    }
+
+    #[test]
+    fn vim_jump_to_new_content_sets_anchor_in_capture_mode() {
+        use crate::app::state::Focus;
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        // Start in Capture mode (the default)
+        assert_eq!(state.focus, Focus::Capture);
+        // Add some content so last non-empty line is not 0
+        dispatch(&mut state, Command::Entry("first note".to_string())).unwrap();
+        vim_jump_to_new_content(&mut state);
+        dispatch(&mut state, Command::Entry("second note".to_string())).unwrap();
+        vim_jump_to_new_content(&mut state);
+        // doc_anchor_line should now point at the last non-empty line
+        let last_nonempty = state
+            .doc
+            .lines
+            .iter()
+            .rposition(|l| !l.trim().is_empty())
+            .unwrap();
+        assert_eq!(
+            state.doc_anchor_line,
+            last_nonempty,
+            "anchor should point to last inserted line; lines: {:?}",
+            state.doc.lines
+        );
     }
 }
