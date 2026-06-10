@@ -90,6 +90,53 @@ pub fn context_at_line(lines: &[String], cursor_line: usize) -> Context {
     }
 }
 
+/// Find the line index of the first line in `lines` that exactly equals `heading`.
+/// Returns `None` if not found.
+fn find_heading(lines: &[String], heading: &str) -> Option<usize> {
+    lines.iter().position(|l| l == heading)
+}
+
+/// Find the line index of the Nth (0-based) `### ` heading that appears after
+/// the given `##` section heading. Stops scanning at the next `## ` heading.
+/// Returns `None` if the section or Nth heading is not found.
+fn find_nth_l3_heading_in_section(
+    lines: &[String],
+    section: &str,
+    n: usize,
+) -> Option<usize> {
+    let start = find_heading(lines, section)?;
+    let mut count = 0usize;
+    for (offset, line) in lines[start + 1..].iter().enumerate() {
+        if line.starts_with("## ") {
+            break; // entered a different section
+        }
+        if line.starts_with("### ") {
+            if count == n {
+                return Some(start + 1 + offset);
+            }
+            count += 1;
+        }
+    }
+    None
+}
+
+/// Returns the line index in `lines` of the heading that corresponds to `context`.
+/// Used to compute the Capture-mode scroll anchor when entering Capture from VimNormal.
+/// Falls back to `0` (top of document) if the heading cannot be located.
+pub fn context_heading_line(lines: &[String], context: &Context) -> usize {
+    match context {
+        Context::Section { heading_line, .. } => *heading_line,
+        Context::Notes => find_heading(lines, "## Notes").unwrap_or(0),
+        Context::Todos => find_heading(lines, "## To-dos").unwrap_or(0),
+        Context::Meeting(n) => {
+            find_nth_l3_heading_in_section(lines, "## Meetings", *n).unwrap_or(0)
+        }
+        Context::NoteBlock(n) => {
+            find_nth_l3_heading_in_section(lines, "## Notes", *n).unwrap_or(0)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -192,7 +239,47 @@ mod tests {
     }
 
     #[test]
-    fn cursor_on_empty_lines_vec() {
-        assert_eq!(context_at_line(&[], 0), Context::Notes);
+    fn context_heading_line_notes_returns_notes_heading() {
+        let doc = lines("## Meetings\n\n## Notes\nstuff\n\n## To-dos\n");
+        assert_eq!(context_heading_line(&doc, &Context::Notes), 2);
+    }
+
+    #[test]
+    fn context_heading_line_todos_returns_todos_heading() {
+        let doc = lines("## Meetings\n\n## Notes\n\n## To-dos\n");
+        assert_eq!(context_heading_line(&doc, &Context::Todos), 4);
+    }
+
+    #[test]
+    fn context_heading_line_meeting_zero_returns_first_meeting() {
+        let doc = lines("## Meetings\n### Standup\ncontent\n### Planning\ncontent\n");
+        assert_eq!(context_heading_line(&doc, &Context::Meeting(0)), 1);
+    }
+
+    #[test]
+    fn context_heading_line_meeting_one_returns_second_meeting() {
+        let doc = lines("## Meetings\n### Standup\ncontent\n### Planning\ncontent\n");
+        assert_eq!(context_heading_line(&doc, &Context::Meeting(1)), 3);
+    }
+
+    #[test]
+    fn context_heading_line_note_block_zero_returns_first_note() {
+        let doc = lines("## Notes\n### My Note\ncontent\n");
+        assert_eq!(context_heading_line(&doc, &Context::NoteBlock(0)), 1);
+    }
+
+    #[test]
+    fn context_heading_line_section_returns_heading_line_directly() {
+        let doc = lines("## Meetings\n### Standup\n#### Phase 1\ncontent\n");
+        assert_eq!(
+            context_heading_line(&doc, &Context::Section { heading_line: 2, level: 4 }),
+            2,
+        );
+    }
+
+    #[test]
+    fn context_heading_line_missing_heading_returns_zero() {
+        let doc = lines("## Meetings\n");
+        assert_eq!(context_heading_line(&doc, &Context::Notes), 0);
     }
 }
