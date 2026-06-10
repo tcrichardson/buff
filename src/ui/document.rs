@@ -98,6 +98,80 @@ fn classify_line<'a>(line: &'a str, in_code: &mut bool, vim_cursor: bool) -> Lin
     LineKind::Plain(line)
 }
 
+/// Maps a heading level (1–6) to its theme colour.
+fn heading_color(level: u8, theme: &Theme) -> ratatui::style::Color {
+    match level {
+        1 => theme.heading1,
+        2 => theme.heading2,
+        3 => theme.heading3,
+        4 => theme.heading4,
+        5 => theme.heading5,
+        _ => theme.heading6,
+    }
+}
+
+/// Converts a classified `LineKind` into a styled ratatui `Line`.
+/// No branching logic lives here — only span construction.
+fn render_line_kind<'a>(kind: LineKind<'a>, theme: &Theme) -> Line<'a> {
+    match kind {
+        LineKind::VimCursor(line) => {
+            Line::from(Span::styled(line, Style::default().bg(theme.vim_cursor_line)))
+        }
+        LineKind::Code(line) => {
+            Line::from(Span::styled(line, Style::default().fg(theme.code)))
+        }
+        LineKind::Heading(level, text) => Line::from(Span::styled(
+            text,
+            Style::default()
+                .fg(heading_color(level, theme))
+                .add_modifier(Modifier::BOLD),
+        )),
+        LineKind::TodoUnchecked(indent, rest) => {
+            let mut spans = Vec::with_capacity(3);
+            if !indent.is_empty() {
+                spans.push(Span::raw(indent));
+            }
+            spans.push(Span::raw("☐ "));
+            spans.push(Span::raw(rest));
+            Line::from(spans)
+        }
+        LineKind::TodoDone(indent, rest) => {
+            let mut spans = Vec::with_capacity(3);
+            if !indent.is_empty() {
+                spans.push(Span::raw(indent));
+            }
+            spans.push(Span::styled("☑ ", Style::default().fg(theme.todo_done)));
+            spans.push(Span::styled(
+                rest,
+                Style::default()
+                    .fg(theme.todo_done)
+                    .add_modifier(Modifier::CROSSED_OUT),
+            ));
+            Line::from(spans)
+        }
+        LineKind::Quote(rest) => Line::from(vec![
+            Span::styled(
+                "│ ",
+                Style::default()
+                    .fg(theme.quote_marker)
+                    .add_modifier(Modifier::ITALIC),
+            ),
+            Span::styled(rest, Style::default().add_modifier(Modifier::ITALIC)),
+        ]),
+        LineKind::Bullet(indent, rest) => {
+            let mut spans = Vec::with_capacity(3);
+            if !indent.is_empty() {
+                spans.push(Span::raw(indent));
+            }
+            spans.push(Span::raw("• "));
+            spans.push(Span::raw(rest));
+            Line::from(spans)
+        }
+        LineKind::Ordered(line) => Line::from(Span::raw(line)),
+        LineKind::Plain(line) => Line::from(line),
+    }
+}
+
 /// Converts one document line to a styled ratatui `Line` for display.
 ///
 /// `in_code` tracks whether a code-fence block is active; it is mutated
@@ -635,5 +709,127 @@ mod tests {
     fn classify_plain() {
         let mut in_code = false;
         assert_eq!(classify_line("just text", &mut in_code, false), LineKind::Plain("just text"));
+    }
+
+    // --- render_line_kind tests ---
+
+    #[test]
+    fn render_vim_cursor_uses_cursor_bg() {
+        let t = th();
+        let line = render_line_kind(LineKind::VimCursor("# raw"), &t);
+        assert_eq!(
+            line,
+            Line::from(Span::styled("# raw", Style::default().bg(t.vim_cursor_line)))
+        );
+    }
+
+    #[test]
+    fn render_code_uses_code_fg() {
+        let t = th();
+        let line = render_line_kind(LineKind::Code("let x = 1;"), &t);
+        assert_eq!(
+            line,
+            Line::from(Span::styled("let x = 1;", Style::default().fg(t.code)))
+        );
+    }
+
+    #[test]
+    fn render_heading1_bold_heading1_color() {
+        let t = th();
+        let line = render_line_kind(LineKind::Heading(1, "Title"), &t);
+        assert_eq!(
+            line,
+            Line::from(Span::styled(
+                "Title",
+                Style::default().fg(t.heading1).add_modifier(Modifier::BOLD)
+            ))
+        );
+    }
+
+    #[test]
+    fn render_heading6_bold_heading6_color() {
+        let t = th();
+        let line = render_line_kind(LineKind::Heading(6, "Six"), &t);
+        assert_eq!(
+            line,
+            Line::from(Span::styled(
+                "Six",
+                Style::default().fg(t.heading6).add_modifier(Modifier::BOLD)
+            ))
+        );
+    }
+
+    #[test]
+    fn render_todo_unchecked_no_indent() {
+        let line = render_line_kind(LineKind::TodoUnchecked("", "task"), &th());
+        assert_eq!(line, Line::from(vec![Span::raw("☐ "), Span::raw("task")]));
+    }
+
+    #[test]
+    fn render_todo_unchecked_with_indent() {
+        let line = render_line_kind(LineKind::TodoUnchecked("  ", "task"), &th());
+        assert_eq!(
+            line,
+            Line::from(vec![Span::raw("  "), Span::raw("☐ "), Span::raw("task")])
+        );
+    }
+
+    #[test]
+    fn render_todo_done_strikethrough() {
+        let t = th();
+        let line = render_line_kind(LineKind::TodoDone("", "done"), &t);
+        assert_eq!(
+            line,
+            Line::from(vec![
+                Span::styled("☑ ", Style::default().fg(t.todo_done)),
+                Span::styled(
+                    "done",
+                    Style::default().fg(t.todo_done).add_modifier(Modifier::CROSSED_OUT)
+                ),
+            ])
+        );
+    }
+
+    #[test]
+    fn render_quote() {
+        let t = th();
+        let line = render_line_kind(LineKind::Quote("hello"), &t);
+        assert_eq!(
+            line,
+            Line::from(vec![
+                Span::styled(
+                    "│ ",
+                    Style::default().fg(t.quote_marker).add_modifier(Modifier::ITALIC)
+                ),
+                Span::styled("hello", Style::default().add_modifier(Modifier::ITALIC)),
+            ])
+        );
+    }
+
+    #[test]
+    fn render_bullet_no_indent() {
+        let line = render_line_kind(LineKind::Bullet("", "item"), &th());
+        assert_eq!(line, Line::from(vec![Span::raw("• "), Span::raw("item")]));
+    }
+
+    #[test]
+    fn render_bullet_with_indent() {
+        let line = render_line_kind(LineKind::Bullet("  ", "sub"), &th());
+        assert_eq!(
+            line,
+            Line::from(vec![Span::raw("  "), Span::raw("• "), Span::raw("sub")])
+        );
+    }
+
+    #[test]
+    fn render_ordered_verbatim() {
+        let line = render_line_kind(LineKind::Ordered("1. first"), &th());
+        assert_eq!(line, Line::from(Span::raw("1. first")));
+    }
+
+    #[test]
+    fn render_plain_verbatim() {
+        let line = render_line_kind(LineKind::Plain("just text"), &th());
+        assert_eq!(line, Line::from("just text"));
     }
 }
