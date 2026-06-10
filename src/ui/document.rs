@@ -5,6 +5,31 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::Paragraph;
 
+/// Classifies a single document line into a rendering variant.
+/// Each variant carries exactly the string slices needed for rendering,
+/// so `render_line_kind` needs no other context.
+#[derive(Debug, PartialEq)]
+enum LineKind<'a> {
+    /// Vim cursor sits on this line — show raw text with cursor background.
+    VimCursor(&'a str),
+    /// Inside (or entering/leaving) a code fence — show with code colour.
+    Code(&'a str),
+    /// Markdown heading. `u8` is the level (1–6); `&str` is the text after the hashes.
+    Heading(u8, &'a str),
+    /// Unchecked todo checkbox. `(indent, rest)`.
+    TodoUnchecked(&'a str, &'a str),
+    /// Checked todo checkbox (lowercase or uppercase x). `(indent, rest)`.
+    TodoDone(&'a str, &'a str),
+    /// Blockquote line. Contains the text after `"> "` (may be empty).
+    Quote(&'a str),
+    /// Unordered bullet (`-`, `*`, `+`). `(indent, rest)`.
+    Bullet(&'a str, &'a str),
+    /// Ordered list item — shown verbatim.
+    Ordered(&'a str),
+    /// Plain text — shown verbatim.
+    Plain(&'a str),
+}
+
 /// Converts one document line to a styled ratatui `Line` for display.
 ///
 /// `in_code` tracks whether a code-fence block is active; it is mutated
