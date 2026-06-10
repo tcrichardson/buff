@@ -30,6 +30,74 @@ enum LineKind<'a> {
     Plain(&'a str),
 }
 
+/// Classifies `line` into a `LineKind`, mutating `in_code` when a code fence
+/// is encountered.  Called once per line during rendering.
+fn classify_line<'a>(line: &'a str, in_code: &mut bool, vim_cursor: bool) -> LineKind<'a> {
+    if vim_cursor {
+        *in_code = false;
+        return LineKind::VimCursor(line);
+    }
+
+    let fence = line.trim_start().starts_with("```");
+    if *in_code || fence {
+        if fence {
+            *in_code = !*in_code;
+        }
+        return LineKind::Code(line);
+    }
+
+    // Try headings longest-prefix-first to avoid `#` matching `##`.
+    for (prefix, level) in [
+        ("###### ", 6u8),
+        ("##### ",  5),
+        ("#### ",   4),
+        ("### ",    3),
+        ("## ",     2),
+        ("# ",      1),
+    ] {
+        if let Some(rest) = line.strip_prefix(prefix) {
+            return LineKind::Heading(level, rest);
+        }
+    }
+
+    // Blockquote matches the full line (not trimmed — they're not indented here).
+    if let Some(rest) = line.strip_prefix("> ") {
+        return LineKind::Quote(rest);
+    }
+    if line == ">" {
+        return LineKind::Quote("");
+    }
+
+    // For bullets and todos: extract leading whitespace so indented variants
+    // render identically to unindented ones.
+    let indent_len = line.len() - line.trim_start().len();
+    let indent = &line[..indent_len];
+    let trimmed = &line[indent_len..];
+
+    if let Some(rest) = trimmed.strip_prefix("- [ ] ") {
+        return LineKind::TodoUnchecked(indent, rest);
+    }
+    if let Some(rest) = trimmed
+        .strip_prefix("- [x] ")
+        .or_else(|| trimmed.strip_prefix("- [X] "))
+    {
+        return LineKind::TodoDone(indent, rest);
+    }
+    if let Some(rest) = trimmed
+        .strip_prefix("- ")
+        .or_else(|| trimmed.strip_prefix("* "))
+        .or_else(|| trimmed.strip_prefix("+ "))
+    {
+        return LineKind::Bullet(indent, rest);
+    }
+
+    if crate::model::parser::is_ordered(line) {
+        return LineKind::Ordered(line);
+    }
+
+    LineKind::Plain(line)
+}
+
 /// Converts one document line to a styled ratatui `Line` for display.
 ///
 /// `in_code` tracks whether a code-fence block is active; it is mutated
@@ -417,5 +485,155 @@ mod tests {
                 ),
             ])
         );
+    }
+
+    // --- classify_line tests ---
+
+    #[test]
+    fn classify_vim_cursor_returns_vim_cursor_variant() {
+        let mut in_code = false;
+        let result = classify_line("# My Note", &mut in_code, true);
+        assert_eq!(result, LineKind::VimCursor("# My Note"));
+        assert!(!in_code, "vim_cursor should reset in_code to false");
+    }
+
+    #[test]
+    fn classify_vim_cursor_resets_in_code() {
+        let mut in_code = true;
+        let result = classify_line("anything", &mut in_code, true);
+        assert_eq!(result, LineKind::VimCursor("anything"));
+        assert!(!in_code);
+    }
+
+    #[test]
+    fn classify_code_fence_opens_block() {
+        let mut in_code = false;
+        let result = classify_line("```", &mut in_code, false);
+        assert_eq!(result, LineKind::Code("```"));
+        assert!(in_code, "fence should open the code block");
+    }
+
+    #[test]
+    fn classify_code_fence_closes_block() {
+        let mut in_code = true;
+        let result = classify_line("```", &mut in_code, false);
+        assert_eq!(result, LineKind::Code("```"));
+        assert!(!in_code, "second fence should close the code block");
+    }
+
+    #[test]
+    fn classify_line_inside_code_block() {
+        let mut in_code = true;
+        let result = classify_line("let x = 1;", &mut in_code, false);
+        assert_eq!(result, LineKind::Code("let x = 1;"));
+        assert!(in_code, "in_code should remain true for non-fence lines");
+    }
+
+    #[test]
+    fn classify_heading1() {
+        let mut in_code = false;
+        assert_eq!(classify_line("# Title", &mut in_code, false), LineKind::Heading(1, "Title"));
+    }
+
+    #[test]
+    fn classify_heading2() {
+        let mut in_code = false;
+        assert_eq!(classify_line("## Notes", &mut in_code, false), LineKind::Heading(2, "Notes"));
+    }
+
+    #[test]
+    fn classify_heading3() {
+        let mut in_code = false;
+        assert_eq!(classify_line("### Sub", &mut in_code, false), LineKind::Heading(3, "Sub"));
+    }
+
+    #[test]
+    fn classify_heading4() {
+        let mut in_code = false;
+        assert_eq!(classify_line("#### Deep", &mut in_code, false), LineKind::Heading(4, "Deep"));
+    }
+
+    #[test]
+    fn classify_heading5() {
+        let mut in_code = false;
+        assert_eq!(classify_line("##### Five", &mut in_code, false), LineKind::Heading(5, "Five"));
+    }
+
+    #[test]
+    fn classify_heading6() {
+        let mut in_code = false;
+        assert_eq!(classify_line("###### Six", &mut in_code, false), LineKind::Heading(6, "Six"));
+    }
+
+    #[test]
+    fn classify_todo_unchecked() {
+        let mut in_code = false;
+        assert_eq!(classify_line("- [ ] task", &mut in_code, false), LineKind::TodoUnchecked("", "task"));
+    }
+
+    #[test]
+    fn classify_todo_unchecked_indented() {
+        let mut in_code = false;
+        assert_eq!(classify_line("  - [ ] task", &mut in_code, false), LineKind::TodoUnchecked("  ", "task"));
+    }
+
+    #[test]
+    fn classify_todo_done_lowercase_x() {
+        let mut in_code = false;
+        assert_eq!(classify_line("- [x] done", &mut in_code, false), LineKind::TodoDone("", "done"));
+    }
+
+    #[test]
+    fn classify_todo_done_uppercase_x() {
+        let mut in_code = false;
+        assert_eq!(classify_line("  - [X] done", &mut in_code, false), LineKind::TodoDone("  ", "done"));
+    }
+
+    #[test]
+    fn classify_quote_with_text() {
+        let mut in_code = false;
+        assert_eq!(classify_line("> hello", &mut in_code, false), LineKind::Quote("hello"));
+    }
+
+    #[test]
+    fn classify_quote_bare() {
+        let mut in_code = false;
+        assert_eq!(classify_line(">", &mut in_code, false), LineKind::Quote(""));
+    }
+
+    #[test]
+    fn classify_bullet_dash() {
+        let mut in_code = false;
+        assert_eq!(classify_line("- item", &mut in_code, false), LineKind::Bullet("", "item"));
+    }
+
+    #[test]
+    fn classify_bullet_star() {
+        let mut in_code = false;
+        assert_eq!(classify_line("* item", &mut in_code, false), LineKind::Bullet("", "item"));
+    }
+
+    #[test]
+    fn classify_bullet_plus() {
+        let mut in_code = false;
+        assert_eq!(classify_line("+ item", &mut in_code, false), LineKind::Bullet("", "item"));
+    }
+
+    #[test]
+    fn classify_bullet_indented() {
+        let mut in_code = false;
+        assert_eq!(classify_line("  - sub", &mut in_code, false), LineKind::Bullet("  ", "sub"));
+    }
+
+    #[test]
+    fn classify_ordered() {
+        let mut in_code = false;
+        assert_eq!(classify_line("1. first", &mut in_code, false), LineKind::Ordered("1. first"));
+    }
+
+    #[test]
+    fn classify_plain() {
+        let mut in_code = false;
+        assert_eq!(classify_line("just text", &mut in_code, false), LineKind::Plain("just text"));
     }
 }
