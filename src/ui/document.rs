@@ -56,44 +56,68 @@ fn style_line<'a>(line: &'a str, in_code: &mut bool, vim_cursor: bool, theme: &T
             rest,
             Style::default().fg(theme.heading1).add_modifier(Modifier::BOLD),
         ))
-    } else if let Some(rest) = line.strip_prefix("- [ ] ") {
-        Line::from(vec![Span::raw("☐ "), Span::raw(rest)])
-    } else if let Some(rest) = line
-        .strip_prefix("- [x] ")
-        .or_else(|| line.strip_prefix("- [X] "))
-    {
-        Line::from(vec![
-            Span::styled("☑ ", Style::default().fg(theme.todo_done)),
-            Span::styled(
+    } else {
+        // Extract leading whitespace once; bullet/todo branches match against
+        // the trimmed portion so indented variants render like unindented ones.
+        // Blockquotes are not indented in this app and still match against `line`.
+        let indent_len = line.len() - line.trim_start().len();
+        let indent = &line[..indent_len];
+        let trimmed = &line[indent_len..];
+
+        if let Some(rest) = trimmed.strip_prefix("- [ ] ") {
+            let mut spans = Vec::with_capacity(3);
+            if !indent.is_empty() {
+                spans.push(Span::raw(indent));
+            }
+            spans.push(Span::raw("☐ "));
+            spans.push(Span::raw(rest));
+            Line::from(spans)
+        } else if let Some(rest) = trimmed
+            .strip_prefix("- [x] ")
+            .or_else(|| trimmed.strip_prefix("- [X] "))
+        {
+            let mut spans = Vec::with_capacity(3);
+            if !indent.is_empty() {
+                spans.push(Span::raw(indent));
+            }
+            spans.push(Span::styled("☑ ", Style::default().fg(theme.todo_done)));
+            spans.push(Span::styled(
                 rest,
                 Style::default()
                     .fg(theme.todo_done)
                     .add_modifier(Modifier::CROSSED_OUT),
-            ),
-        ])
-    } else if let Some(rest) = line
-        .strip_prefix("> ")
-        .or_else(|| if line == ">" { Some("") } else { None })
-    {
-        Line::from(vec![
-            Span::styled(
-                "│ ",
-                Style::default()
-                    .fg(theme.quote_marker)
-                    .add_modifier(Modifier::ITALIC),
-            ),
-            Span::styled(rest, Style::default().add_modifier(Modifier::ITALIC)),
-        ])
-    } else if let Some(rest) = line
-        .strip_prefix("- ")
-        .or_else(|| line.strip_prefix("* "))
-        .or_else(|| line.strip_prefix("+ "))
-    {
-        Line::from(vec![Span::raw("• "), Span::raw(rest)])
-    } else if crate::model::parser::is_ordered(line) {
-        Line::from(Span::raw(line))
-    } else {
-        Line::from(line)
+            ));
+            Line::from(spans)
+        } else if let Some(rest) = line
+            .strip_prefix("> ")
+            .or_else(|| if line == ">" { Some("") } else { None })
+        {
+            Line::from(vec![
+                Span::styled(
+                    "│ ",
+                    Style::default()
+                        .fg(theme.quote_marker)
+                        .add_modifier(Modifier::ITALIC),
+                ),
+                Span::styled(rest, Style::default().add_modifier(Modifier::ITALIC)),
+            ])
+        } else if let Some(rest) = trimmed
+            .strip_prefix("- ")
+            .or_else(|| trimmed.strip_prefix("* "))
+            .or_else(|| trimmed.strip_prefix("+ "))
+        {
+            let mut spans = Vec::with_capacity(3);
+            if !indent.is_empty() {
+                spans.push(Span::raw(indent));
+            }
+            spans.push(Span::raw("• "));
+            spans.push(Span::raw(rest));
+            Line::from(spans)
+        } else if crate::model::parser::is_ordered(line) {
+            Line::from(Span::raw(line))
+        } else {
+            Line::from(line)
+        }
     }
 }
 
@@ -272,6 +296,98 @@ mod tests {
                 "# My Note",
                 Style::default().bg(th().vim_cursor_line),
             ))
+        );
+    }
+
+    // --- Change 2: indented bullets/todos render same as unindented ---
+
+    #[test]
+    fn unindented_bullet_still_works() {
+        let mut in_code = false;
+        let result = style_line("- item", &mut in_code, false, &th());
+        assert_eq!(
+            result,
+            Line::from(vec![Span::raw("• "), Span::raw("item")])
+        );
+    }
+
+    #[test]
+    fn indented_bullet_two_spaces() {
+        let mut in_code = false;
+        let result = style_line("  - sub", &mut in_code, false, &th());
+        assert_eq!(
+            result,
+            Line::from(vec![Span::raw("  "), Span::raw("• "), Span::raw("sub")])
+        );
+    }
+
+    #[test]
+    fn indented_bullet_four_spaces() {
+        let mut in_code = false;
+        let result = style_line("    * deep", &mut in_code, false, &th());
+        assert_eq!(
+            result,
+            Line::from(vec![Span::raw("    "), Span::raw("• "), Span::raw("deep")])
+        );
+    }
+
+    #[test]
+    fn indented_bullet_plus_marker() {
+        let mut in_code = false;
+        let result = style_line("  + item", &mut in_code, false, &th());
+        assert_eq!(
+            result,
+            Line::from(vec![Span::raw("  "), Span::raw("• "), Span::raw("item")])
+        );
+    }
+
+    #[test]
+    fn indented_todo_unchecked() {
+        let mut in_code = false;
+        let result = style_line("  - [ ] task", &mut in_code, false, &th());
+        assert_eq!(
+            result,
+            Line::from(vec![Span::raw("  "), Span::raw("☐ "), Span::raw("task")])
+        );
+    }
+
+    #[test]
+    fn indented_todo_checked_lowercase() {
+        let t = th();
+        let mut in_code = false;
+        let result = style_line("  - [x] done", &mut in_code, false, &t);
+        assert_eq!(
+            result,
+            Line::from(vec![
+                Span::raw("  "),
+                Span::styled("☑ ", Style::default().fg(t.todo_done)),
+                Span::styled(
+                    "done",
+                    Style::default()
+                        .fg(t.todo_done)
+                        .add_modifier(Modifier::CROSSED_OUT),
+                ),
+            ])
+        );
+    }
+
+    #[test]
+    fn indented_todo_checked_uppercase() {
+        let t = th();
+        let mut in_code = false;
+        let result = style_line("    - [X] done", &mut in_code, false, &t);
+        assert_eq!(
+            result,
+            Line::from(vec![
+                Span::raw("    "),
+                Span::styled("☑ ", Style::default().fg(t.todo_done)),
+                Span::styled(
+                    "done",
+                    Style::default()
+                        .fg(t.todo_done)
+                        .add_modifier(Modifier::CROSSED_OUT),
+                ),
+            ])
         );
     }
 }
