@@ -31,6 +31,7 @@ pub fn go_next_day(state: &mut AppState) -> anyhow::Result<()> {
 /// Re-derive context from the current vim cursor position and update state.context + display.
 pub fn vim_update_context(state: &mut AppState) {
     use crate::app::context::context_at_line;
+    state.doc_anchor_line = state.vim.cursor_line;  // keep anchor in sync
     state.context = context_at_line(&state.doc.lines, state.vim.cursor_line);
     state.update_context_display();
 }
@@ -1637,5 +1638,21 @@ mod tests {
         assert!(state.input.is_empty());
         assert!(state.editing.is_none());
         assert_eq!(state.focus, crate::app::state::Focus::VimNormal);
+    }
+
+    #[test]
+    fn vim_update_context_sets_doc_anchor_line() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        state.doc.lines = vec![
+            "# Day".to_string(),
+            String::new(),
+            "## Notes".to_string(),
+            "line one".to_string(),
+            "line two".to_string(),
+        ];
+        state.vim.cursor_line = 4;
+        vim_update_context(&mut state);
+        assert_eq!(state.doc_anchor_line, 4);
     }
 }
