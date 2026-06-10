@@ -89,6 +89,19 @@ fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme
         .map(|d| d.format("%B %Y").to_string())
         .unwrap_or_default();
 
+    // Center the calendar (21 chars = 7 columns × 3 chars) horizontally
+    let cal_width: u16 = 21;
+    let h_pad = area.width.saturating_sub(cal_width) / 2;
+    let centered = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(h_pad),
+            Constraint::Length(cal_width),
+            Constraint::Min(0),
+        ])
+        .split(area);
+    let cal_area = centered[1];
+
     // Split calendar area: header (1) + day-names (1) + weeks (rest)
     let cal_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -97,16 +110,12 @@ fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme
             Constraint::Length(1),
             Constraint::Min(0),
         ])
-        .split(area);
+        .split(cal_area);
 
-    let header_sub = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(21), Constraint::Min(0)])
-        .split(cal_chunks[0]);
     let header_widget = Paragraph::new(month_name)
         .alignment(Alignment::Center)
         .style(Style::default().bg(theme.panel_bg));
-    frame.render_widget(header_widget, header_sub[0]);
+    frame.render_widget(header_widget, cal_chunks[0]);
 
     let day_names: Vec<&str> = match app.config.week_starts_on {
         WeekStart::Sunday => vec!["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"],

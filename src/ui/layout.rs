@@ -5,31 +5,31 @@ use ratatui::text::Span;
 use ratatui::widgets::{Block, Borders};
 
 pub fn render(frame: &mut ratatui::Frame, app: &AppState, theme: &crate::ui::theme::Theme) {
-    // Outer horizontal split: main (notes + chat) | right panel (full height)
-    let panel_constraint = pane_size_to_constraint(&app.config.panel_width);
-    let outer = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Min(0), panel_constraint])
-        .split(frame.area());
-    let main_area = outer[0];
-    let panel_area = outer[1];
-
-    // main_area vertical split: header | content_row | status | input
+    // Full-width outer vertical split: header | middle (panels) | status | input
     let input_line_count = app.input.split('\n').count().max(1) as u16;
     let input_height = (input_line_count + 2).clamp(app.config.capture_height, 12);
-    let main_chunks = Layout::default()
+    let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(5),             // header
-            Constraint::Min(0),                // content_row
-            Constraint::Length(1),             // status
-            Constraint::Length(input_height),  // input (footer)
+            Constraint::Length(6),             // header (5 rows + 1 padding line at bottom)
+            Constraint::Min(0),                // middle row (notes + chat + right panel)
+            Constraint::Length(1),             // status bar
+            Constraint::Length(input_height),  // capture input (footer)
         ])
-        .split(main_area);
-    let header_area = main_chunks[0];
-    let content_row = main_chunks[1];
-    let status_area = main_chunks[2];
-    let input_area = main_chunks[3];
+        .split(frame.area());
+    let header_area = outer[0];
+    let middle_row = outer[1];
+    let status_area = outer[2];
+    let input_area = outer[3];
+
+    // middle_row horizontal split: notes+chat area | right panel
+    let panel_constraint = pane_size_to_constraint(&app.config.panel_width);
+    let middle_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Min(0), panel_constraint])
+        .split(middle_row);
+    let content_row = middle_chunks[0];
+    let panel_area = middle_chunks[1];
 
     // Header: buff ASCII art (left) + date/context (right), spans full main_area width
     let title_chunks = Layout::default()
