@@ -5,14 +5,104 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::Paragraph;
 
+/// Converts one document line to a styled ratatui `Line` for display.
+///
+/// `in_code` tracks whether a code-fence block is active; it is mutated
+/// when a fence marker is encountered.  `vim_cursor` is true when the vim
+/// cursor sits on this line — in that case the raw text is returned with a
+/// background highlight and `in_code` is reset.
+fn style_line<'a>(line: &'a str, in_code: &mut bool, vim_cursor: bool, theme: &Theme) -> Line<'a> {
+    if vim_cursor {
+        *in_code = false;
+        let bg_style = Style::default().bg(theme.vim_cursor_line);
+        return Line::from(Span::styled(line, bg_style));
+    }
+
+    let fence = line.trim_start().starts_with("```");
+    if *in_code || fence {
+        if fence {
+            *in_code = !*in_code;
+        }
+        return Line::from(Span::styled(line, Style::default().fg(theme.code)));
+    }
+
+    if let Some(rest) = line.strip_prefix("###### ") {
+        Line::from(Span::styled(
+            format!("###### {}", rest),
+            Style::default().fg(theme.heading6).add_modifier(Modifier::BOLD),
+        ))
+    } else if let Some(rest) = line.strip_prefix("##### ") {
+        Line::from(Span::styled(
+            format!("##### {}", rest),
+            Style::default().fg(theme.heading5).add_modifier(Modifier::BOLD),
+        ))
+    } else if let Some(rest) = line.strip_prefix("#### ") {
+        Line::from(Span::styled(
+            format!("#### {}", rest),
+            Style::default().fg(theme.heading4).add_modifier(Modifier::BOLD),
+        ))
+    } else if let Some(rest) = line.strip_prefix("### ") {
+        Line::from(Span::styled(
+            format!("### {}", rest),
+            Style::default().fg(theme.heading3).add_modifier(Modifier::BOLD),
+        ))
+    } else if let Some(rest) = line.strip_prefix("## ") {
+        Line::from(Span::styled(
+            format!("## {}", rest),
+            Style::default().fg(theme.heading2).add_modifier(Modifier::BOLD),
+        ))
+    } else if let Some(rest) = line.strip_prefix("# ") {
+        Line::from(Span::styled(
+            format!("# {}", rest),
+            Style::default().fg(theme.heading1).add_modifier(Modifier::BOLD),
+        ))
+    } else if let Some(rest) = line.strip_prefix("- [ ] ") {
+        Line::from(vec![Span::raw("☐ "), Span::raw(rest)])
+    } else if let Some(rest) = line
+        .strip_prefix("- [x] ")
+        .or_else(|| line.strip_prefix("- [X] "))
+    {
+        Line::from(vec![
+            Span::styled("☑ ", Style::default().fg(theme.todo_done)),
+            Span::styled(
+                rest,
+                Style::default()
+                    .fg(theme.todo_done)
+                    .add_modifier(Modifier::CROSSED_OUT),
+            ),
+        ])
+    } else if let Some(rest) = line
+        .strip_prefix("> ")
+        .or_else(|| if line == ">" { Some("") } else { None })
+    {
+        Line::from(vec![
+            Span::styled(
+                "│ ",
+                Style::default()
+                    .fg(theme.quote_marker)
+                    .add_modifier(Modifier::ITALIC),
+            ),
+            Span::styled(rest, Style::default().add_modifier(Modifier::ITALIC)),
+        ])
+    } else if let Some(rest) = line
+        .strip_prefix("- ")
+        .or_else(|| line.strip_prefix("* "))
+        .or_else(|| line.strip_prefix("+ "))
+    {
+        Line::from(vec![Span::raw("• "), Span::raw(rest)])
+    } else if crate::model::parser::is_ordered(line) {
+        Line::from(Span::raw(line))
+    } else {
+        Line::from(line)
+    }
+}
+
 pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect, theme: &Theme) {
     use crate::app::state::Focus;
 
     let vim_active = matches!(app.focus, Focus::VimNormal | Focus::VimInsert);
     let cursor_line = app.vim.cursor_line;
 
-    // For Navigate mode (legacy), keep old selected-range highlight
-    // (Navigate is gone, but keep the None path for Capture/Chat focus)
     let mut in_code = false;
     let text_lines: Vec<Line> = app
         .doc
@@ -20,91 +110,8 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect, theme: &Th
         .iter()
         .enumerate()
         .map(|(i, line)| {
-            // Cursor line: render raw in vim modes
-            if vim_active && i == cursor_line {
-                in_code = false; // reset; raw line shown anyway
-                let bg_style = Style::default()
-                    .bg(theme.vim_cursor_line);
-                return Line::from(Span::styled(line.as_str(), bg_style));
-            }
-
-            let fence = line.trim_start().starts_with("```");
-            if in_code || fence {
-                if fence {
-                    in_code = !in_code;
-                }
-                return Line::from(Span::styled(line.as_str(), Style::default().fg(theme.code)));
-            }
-
-            if let Some(rest) = line.strip_prefix("###### ") {
-                Line::from(Span::styled(
-                    format!("###### {}", rest),
-                    Style::default().fg(theme.heading6).add_modifier(Modifier::BOLD),
-                ))
-            } else if let Some(rest) = line.strip_prefix("##### ") {
-                Line::from(Span::styled(
-                    format!("##### {}", rest),
-                    Style::default().fg(theme.heading5).add_modifier(Modifier::BOLD),
-                ))
-            } else if let Some(rest) = line.strip_prefix("#### ") {
-                Line::from(Span::styled(
-                    format!("#### {}", rest),
-                    Style::default().fg(theme.heading4).add_modifier(Modifier::BOLD),
-                ))
-            } else if let Some(rest) = line.strip_prefix("### ") {
-                Line::from(Span::styled(
-                    format!("### {}", rest),
-                    Style::default().fg(theme.heading3).add_modifier(Modifier::BOLD),
-                ))
-            } else if let Some(rest) = line.strip_prefix("## ") {
-                Line::from(Span::styled(
-                    format!("## {}", rest),
-                    Style::default().fg(theme.heading2).add_modifier(Modifier::BOLD),
-                ))
-            } else if let Some(rest) = line.strip_prefix("# ") {
-                Line::from(Span::styled(
-                    format!("# {}", rest),
-                    Style::default().fg(theme.heading1).add_modifier(Modifier::BOLD),
-                ))
-            } else if let Some(rest) = line.strip_prefix("- [ ] ") {
-                Line::from(vec![Span::raw("☐ "), Span::raw(rest)])
-            } else if let Some(rest) = line
-                .strip_prefix("- [x] ")
-                .or_else(|| line.strip_prefix("- [X] "))
-            {
-                Line::from(vec![
-                    Span::styled("☑ ", Style::default().fg(theme.todo_done)),
-                    Span::styled(
-                        rest,
-                        Style::default()
-                            .fg(theme.todo_done)
-                            .add_modifier(Modifier::CROSSED_OUT),
-                    ),
-                ])
-            } else if let Some(rest) = line
-                .strip_prefix("> ")
-                .or_else(|| if line == ">" { Some("") } else { None })
-            {
-                Line::from(vec![
-                    Span::styled(
-                        "│ ",
-                        Style::default()
-                            .fg(theme.quote_marker)
-                            .add_modifier(Modifier::ITALIC),
-                    ),
-                    Span::styled(rest, Style::default().add_modifier(Modifier::ITALIC)),
-                ])
-            } else if let Some(rest) = line
-                .strip_prefix("- ")
-                .or_else(|| line.strip_prefix("* "))
-                .or_else(|| line.strip_prefix("+ "))
-            {
-                Line::from(vec![Span::raw("• "), Span::raw(rest)])
-            } else if crate::model::parser::is_ordered(line) {
-                Line::from(Span::raw(line.as_str()))
-            } else {
-                Line::from(line.as_str())
-            }
+            let vim_cursor = vim_active && i == cursor_line;
+            style_line(line.as_str(), &mut in_code, vim_cursor, theme)
         })
         .collect();
 
@@ -122,7 +129,6 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect, theme: &Th
     // Place terminal cursor for vim modes
     if vim_active {
         let line_text = app.doc.lines.get(cursor_line).map(|l| l.as_str()).unwrap_or("");
-        // cursor_col is a byte offset; we need the display column (char count)
         let display_col = line_text[..app.vim.cursor_col.min(line_text.len())]
             .chars()
             .count() as u16;
@@ -148,12 +154,11 @@ pub fn render_mode_line(
     let (mode_label, mode_color) = match app.focus {
         Focus::VimNormal => ("-- NORMAL --", theme.heading2),
         Focus::VimInsert => ("-- INSERT --", theme.heading3),
-        _ => return, // no mode line when not in vim mode
+        _ => return,
     };
     let left = Span::styled(mode_label, Style::default().fg(mode_color));
     let right_text = format!("ln {}/{}", current, total);
     let right = Span::styled(right_text, Style::default().fg(theme.heading6));
-    // Pad the middle
     let left_len = mode_label.len() as u16;
     let right_len = format!("ln {}/{}", current, total).len() as u16;
     let gap = area.width.saturating_sub(left_len + right_len);
