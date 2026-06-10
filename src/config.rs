@@ -146,6 +146,7 @@ pub struct ThemeOverrides {
     pub todo_done: Option<String>,
     pub todo_overdue: Option<String>,
     pub vim_cursor_line: Option<String>,
+    pub capture_bg: Option<String>,
 }
 
 #[cfg(test)]

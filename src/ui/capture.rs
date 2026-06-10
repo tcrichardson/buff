@@ -1,9 +1,15 @@
 use crate::app::state::AppState;
 use ratatui::layout::Rect;
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph};
+use ratatui::widgets::{Block, Paragraph};
 
-pub fn render_status(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
+pub fn render_status(
+    frame: &mut ratatui::Frame,
+    app: &AppState,
+    area: Rect,
+    theme: &crate::ui::theme::Theme,
+) {
     let text = if !app.status.is_empty() {
         Line::from(app.status.as_str())
     } else {
@@ -17,20 +23,27 @@ pub fn render_status(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
             Span::raw(help),
         ])
     };
-    let paragraph = Paragraph::new(text);
+    let paragraph = Paragraph::new(text)
+        .style(Style::default().bg(theme.capture_bg));
     frame.render_widget(paragraph, area);
 }
 
-pub fn render_input(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
+pub fn render_input(
+    frame: &mut ratatui::Frame,
+    app: &AppState,
+    area: Rect,
+    theme: &crate::ui::theme::Theme,
+) {
     use ratatui::text::Text;
     use crate::app::state::Focus;
 
-    let (title, prefix) = if app.editing.is_some() {
-        ("Edit", "Edit: › ")
+    let prefix = if app.editing.is_some() {
+        "Edit: › "
     } else {
-        ("Capture", "› ")
+        "› "
     };
-    let block = Block::default().title(title).borders(Borders::ALL);
+    let block = Block::default()
+        .style(Style::default().bg(theme.capture_bg));
 
     let input_lines: Vec<&str> = app.input.split('\n').collect();
     let rendered: Vec<Line> = input_lines
@@ -45,7 +58,7 @@ pub fn render_input(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
         })
         .collect();
 
-    let inner_height = area.height.saturating_sub(2);
+    let inner_height = area.height;
     let overflow = input_lines.len().saturating_sub(inner_height as usize);
 
     let paragraph = Paragraph::new(Text::from(rendered))
@@ -79,11 +92,9 @@ pub fn render_input(frame: &mut ratatui::Frame, app: &AppState, area: Rect) {
             cursor_col
         };
 
-        let inner_x = area.x + 1;
-        let inner_y = area.y + 1;
         frame.set_cursor_position(ratatui::layout::Position::new(
-            inner_x + col as u16,
-            inner_y + (cursor_row.saturating_sub(overflow)) as u16,
+            area.x + col as u16,
+            area.y + (cursor_row.saturating_sub(overflow)) as u16,
         ));
     }
 }

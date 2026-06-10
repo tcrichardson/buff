@@ -19,6 +19,7 @@ pub struct Theme {
     pub todo_done: Color,
     pub todo_overdue: Color,
     pub vim_cursor_line: Color,
+    pub capture_bg: Color,
 }
 
 pub fn light() -> Theme {
@@ -39,6 +40,7 @@ pub fn light() -> Theme {
         todo_done: Color::Green,
         todo_overdue: Color::Red,
         vim_cursor_line: Color::Rgb(219, 234, 254),
+        capture_bg: Color::Reset,
     }
 }
 
@@ -60,6 +62,7 @@ pub fn dark() -> Theme {
         todo_done: Color::Green,
         todo_overdue: Color::Red,
         vim_cursor_line: Color::Rgb(40, 44, 52),
+        capture_bg: Color::Reset,
     }
 }
 
@@ -135,6 +138,7 @@ pub fn resolve_theme(name: &str, overrides: &ThemeOverrides) -> Theme {
     apply!(todo_done);
     apply!(todo_overdue);
     apply!(vim_cursor_line);
+    apply!(capture_bg);
 
     theme
 }

@@ -34,7 +34,7 @@ fn wrap_line(text: &str, width: usize) -> Vec<String> {
 pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &crate::ui::theme::Theme) {
     let bg = Block::default()
         .style(Style::default().bg(theme.chat_panel_bg))
-        .padding(Padding::new(1, 1, 1, 1));
+        .padding(Padding::new(1, 1, 0, 1));
     let inner = bg.inner(area);
     frame.render_widget(bg, area);
 

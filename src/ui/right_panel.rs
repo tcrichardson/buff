@@ -159,24 +159,25 @@ fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme
 fn render_todo_list(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &crate::ui::theme::Theme) {
     let mut virtual_lines: Vec<Line> = Vec::new();
 
-    virtual_lines.push(Line::from("To-dos"));
+    virtual_lines.push(Line::styled("To-dos", Style::default().add_modifier(Modifier::BOLD)));
 
     let mut current_date = None;
     for (flat_idx, todo) in app.panel_todos.iter().enumerate() {
         if Some(todo.date) != current_date {
             current_date = Some(todo.date);
             let header = todo.date.format("%a %b %d").to_string();
-            virtual_lines.push(Line::from(format!("─ {} ", header)));
+            virtual_lines.push(Line::styled(
+                format!("─ {} ", header),
+                Style::default().add_modifier(Modifier::BOLD),
+            ));
         }
         let is_selected =
             app.focus == Focus::RightPanel && flat_idx == app.right_panel_selected;
         let item_text = format!("☐ {}", todo.text);
         let style = if is_selected {
-            Style::default()
-                .add_modifier(Modifier::REVERSED)
-                .add_modifier(Modifier::BOLD)
+            Style::default().add_modifier(Modifier::REVERSED)
         } else {
-            Style::default().add_modifier(Modifier::BOLD)
+            Style::default()
         };
         virtual_lines.push(Line::styled(item_text, style));
     }
