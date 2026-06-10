@@ -52,6 +52,11 @@ pub struct ChatState {
     pub scroll: usize,
     pub status: Option<String>,
     pub event_tx: Option<std::sync::mpsc::Sender<crate::app::llm::LlmEvent>>,
+    /// Some(n) when a per-meeting assistant session is active for meeting ordinal n.
+    pub meeting_ordinal: Option<usize>,
+    /// True when the current pending LLM request is a summary generation request.
+    /// On Done, the response is written to the document and meeting mode is cleared.
+    pub summarizing: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -185,7 +190,16 @@ impl AppState {
     }
 
     pub fn save_chat(&self) -> anyhow::Result<()> {
-        let path = storage::chat_path_for(&self.notes_dir, self.date, &self.config.date_format);
+        let path = if let Some(ord) = self.chat.meeting_ordinal {
+            storage::meeting_chat_path_for(
+                &self.notes_dir,
+                self.date,
+                &self.config.date_format,
+                ord,
+            )
+        } else {
+            storage::chat_path_for(&self.notes_dir, self.date, &self.config.date_format)
+        };
         storage::save_chat(&path, &self.chat.messages)
     }
 
@@ -206,6 +220,10 @@ impl AppState {
             LlmEvent::Done { .. } => {
                 self.chat.pending = false;
                 let _ = self.save_chat();
+                if self.chat.summarizing {
+                    self.chat.summarizing = false;
+                    self.apply_meeting_summary();
+                }
             }
             LlmEvent::Error { message, .. } => {
                 self.chat.pending = false;
@@ -220,11 +238,105 @@ impl AppState {
             }
         }
     }
+
+    /// Called when a summary LLM request finishes. Writes the summary to the document,
+    /// saves it, then switches back to the daily chat sidecar.
+    fn apply_meeting_summary(&mut self) {
+        let Some(ord) = self.chat.meeting_ordinal else {
+            return;
+        };
+        let summary = match self.chat.messages.last() {
+            Some(m) if m.role == ChatRole::Assistant && !m.content.is_empty() => {
+                m.content.clone()
+            }
+            _ => return,
+        };
+        self.doc.add_meeting_summary(ord, &summary);
+        let _ = self.save();
+        self.selectables = self.doc.selectables();
+        self.panel_agenda = crate::ui::right_panel::collect_agenda_items(&self.doc);
+        self.dates_with_notes =
+            crate::storage::dates_with_notes(&self.notes_dir, &self.config.date_format);
+
+        // Switch back to daily chat
+        let _ = self.save_chat(); // flush the meeting sidecar one last time
+        self.chat.meeting_ordinal = None;
+        let daily_path =
+            storage::chat_path_for(&self.notes_dir, self.date, &self.config.date_format);
+        self.chat.messages = storage::load_chat(&daily_path);
+        self.chat.scroll = 0;
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chat_state_default_has_no_meeting_ordinal() {
+        let state = ChatState::default();
+        assert_eq!(state.meeting_ordinal, None);
+        assert!(!state.summarizing);
+    }
+
+    #[test]
+    fn save_chat_uses_meeting_sidecar_when_ordinal_set() {
+        use crate::app::state::{ChatMessage, ChatRole};
+        let tmp = tempfile::tempdir().unwrap();
+        let config = Config::default();
+        let date = NaiveDate::from_ymd_opt(2026, 6, 10).unwrap();
+        let mut state = AppState::open_day(tmp.path().to_path_buf(), config, date).unwrap();
+
+        state.chat.meeting_ordinal = Some(0);
+        state.chat.messages = vec![
+            ChatMessage { role: ChatRole::Assistant, content: "hello meeting".into() },
+        ];
+        state.save_chat().unwrap();
+
+        // Meeting sidecar should exist
+        let meeting_path = crate::storage::meeting_chat_path_for(
+            tmp.path(), date, "%Y-%m-%d-%a", 0
+        );
+        assert!(meeting_path.exists(), "meeting sidecar should be written");
+
+        // Daily sidecar should NOT exist (no daily messages)
+        let daily_path = crate::storage::chat_path_for(tmp.path(), date, "%Y-%m-%d-%a");
+        assert!(!daily_path.exists(), "daily sidecar should be empty/absent");
+    }
+
+    #[test]
+    fn apply_meeting_summary_writes_to_doc_and_resets_mode() {
+        use crate::app::state::{ChatMessage, ChatRole};
+        let tmp = tempfile::tempdir().unwrap();
+        let config = Config::default();
+        let date = NaiveDate::from_ymd_opt(2026, 6, 10).unwrap();
+        let mut state = AppState::open_day(tmp.path().to_path_buf(), config, date).unwrap();
+
+        // Set up a meeting
+        state.doc = crate::model::day::Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\n- note\n\n## Notes\n\n## To-dos\n",
+        );
+        state.chat.meeting_ordinal = Some(0);
+        state.chat.summarizing = true;
+        state.chat.active_request = 42;
+        state.chat.messages = vec![
+            ChatMessage {
+                role: ChatRole::Assistant,
+                content: "#### Meeting Summary\n**Key Decisions:** Ship it".into(),
+            },
+        ];
+
+        state.handle_llm_event(LlmEvent::Done { id: 42 });
+
+        // Summary should now be in the document
+        let text = state.doc.to_text();
+        assert!(text.contains("#### Meeting Summary"), "summary missing: {}", text);
+        assert!(text.contains("**Key Decisions:** Ship it"), "content missing: {}", text);
+
+        // Meeting mode should be cleared
+        assert_eq!(state.chat.meeting_ordinal, None);
+        assert!(!state.chat.summarizing);
+    }
 
     #[test]
     fn context_todos_display() {
