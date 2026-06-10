@@ -57,8 +57,8 @@ pub fn after_vim_edit(state: &mut AppState) -> anyhow::Result<()> {
 /// content line that could be the new entry.
 /// 
 /// Simple heuristic: cursor goes to the last non-empty line in the document.
-/// This is correct for all entry types (bullet, todo, meeting heading, etc.)
-/// because they are always appended to the end of their section block.
+/// Jump the vim cursor to the last non-empty line after new content is added,
+/// or update the document scroll anchor in Capture mode so the new content stays visible.
 pub fn vim_jump_to_new_content(state: &mut AppState) {
     if let Some(idx) = state.doc.lines.iter().rposition(|l| !l.trim().is_empty()) {
         if matches!(

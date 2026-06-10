@@ -282,4 +282,9 @@ mod tests {
         let doc = lines("## Meetings\n");
         assert_eq!(context_heading_line(&doc, &Context::Notes), 0);
     }
+
+    #[test]
+    fn cursor_on_empty_lines_vec() {
+        assert_eq!(context_at_line(&[], 0), Context::Notes);
+    }
 }
