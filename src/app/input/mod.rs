@@ -1361,7 +1361,7 @@ mod tests {
     }
 
     #[test]
-    fn submit_input_jumps_cursor_to_new_content() {
+    fn submit_input_anchors_to_context_heading() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
@@ -1370,9 +1370,12 @@ mod tests {
         state.vim.cursor_col = 0;
         state.input = "/todo test".to_string();
         execute_action(&mut state, UiAction::SubmitInput).unwrap();
-        // Cursor should be on the newly added todo line (last line)
-        assert_eq!(state.vim.cursor_line, state.doc.lines.len() - 1);
-        // Column should reset to 0
+        // After submit, the doc anchor should be set to the context heading (## Notes at line 2),
+        // not to the newly added content. This keeps the current section near the top of the
+        // viewport as entries accumulate below it.
+        assert_eq!(state.doc_anchor_line, 2);
+        // Vim cursor stays where it was — submission no longer jumps to new content
+        assert_eq!(state.vim.cursor_line, 0);
         assert_eq!(state.vim.cursor_col, 0);
     }
 
