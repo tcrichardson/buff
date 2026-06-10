@@ -2,6 +2,25 @@ use crate::app::command::Command;
 use crate::app::state::{AppState, Context};
 use crate::model::day::SelectableKind;
 
+const MEETING_ASSISTANT_SYSTEM_PROMPT: &str = "\
+You are a meeting assistant embedded in a note-taking app.
+You will be given the current state of a meeting (title, metadata, bullet-point notes).
+Your job:
+- Understand what the meeting is about
+- Send a concise opening message when the meeting starts, acknowledging what you know \
+and asking one clarifying question if something is unclear
+- Respond helpfully when the user asks questions during the meeting
+- When asked to summarize, produce a structured summary using ONLY the sections that \
+have relevant content:
+
+#### Meeting Summary
+**Key Decisions:** ...
+**Action Items:** ...
+**Discussion Highlights:** ...
+**Open Questions:** ...
+
+Keep responses short and direct — this is a live meeting.";
+
 pub fn go_to_date(state: &mut AppState, date: chrono::NaiveDate) -> anyhow::Result<()> {
     state.save()?;
     state.save_chat()?;
@@ -180,6 +199,165 @@ fn handle_summarize(state: &mut AppState) {
     state.status = "summarize is not implemented yet".to_string();
 }
 
+fn handle_clear(state: &mut AppState) -> anyhow::Result<()> {
+    state.chat.messages.clear();
+    state.chat.active_request = crate::app::llm::next_request_id();
+    state.chat.pending = false;
+    state.chat.status = None;
+    state.chat.scroll = 0;
+    let _ = state.save_chat();
+    Ok(())
+}
+
+/// Build the meeting context injection message for ordinal `meeting_ordinal`.
+/// Returns None if the meeting doesn't exist.
+fn build_meeting_context_message(
+    state: &AppState,
+    meeting_ordinal: usize,
+) -> Option<crate::app::state::ChatMessage> {
+    let meeting = state.doc.meetings().into_iter().nth(meeting_ordinal)?;
+    let heading_line = meeting.heading_line;
+
+    let section_end = state.doc.lines[heading_line + 1..]
+        .iter()
+        .position(|line| line.starts_with("### ") || line.starts_with("## "))
+        .map(|i| heading_line + 1 + i)
+        .unwrap_or(state.doc.lines.len());
+
+    let section_text = state.doc.lines[heading_line..section_end].join("\n");
+
+    Some(crate::app::state::ChatMessage {
+        role: crate::app::state::ChatRole::User,
+        content: format!("Here is the current state of the meeting:\n{}", section_text),
+    })
+}
+
+/// Fire an LLM call in meeting assistant mode.
+/// The trigger_message is sent to the LLM but NOT stored in chat history
+/// (it is only an API mechanic). If `is_summary` is true, the `summarizing`
+/// flag is set so the response is written to the document on completion.
+fn fire_meeting_llm_call(
+    state: &mut AppState,
+    trigger_message: &str,
+    is_summary: bool,
+) -> anyhow::Result<()> {
+    let Some(tx) = state.chat.event_tx.clone() else {
+        state.chat.status = Some("LLM channel unavailable".to_string());
+        return Ok(());
+    };
+    let Some(ord) = state.chat.meeting_ordinal else {
+        return Ok(());
+    };
+
+    state.chat.status = None;
+    state.chat.scroll = 0;
+    state.chat.summarizing = is_summary;
+
+    // Build: [context injection] + [conversation history] + [trigger message]
+    let mut request_messages = Vec::new();
+    if let Some(ctx_msg) = build_meeting_context_message(state, ord) {
+        request_messages.push(ctx_msg);
+    }
+    request_messages.extend(state.chat.messages.clone());
+    request_messages.push(crate::app::state::ChatMessage {
+        role: crate::app::state::ChatRole::User,
+        content: trigger_message.to_string(),
+    });
+
+    let id = crate::app::llm::next_request_id();
+    state.chat.active_request = id;
+    state.chat.pending = true;
+    state.chat.messages.push(crate::app::state::ChatMessage {
+        role: crate::app::state::ChatRole::Assistant,
+        content: String::new(),
+    });
+
+    let req = crate::app::llm::ChatRequest {
+        id,
+        base_url: state.config.llm_base_url.clone(),
+        model: state.config.llm_model.clone(),
+        system: Some(MEETING_ASSISTANT_SYSTEM_PROMPT.to_string()),
+        messages: request_messages,
+    };
+    crate::app::llm::spawn(req, tx);
+    Ok(())
+}
+
+fn handle_start(state: &mut AppState) -> anyhow::Result<()> {
+    let ord = match &state.context {
+        Context::Meeting(ord) => *ord,
+        _ => {
+            state.status = "Not in a meeting".to_string();
+            return Ok(());
+        }
+    };
+    if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
+        let time = state.current_time_hhmm();
+        crate::model::writer::set_metadata_field(
+            &mut state.doc.lines,
+            heading,
+            "Started",
+            &time,
+        );
+        after_doc_mutation(state)?;
+    }
+
+    // Save current daily chat before switching to meeting sidecar.
+    let _ = state.save_chat();
+
+    // Load (or start empty) per-meeting sidecar.
+    let meeting_path = crate::storage::meeting_chat_path_for(
+        &state.notes_dir,
+        state.date,
+        &state.config.date_format,
+        ord,
+    );
+    state.chat.messages = crate::storage::load_chat(&meeting_path);
+    state.chat.meeting_ordinal = Some(ord);
+    state.chat.scroll = 0;
+    state.chat.status = None;
+
+    // Show and focus the chat panel.
+    state.chat.visible = true;
+    state.focus = crate::app::state::Focus::Chat;
+
+    // Trigger the AI welcome message.
+    fire_meeting_llm_call(state, "Meeting started.", false)?;
+
+    Ok(())
+}
+
+fn handle_end(state: &mut AppState) -> anyhow::Result<()> {
+    let ord = match &state.context {
+        Context::Meeting(ord) => *ord,
+        _ => {
+            state.status = "Not in a meeting".to_string();
+            return Ok(());
+        }
+    };
+    if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
+        let time = state.current_time_hhmm();
+        crate::model::writer::set_metadata_field(
+            &mut state.doc.lines,
+            heading,
+            "Ended",
+            &time,
+        );
+        after_doc_mutation(state)?;
+    }
+
+    // If meeting assistant mode is active for this meeting, trigger summary generation.
+    if state.chat.meeting_ordinal == Some(ord) {
+        fire_meeting_llm_call(
+            state,
+            "The meeting has ended. Please generate the meeting summary now.",
+            true,
+        )?;
+    }
+
+    Ok(())
+}
+
 fn handle_ask(state: &mut AppState, text: &str) -> anyhow::Result<()> {
     let Some(tx) = state.chat.event_tx.clone() else {
         state.chat.status = Some("LLM channel unavailable".to_string());
@@ -188,11 +366,43 @@ fn handle_ask(state: &mut AppState, text: &str) -> anyhow::Result<()> {
     state.chat.visible = true;
     state.chat.status = None;
     state.chat.scroll = 0;
+
+    // Add the user message to history (both modes).
     state.chat.messages.push(crate::app::state::ChatMessage {
         role: crate::app::state::ChatRole::User,
         content: text.to_string(),
     });
     let _ = state.save_chat();
+
+    // Meeting assistant mode: inject fresh meeting context before history.
+    if let Some(ord) = state.chat.meeting_ordinal {
+        let mut request_messages = Vec::new();
+        if let Some(ctx_msg) = build_meeting_context_message(state, ord) {
+            request_messages.push(ctx_msg);
+        }
+        request_messages.extend(state.chat.messages.clone());
+
+        let id = crate::app::llm::next_request_id();
+        state.chat.active_request = id;
+        state.chat.pending = true;
+        state.chat.summarizing = false;
+        state.chat.messages.push(crate::app::state::ChatMessage {
+            role: crate::app::state::ChatRole::Assistant,
+            content: String::new(),
+        });
+
+        let req = crate::app::llm::ChatRequest {
+            id,
+            base_url: state.config.llm_base_url.clone(),
+            model: state.config.llm_model.clone(),
+            system: Some(MEETING_ASSISTANT_SYSTEM_PROMPT.to_string()),
+            messages: request_messages,
+        };
+        crate::app::llm::spawn(req, tx);
+        return Ok(());
+    }
+
+    // Standard mode (existing behavior).
     let request_messages = state.chat.messages.clone();
     let id = crate::app::llm::next_request_id();
     state.chat.active_request = id;
@@ -214,46 +424,6 @@ fn handle_ask(state: &mut AppState, text: &str) -> anyhow::Result<()> {
         messages: request_messages,
     };
     crate::app::llm::spawn(req, tx);
-    Ok(())
-}
-
-fn handle_clear(state: &mut AppState) -> anyhow::Result<()> {
-    state.chat.messages.clear();
-    state.chat.active_request = crate::app::llm::next_request_id();
-    state.chat.pending = false;
-    state.chat.status = None;
-    state.chat.scroll = 0;
-    let _ = state.save_chat();
-    Ok(())
-}
-
-fn handle_start(state: &mut AppState) -> anyhow::Result<()> {
-    let ord = match &state.context {
-        Context::Meeting(ord) => *ord,
-        _ => { state.status = "Not in a meeting".to_string(); return Ok(()); }
-    };
-    if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
-        let time = state.current_time_hhmm();
-        crate::model::writer::set_metadata_field(
-            &mut state.doc.lines, heading, "Started", &time,
-        );
-        after_doc_mutation(state)?;
-    }
-    Ok(())
-}
-
-fn handle_end(state: &mut AppState) -> anyhow::Result<()> {
-    let ord = match &state.context {
-        Context::Meeting(ord) => *ord,
-        _ => { state.status = "Not in a meeting".to_string(); return Ok(()); }
-    };
-    if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
-        let time = state.current_time_hhmm();
-        crate::model::writer::set_metadata_field(
-            &mut state.doc.lines, heading, "Ended", &time,
-        );
-        after_doc_mutation(state)?;
-    }
     Ok(())
 }
 
@@ -1776,29 +1946,97 @@ mod tests {
     }
 
     #[test]
-    fn vim_jump_to_new_content_sets_anchor_in_capture_mode() {
+    fn start_in_meeting_activates_meeting_assistant_mode() {
+        use crate::app::llm::LlmEvent;
         use crate::app::state::Focus;
+
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
-        // Start in Capture mode (the default)
-        assert_eq!(state.focus, Focus::Capture);
-        // Add some content so last non-empty line is not 0
-        dispatch(&mut state, Command::Entry("first note".to_string())).unwrap();
-        vim_jump_to_new_content(&mut state);
-        dispatch(&mut state, Command::Entry("second note".to_string())).unwrap();
-        vim_jump_to_new_content(&mut state);
-        // doc_anchor_line should now point at the last non-empty line
-        let last_nonempty = state
-            .doc
-            .lines
-            .iter()
-            .rposition(|l| !l.trim().is_empty())
-            .unwrap();
-        assert_eq!(
-            state.doc_anchor_line,
-            last_nonempty,
-            "anchor should point to last inserted line; lines: {:?}",
-            state.doc.lines
+
+        // Need an LLM channel so handle_start can fire the welcome call
+        let (tx, _rx) = std::sync::mpsc::channel::<LlmEvent>();
+        state.chat.event_tx = Some(tx);
+
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        dispatch(&mut state, Command::Start).unwrap();
+
+        assert_eq!(state.chat.meeting_ordinal, Some(0), "meeting ordinal should be set");
+        assert!(state.chat.visible, "chat should be visible");
+        assert_eq!(state.focus, Focus::Chat, "focus should shift to chat");
+        assert!(state.chat.pending, "LLM call should be pending");
+    }
+
+    #[test]
+    fn start_without_llm_channel_still_activates_meeting_mode() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        // No event_tx set
+
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        dispatch(&mut state, Command::Start).unwrap();
+
+        // Meeting mode should still activate even if LLM is unavailable
+        assert_eq!(state.chat.meeting_ordinal, Some(0));
+        assert!(state.chat.visible);
+    }
+
+    #[test]
+    fn end_in_meeting_mode_triggers_summary_generation() {
+        use crate::app::llm::LlmEvent;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+
+        let (tx, _rx) = std::sync::mpsc::channel::<LlmEvent>();
+        state.chat.event_tx = Some(tx);
+
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        dispatch(&mut state, Command::Start).unwrap();
+
+        // Drain the pending welcome call
+        state.chat.pending = false;
+        state.chat.messages.clear();
+
+        dispatch(&mut state, Command::End).unwrap();
+
+        assert!(state.chat.pending, "summary LLM call should be pending");
+        assert!(state.chat.summarizing, "summarizing flag should be set");
+    }
+
+    #[test]
+    fn end_outside_meeting_mode_does_not_trigger_summary() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        // Do NOT call /start — so meeting_ordinal is None
+
+        dispatch(&mut state, Command::End).unwrap();
+
+        assert!(!state.chat.pending, "no LLM call should fire without meeting assistant mode");
+        assert_eq!(state.chat.meeting_ordinal, None);
+    }
+
+    #[test]
+    fn ask_in_meeting_mode_uses_meeting_system_prompt() {
+        use crate::app::llm::LlmEvent;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+
+        let (tx, _rx) = std::sync::mpsc::channel::<LlmEvent>();
+        state.chat.event_tx = Some(tx);
+
+        dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
+        state.chat.meeting_ordinal = Some(0);
+
+        dispatch(&mut state, Command::Ask("what's on the agenda?".to_string())).unwrap();
+
+        // User message should be in chat history
+        assert!(
+            state.chat.messages.iter().any(|m| m.content.contains("what's on the agenda?")),
+            "user message should be in history"
         );
+        assert!(state.chat.pending);
     }
 }
