@@ -146,6 +146,7 @@ mod tests {
             dates_with_notes: std::collections::BTreeSet::new(),
             right_panel_selected: 0,
             right_panel_scroll: 0,
+            doc_anchor_line: 0,
             panel_todos: Vec::new(),
             panel_agenda: Vec::new(),
             chat: crate::app::state::ChatState::default(),

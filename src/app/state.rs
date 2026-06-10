@@ -89,6 +89,7 @@ pub struct AppState {
     pub dates_with_notes: BTreeSet<NaiveDate>,
     pub right_panel_selected: usize,
     pub right_panel_scroll: usize, // scroll offset for todo list — scroll-follow not yet implemented
+    pub doc_anchor_line: usize,
     pub panel_todos: Vec<PanelTodo>,
     pub panel_agenda: Vec<(String, String)>, // (scheduled_time, meeting_name)
     pub chat: ChatState,
@@ -130,6 +131,7 @@ impl AppState {
             dates_with_notes,
             right_panel_selected: 0,
             right_panel_scroll: 0,
+            doc_anchor_line: 0,
             panel_todos,
             panel_agenda,
             chat: ChatState {
@@ -240,6 +242,18 @@ mod tests {
             "expected To-do in display, got: {}",
             s.context_display
         );
+    }
+
+    #[test]
+    fn doc_anchor_line_initializes_to_zero() {
+        let tmp = tempfile::tempdir().unwrap();
+        let state = AppState::open_day(
+            tmp.path().to_path_buf(),
+            Config::default(),
+            NaiveDate::from_ymd_opt(2026, 6, 5).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(state.doc_anchor_line, 0);
     }
 
     #[test]
