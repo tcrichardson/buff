@@ -332,6 +332,8 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         }
         UiAction::SwitchToCapture => {
             state.focus = Focus::Capture;
+            state.doc_anchor_line =
+                crate::app::context::context_heading_line(&state.doc.lines, &state.context);
         }
         UiAction::FocusVimNormal => {
             state.focus = Focus::VimNormal;
@@ -1341,5 +1343,32 @@ mod tests {
         assert_eq!(state.vim.cursor_line, state.doc.lines.len() - 1);
         // Column should reset to 0
         assert_eq!(state.vim.cursor_col, 0);
+    }
+
+    #[test]
+    fn switch_to_capture_sets_anchor_to_context_heading() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        // Set up document with a Notes section not at line 0
+        state.doc.lines = vec![
+            "# Day".to_string(),
+            String::new(),
+            "## Meetings".to_string(),
+            String::new(),
+            "## Notes".to_string(),
+            "a note".to_string(),
+            String::new(),
+            "## To-dos".to_string(),
+        ];
+        state.context = Context::Notes;
+        state.focus = Focus::VimNormal;
+        state.vim.cursor_line = 5; // inside ## Notes
+        state.doc_anchor_line = 5; // synced by vim_update_context
+
+        execute_action(&mut state, UiAction::SwitchToCapture).unwrap();
+
+        assert_eq!(state.focus, Focus::Capture);
+        // Anchor should jump to "## Notes" heading at line 4, not stay at 5
+        assert_eq!(state.doc_anchor_line, 4);
     }
 }
