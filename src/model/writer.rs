@@ -254,6 +254,61 @@ impl Document {
         insert_idx
     }
 
+    /// Append an AI-generated meeting summary at the end of the given meeting's
+    /// section. If a `#### Meeting Summary` block already exists, it is replaced.
+    /// The summary is normalized to ensure it starts with `#### Meeting Summary`.
+    pub fn add_meeting_summary(&mut self, meeting_ordinal: usize, summary: &str) {
+        let meetings = self.meetings();
+        let Some(meeting) = meetings.get(meeting_ordinal) else {
+            return;
+        };
+        let heading_line = meeting.heading_line;
+
+        // Exclusive end index of this meeting's section.
+        let section_end = self.lines[heading_line + 1..]
+            .iter()
+            .position(|line| line.starts_with("### ") || line.starts_with("## "))
+            .map(|i| heading_line + 1 + i)
+            .unwrap_or(self.lines.len());
+
+        // Check if an existing "#### Meeting Summary" is already present.
+        let existing_start = self.lines[heading_line..section_end]
+            .iter()
+            .position(|line| line == "#### Meeting Summary")
+            .map(|i| heading_line + i);
+
+        let summary_lines: Vec<String> = normalize_summary(summary)
+            .lines()
+            .map(|l| l.to_string())
+            .collect();
+
+        if let Some(start) = existing_start {
+            // Replace from the existing heading to the section end.
+            self.lines.splice(start..section_end, summary_lines);
+        } else {
+            // Insert after the last non-blank content line in the section.
+            let mut insert_at = section_end;
+            while insert_at > heading_line + 1
+                && self.lines.get(insert_at - 1).map_or(false, |l| l.trim().is_empty())
+            {
+                insert_at -= 1;
+            }
+
+            let mut to_insert = Vec::new();
+            // Add a blank separator if the preceding line is non-blank.
+            if self
+                .lines
+                .get(insert_at.saturating_sub(1))
+                .map_or(false, |l| !l.trim().is_empty())
+            {
+                to_insert.push(String::new());
+            }
+            to_insert.extend(summary_lines);
+
+            self.lines.splice(insert_at..insert_at, to_insert);
+        }
+    }
+
     pub fn add_entry(&mut self, target: &EntryTarget, text: &str, time: Option<&str>) {
         let block = format_entry(text, time);
         self.add_block(target, &block);
@@ -555,6 +610,15 @@ pub fn set_metadata_field(
     lines.drain(heading_line + 1..meta_end);
     for (i, line) in new_lines.into_iter().enumerate() {
         lines.insert(heading_line + 1 + i, line);
+    }
+}
+
+fn normalize_summary(summary: &str) -> String {
+    let summary = summary.trim();
+    if summary.starts_with("#### Meeting Summary") {
+        summary.to_string()
+    } else {
+        format!("#### Meeting Summary\n{}", summary)
     }
 }
 
@@ -1542,5 +1606,68 @@ mod tests {
         );
         let result = doc.meetings_with_scheduled();
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn add_meeting_summary_appends_at_end_of_meeting_section() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\nmeta:Started: 09:00\n- note one\n- note two\n\n## Notes\n\n## To-dos\n",
+        );
+        doc.add_meeting_summary(0, "#### Meeting Summary\n**Key Decisions:** Ship it");
+        let text = doc.to_text();
+        let note_two_pos = text.find("- note two").unwrap();
+        let summary_pos = text.find("#### Meeting Summary").unwrap();
+        assert!(summary_pos > note_two_pos, "summary should be after notes: {}", text);
+        // Must not bleed into Notes section
+        let notes_pos = text.find("## Notes").unwrap();
+        assert!(summary_pos < notes_pos, "summary must be before ## Notes: {}", text);
+    }
+
+    #[test]
+    fn add_meeting_summary_replaces_existing_summary() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\n- note\n\n#### Meeting Summary\n**Key Decisions:** old\n\n## Notes\n\n## To-dos\n",
+        );
+        doc.add_meeting_summary(0, "#### Meeting Summary\n**Key Decisions:** new");
+        let text = doc.to_text();
+        assert!(text.contains("**Key Decisions:** new"), "new summary missing: {}", text);
+        assert!(!text.contains("**Key Decisions:** old"), "old summary should be gone: {}", text);
+        // Only one #### Meeting Summary heading
+        assert_eq!(text.matches("#### Meeting Summary").count(), 1, "duplicate summary: {}", text);
+    }
+
+    #[test]
+    fn add_meeting_summary_normalizes_missing_heading() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\n- note\n\n## Notes\n\n## To-dos\n",
+        );
+        // AI response without the heading
+        doc.add_meeting_summary(0, "**Key Decisions:** Ship it");
+        let text = doc.to_text();
+        assert!(text.contains("#### Meeting Summary"), "heading should be added: {}", text);
+        assert!(text.contains("**Key Decisions:** Ship it"), "content should be present: {}", text);
+    }
+
+    #[test]
+    fn add_meeting_summary_noop_for_invalid_ordinal() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\n- note\n\n## Notes\n\n## To-dos\n",
+        );
+        let before = doc.to_text();
+        doc.add_meeting_summary(99, "#### Meeting Summary\n**Key Decisions:** x");
+        assert_eq!(doc.to_text(), before, "invalid ordinal should be noop");
+    }
+
+    #[test]
+    fn add_meeting_summary_does_not_bleed_into_next_meeting() {
+        let mut doc = Document::from_text(
+            "# Day\n\n## Meetings\n\n### Standup\n- standup note\n\n### Review\n- review note\n\n## Notes\n\n## To-dos\n",
+        );
+        doc.add_meeting_summary(0, "#### Meeting Summary\n**Key Decisions:** standup decision");
+        let text = doc.to_text();
+        let summary_pos = text.find("#### Meeting Summary").unwrap();
+        let review_pos = text.find("### Review").unwrap();
+        assert!(summary_pos < review_pos, "summary should not pass the Review meeting: {}", text);
+        assert!(text.contains("- review note"), "review notes must be intact: {}", text);
     }
 }
