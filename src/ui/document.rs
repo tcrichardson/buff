@@ -139,12 +139,15 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect, theme: &Th
         })
         .collect();
 
-    // Scroll: follow cursor in vim mode, else 0
+    // Scroll: use doc_anchor_line for both vim and capture modes.
+    // Vim mode: anchor follows cursor; keeps cursor near bottom of viewport.
+    // Capture mode: anchor is context heading or last inserted line; shown near top.
+    let doc_anchor = app.doc_anchor_line;
+    let visible_height = area.height as usize;
     let scroll_offset: usize = if vim_active {
-        let visible_height = area.height as usize;
-        cursor_line.saturating_sub(visible_height.saturating_sub(1))
+        doc_anchor.saturating_sub(visible_height.saturating_sub(1))
     } else {
-        0
+        doc_anchor.saturating_sub(3)
     };
 
     let paragraph = Paragraph::new(Text::from(text_lines)).scroll((scroll_offset as u16, 0));
