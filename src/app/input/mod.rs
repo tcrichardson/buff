@@ -63,12 +63,7 @@ pub enum UiAction {
     // VimNormal actions
     VimNormal(VimNormalAction),
     // VimInsert actions
-    VimInsertChar(char),
-    VimInsertNewline,
-    VimInsertBackspace,
-    VimInsertDeleteWordBefore,
-    VimInsertTab,
-    VimExitInsert,
+    VimInsert(VimInsertAction),
 
     // Right panel
     FocusRightPanel,
@@ -95,6 +90,16 @@ pub enum ChatAction {
     ScrollDown,
     PageUp,
     PageDown,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum VimInsertAction {
+    InsertChar(char),
+    InsertNewline,
+    InsertBackspace,
+    DeleteWordBefore,
+    InsertTab,
+    ExitInsert,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -263,7 +268,7 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
                 }
             }
             Focus::VimNormal => Some(UiAction::SwitchToCapture),
-            Focus::VimInsert => Some(UiAction::VimExitInsert),
+            Focus::VimInsert => Some(UiAction::VimInsert(VimInsertAction::ExitInsert)),
             Focus::RightPanel => Some(UiAction::RightPanelBlur),
             Focus::Chat => Some(UiAction::ChatBlur),
         };
@@ -361,12 +366,7 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         }
 
         UiAction::VimNormal(a) => return vim_normal::execute_action(state, a),
-        UiAction::VimInsertChar(_)
-        | UiAction::VimInsertNewline
-        | UiAction::VimInsertBackspace
-        | UiAction::VimInsertDeleteWordBefore
-        | UiAction::VimInsertTab
-        | UiAction::VimExitInsert => return vim_insert::execute_action(state, action),
+        UiAction::VimInsert(a) => return vim_insert::execute_action(state, a),
 
         // Right panel
         UiAction::FocusRightPanel => {
@@ -1057,7 +1057,7 @@ mod tests {
         state.focus = Focus::VimInsert;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Tab)),
-            Some(UiAction::VimInsertTab)
+            Some(UiAction::VimInsert(VimInsertAction::InsertTab))
         );
     }
 
@@ -1069,7 +1069,7 @@ mod tests {
         state.doc.lines = vec!["hello".to_string()];
         state.vim.cursor_line = 0;
         state.vim.cursor_col = 5;
-        execute_action(&mut state, UiAction::VimInsertTab).unwrap();
+        execute_action(&mut state, UiAction::VimInsert(VimInsertAction::InsertTab)).unwrap();
         assert_eq!(state.doc.lines[0], "hello  ");
         assert_eq!(state.vim.cursor_col, 7);
     }
@@ -1081,7 +1081,7 @@ mod tests {
         state.focus = Focus::VimInsert;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Esc)),
-            Some(UiAction::VimExitInsert)
+            Some(UiAction::VimInsert(VimInsertAction::ExitInsert))
         );
     }
 
@@ -1092,7 +1092,7 @@ mod tests {
         state.focus = Focus::VimInsert;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Char('a'))),
-            Some(UiAction::VimInsertChar('a'))
+            Some(UiAction::VimInsert(VimInsertAction::InsertChar('a')))
         );
     }
 
@@ -1203,7 +1203,7 @@ mod tests {
         state.doc.lines = vec!["hello".to_string()];
         state.vim.cursor_line = 0;
         state.vim.cursor_col = 5; // end of "hello"
-        execute_action(&mut state, UiAction::VimInsertChar('!')).unwrap();
+        execute_action(&mut state, UiAction::VimInsert(VimInsertAction::InsertChar('!'))).unwrap();
         assert_eq!(state.doc.lines[0], "hello!");
         assert_eq!(state.vim.cursor_col, 6);
     }
@@ -1216,7 +1216,7 @@ mod tests {
         state.doc.lines = vec!["hello world".to_string()];
         state.vim.cursor_line = 0;
         state.vim.cursor_col = 5; // between "hello" and " world"
-        execute_action(&mut state, UiAction::VimInsertNewline).unwrap();
+        execute_action(&mut state, UiAction::VimInsert(VimInsertAction::InsertNewline)).unwrap();
         assert_eq!(state.doc.lines[0], "hello");
         assert_eq!(state.doc.lines[1], " world");
         assert_eq!(state.vim.cursor_line, 1);
@@ -1231,7 +1231,7 @@ mod tests {
         state.doc.lines = vec!["hello".to_string()];
         state.vim.cursor_line = 0;
         state.vim.cursor_col = 3; // after "hel"
-        execute_action(&mut state, UiAction::VimInsertBackspace).unwrap();
+        execute_action(&mut state, UiAction::VimInsert(VimInsertAction::InsertBackspace)).unwrap();
         assert_eq!(state.doc.lines[0], "helo");
         assert_eq!(state.vim.cursor_col, 2);
     }
@@ -1244,7 +1244,7 @@ mod tests {
         state.doc.lines = vec!["first".to_string(), "second".to_string()];
         state.vim.cursor_line = 1;
         state.vim.cursor_col = 0;
-        execute_action(&mut state, UiAction::VimInsertBackspace).unwrap();
+        execute_action(&mut state, UiAction::VimInsert(VimInsertAction::InsertBackspace)).unwrap();
         assert_eq!(state.doc.lines.len(), 1);
         assert_eq!(state.doc.lines[0], "firstsecond");
         assert_eq!(state.vim.cursor_line, 0);
@@ -1298,7 +1298,7 @@ mod tests {
         // Simulate entering insert and making a change
         execute_action(&mut state, UiAction::VimNormal(VimNormalAction::EnterInsert)).unwrap(); // pushes snapshot
         state.doc.lines[0] = "modified".to_string();
-        execute_action(&mut state, UiAction::VimExitInsert).unwrap();
+        execute_action(&mut state, UiAction::VimInsert(VimInsertAction::ExitInsert)).unwrap();
         // Now undo
         execute_action(&mut state, UiAction::VimNormal(VimNormalAction::Undo)).unwrap();
         assert_eq!(state.doc.lines[0], "original");

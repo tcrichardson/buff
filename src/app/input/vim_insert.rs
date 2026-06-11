@@ -1,39 +1,38 @@
 use crate::app::state::{AppState, Focus};
-use crate::app::input::{EventOutcome, UiAction, VimNormalAction};
+use crate::app::input::{EventOutcome, UiAction, VimInsertAction, VimNormalAction};
 use anyhow::Result;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub(super) fn key_to_action(_state: &AppState, key: KeyEvent) -> Option<UiAction> {
     match key.code {
-        KeyCode::Esc       => Some(UiAction::VimExitInsert),
-        KeyCode::Enter     => Some(UiAction::VimInsertNewline),
-        KeyCode::Backspace => Some(UiAction::VimInsertBackspace),
-        KeyCode::Tab       => Some(UiAction::VimInsertTab),
+        KeyCode::Esc       => Some(UiAction::VimInsert(VimInsertAction::ExitInsert)),
+        KeyCode::Enter     => Some(UiAction::VimInsert(VimInsertAction::InsertNewline)),
+        KeyCode::Backspace => Some(UiAction::VimInsert(VimInsertAction::InsertBackspace)),
+        KeyCode::Tab       => Some(UiAction::VimInsert(VimInsertAction::InsertTab)),
         KeyCode::Left      => Some(UiAction::VimNormal(VimNormalAction::MoveLeft)),
         KeyCode::Right     => Some(UiAction::VimNormal(VimNormalAction::MoveRight)),
         KeyCode::Up        => Some(UiAction::VimNormal(VimNormalAction::MoveUp)),
         KeyCode::Down      => Some(UiAction::VimNormal(VimNormalAction::MoveDown)),
         KeyCode::Char('w') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            Some(UiAction::VimInsertDeleteWordBefore)
+            Some(UiAction::VimInsert(VimInsertAction::DeleteWordBefore))
         }
         KeyCode::Char(c)
             if !key.modifiers.contains(KeyModifiers::CONTROL) && !c.is_control() =>
         {
-            Some(UiAction::VimInsertChar(c))
+            Some(UiAction::VimInsert(VimInsertAction::InsertChar(c)))
         }
         _ => None,
     }
 }
 
-pub(super) fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOutcome> {
+pub(super) fn execute_action(state: &mut AppState, action: VimInsertAction) -> Result<EventOutcome> {
     match action {
-        UiAction::VimExitInsert             => exit_insert(state),
-        UiAction::VimInsertChar(c)          => insert_char(state, c),
-        UiAction::VimInsertNewline          => insert_newline(state),
-        UiAction::VimInsertBackspace        => insert_backspace(state),
-        UiAction::VimInsertDeleteWordBefore => delete_word_before(state),
-        UiAction::VimInsertTab             => insert_tab(state),
-        _ => unreachable!("vim_insert::execute_action called with non-vim-insert action: {:?}", action),
+        VimInsertAction::ExitInsert       => exit_insert(state),
+        VimInsertAction::InsertChar(c)    => insert_char(state, c),
+        VimInsertAction::InsertNewline    => insert_newline(state),
+        VimInsertAction::InsertBackspace  => insert_backspace(state),
+        VimInsertAction::DeleteWordBefore => delete_word_before(state),
+        VimInsertAction::InsertTab        => insert_tab(state),
     }
     Ok(EventOutcome::Continue)
 }
