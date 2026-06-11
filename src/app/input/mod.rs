@@ -106,10 +106,15 @@ pub enum UiAction {
     ToggleChat,
     FocusChat,
     ChatBlur,
-    ChatScrollUp,
-    ChatScrollDown,
-    ChatPageUp,
-    ChatPageDown,
+    Chat(ChatAction),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ChatAction {
+    ScrollUp,
+    ScrollDown,
+    PageUp,
+    PageDown,
 }
 
 /// Step back one Unicode scalar from `pos`. Returns 0 if already at start.
@@ -403,10 +408,7 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         UiAction::ChatBlur => {
             state.focus = Focus::Capture;
         }
-        UiAction::ChatScrollUp
-        | UiAction::ChatScrollDown
-        | UiAction::ChatPageUp
-        | UiAction::ChatPageDown => return chat::execute_action(state, action),
+        UiAction::Chat(a) => return chat::execute_action(state, a),
     }
 
     if state.should_quit {
@@ -837,8 +839,8 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::Chat;
-        assert_eq!(key_to_action(&state, make_key(KeyCode::Char('k'))), Some(UiAction::ChatScrollUp));
-        assert_eq!(key_to_action(&state, make_key(KeyCode::Char('j'))), Some(UiAction::ChatScrollDown));
+        assert_eq!(key_to_action(&state, make_key(KeyCode::Char('k'))), Some(UiAction::Chat(ChatAction::ScrollUp)));
+        assert_eq!(key_to_action(&state, make_key(KeyCode::Char('j'))), Some(UiAction::Chat(ChatAction::ScrollDown)));
     }
 
     #[test]
@@ -846,7 +848,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.chat.scroll = 0;
-        execute_action(&mut state, UiAction::ChatScrollDown).unwrap();
+        execute_action(&mut state, UiAction::Chat(ChatAction::ScrollDown)).unwrap();
         assert_eq!(state.chat.scroll, 0);
     }
 
@@ -855,7 +857,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.chat.scroll = 0;
-        execute_action(&mut state, UiAction::ChatScrollUp).unwrap();
+        execute_action(&mut state, UiAction::Chat(ChatAction::ScrollUp)).unwrap();
         assert_eq!(state.chat.scroll, 1);
     }
 
