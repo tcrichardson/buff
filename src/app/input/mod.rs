@@ -97,9 +97,7 @@ pub enum UiAction {
 
     // Right panel
     FocusRightPanel,
-    RightPanelUp,
-    RightPanelDown,
-    RightPanelToggle,
+    RightPanel(RightPanelAction),
     RightPanelBlur,
 
     // Chat panel
@@ -107,6 +105,13 @@ pub enum UiAction {
     FocusChat,
     ChatBlur,
     Chat(ChatAction),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum RightPanelAction {
+    Up,
+    Down,
+    Toggle,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -391,9 +396,7 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
         UiAction::RightPanelBlur => {
             state.focus = Focus::Capture;
         }
-        UiAction::RightPanelUp
-        | UiAction::RightPanelDown
-        | UiAction::RightPanelToggle => return right_panel::execute_action(state, action),
+        UiAction::RightPanel(a) => return right_panel::execute_action(state, a),
 
         // Chat panel
         UiAction::ToggleChat => {
