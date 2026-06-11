@@ -1,5 +1,5 @@
 use crate::app::state::{AppState, Focus, UndoEntry};
-use crate::app::input::{EventOutcome, UiAction};
+use crate::app::input::{EventOutcome, UiAction, VimNormalAction};
 use anyhow::Result;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -9,73 +9,72 @@ pub(super) fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction>
     }
     if let Some(op) = state.vim.pending_op {
         return match (op, &key.code) {
-            ('d', KeyCode::Char('d')) => Some(UiAction::VimDeleteLine),
-            ('y', KeyCode::Char('y')) => Some(UiAction::VimYankLine),
-            ('g', KeyCode::Char('g')) => Some(UiAction::VimMoveFileStart),
-            _ => Some(UiAction::VimClearPendingOp),
+            ('d', KeyCode::Char('d')) => Some(UiAction::VimNormal(VimNormalAction::DeleteLine)),
+            ('y', KeyCode::Char('y')) => Some(UiAction::VimNormal(VimNormalAction::YankLine)),
+            ('g', KeyCode::Char('g')) => Some(UiAction::VimNormal(VimNormalAction::MoveFileStart)),
+            _ => Some(UiAction::VimNormal(VimNormalAction::ClearPendingOp)),
         };
     }
     match key.code {
-        KeyCode::Char('h') | KeyCode::Left  => Some(UiAction::VimMoveLeft),
-        KeyCode::Char('l') | KeyCode::Right => Some(UiAction::VimMoveRight),
-        KeyCode::Char('j') | KeyCode::Down  => Some(UiAction::VimMoveDown),
-        KeyCode::Char('k') | KeyCode::Up    => Some(UiAction::VimMoveUp),
-        KeyCode::Char('w') => Some(UiAction::VimMoveWordForward),
-        KeyCode::Char('b') => Some(UiAction::VimMoveWordBackward),
-        KeyCode::Char('e') => Some(UiAction::VimMoveWordEnd),
-        KeyCode::Char('0') => Some(UiAction::VimMoveLineStart),
-        KeyCode::Char('$') => Some(UiAction::VimMoveLineEnd),
-        KeyCode::Char('G') => Some(UiAction::VimMoveFileEnd),
-        KeyCode::Char('i') => Some(UiAction::VimEnterInsert),
-        KeyCode::Char('a') => Some(UiAction::VimEnterInsertAfter),
-        KeyCode::Char('A') => Some(UiAction::VimEnterInsertEOL),
-        KeyCode::Char('o') => Some(UiAction::VimInsertLineBelow),
-        KeyCode::Char('O') => Some(UiAction::VimInsertLineAbove),
-        KeyCode::Char('x') => Some(UiAction::VimDeleteChar),
-        KeyCode::Char('d') => Some(UiAction::VimSetPendingOp('d')),
-        KeyCode::Char('y') => Some(UiAction::VimSetPendingOp('y')),
-        KeyCode::Char('g') => Some(UiAction::VimSetPendingOp('g')),
-        KeyCode::Char('p') => Some(UiAction::VimPasteBelow),
-        KeyCode::Char('P') => Some(UiAction::VimPasteAbove),
-        KeyCode::Char('u') => Some(UiAction::VimUndo),
-        KeyCode::Char('t') => Some(UiAction::VimToggleTodo),
-        KeyCode::Char('?') => Some(UiAction::OpenHelp),
-        KeyCode::Tab       => Some(UiAction::SwitchToCapture),
-        KeyCode::Enter     => Some(UiAction::VimBeginEditLine),
+        KeyCode::Char('h') | KeyCode::Left  => Some(UiAction::VimNormal(VimNormalAction::MoveLeft)),
+        KeyCode::Char('l') | KeyCode::Right => Some(UiAction::VimNormal(VimNormalAction::MoveRight)),
+        KeyCode::Char('j') | KeyCode::Down  => Some(UiAction::VimNormal(VimNormalAction::MoveDown)),
+        KeyCode::Char('k') | KeyCode::Up    => Some(UiAction::VimNormal(VimNormalAction::MoveUp)),
+        KeyCode::Char('w') => Some(UiAction::VimNormal(VimNormalAction::MoveWordForward)),
+        KeyCode::Char('b') => Some(UiAction::VimNormal(VimNormalAction::MoveWordBackward)),
+        KeyCode::Char('e') => Some(UiAction::VimNormal(VimNormalAction::MoveWordEnd)),
+        KeyCode::Char('0') => Some(UiAction::VimNormal(VimNormalAction::MoveLineStart)),
+        KeyCode::Char('$') => Some(UiAction::VimNormal(VimNormalAction::MoveLineEnd)),
+        KeyCode::Char('G') => Some(UiAction::VimNormal(VimNormalAction::MoveFileEnd)),
+        KeyCode::Char('i') => Some(UiAction::VimNormal(VimNormalAction::EnterInsert)),
+        KeyCode::Char('a') => Some(UiAction::VimNormal(VimNormalAction::EnterInsertAfter)),
+        KeyCode::Char('A') => Some(UiAction::VimNormal(VimNormalAction::EnterInsertEOL)),
+        KeyCode::Char('o') => Some(UiAction::VimNormal(VimNormalAction::InsertLineBelow)),
+        KeyCode::Char('O') => Some(UiAction::VimNormal(VimNormalAction::InsertLineAbove)),
+        KeyCode::Char('x') => Some(UiAction::VimNormal(VimNormalAction::DeleteChar)),
+        KeyCode::Char('d') => Some(UiAction::VimNormal(VimNormalAction::SetPendingOp('d'))),
+        KeyCode::Char('y') => Some(UiAction::VimNormal(VimNormalAction::SetPendingOp('y'))),
+        KeyCode::Char('g') => Some(UiAction::VimNormal(VimNormalAction::SetPendingOp('g'))),
+        KeyCode::Char('p') => Some(UiAction::VimNormal(VimNormalAction::PasteBelow)),
+        KeyCode::Char('P') => Some(UiAction::VimNormal(VimNormalAction::PasteAbove)),
+        KeyCode::Char('u') => Some(UiAction::VimNormal(VimNormalAction::Undo)),
+        KeyCode::Char('t') => Some(UiAction::VimNormal(VimNormalAction::ToggleTodo)),
+        KeyCode::Char('?') => Some(UiAction::OpenHelp),     // stays flat until Task 6
+        KeyCode::Tab       => Some(UiAction::SwitchToCapture), // stays flat until Task 6
+        KeyCode::Enter     => Some(UiAction::VimNormal(VimNormalAction::BeginEditLine)),
         KeyCode::Esc       => None,
         _ => None,
     }
 }
 
-pub(super) fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOutcome> {
+pub(super) fn execute_action(state: &mut AppState, action: VimNormalAction) -> Result<EventOutcome> {
     match action {
-        UiAction::VimMoveLeft         => move_left(state),
-        UiAction::VimMoveRight        => move_right(state),
-        UiAction::VimMoveDown         => move_down(state),
-        UiAction::VimMoveUp           => move_up(state),
-        UiAction::VimMoveLineStart    => move_line_start(state),
-        UiAction::VimMoveLineEnd      => move_line_end(state),
-        UiAction::VimMoveFileStart    => move_file_start(state),
-        UiAction::VimMoveFileEnd      => move_file_end(state),
-        UiAction::VimMoveWordForward  => move_word_forward(state),
-        UiAction::VimMoveWordBackward => move_word_backward(state),
-        UiAction::VimMoveWordEnd      => move_word_end(state),
-        UiAction::VimSetPendingOp(op) => { state.vim.pending_op = Some(op); }
-        UiAction::VimClearPendingOp   => { state.vim.pending_op = None; }
-        UiAction::VimEnterInsert      => enter_insert(state),
-        UiAction::VimEnterInsertAfter => enter_insert_after(state),
-        UiAction::VimEnterInsertEOL   => enter_insert_eol(state),
-        UiAction::VimInsertLineBelow  => insert_line_below(state),
-        UiAction::VimInsertLineAbove  => insert_line_above(state),
-        UiAction::VimDeleteChar       => delete_char(state),
-        UiAction::VimDeleteLine       => delete_line(state),
-        UiAction::VimYankLine         => yank_line(state),
-        UiAction::VimPasteBelow       => paste_below(state),
-        UiAction::VimPasteAbove       => paste_above(state),
-        UiAction::VimUndo             => undo(state),
-        UiAction::VimToggleTodo       => toggle_todo(state),
-        UiAction::VimBeginEditLine    => { crate::app::actions::vim_begin_edit_line(state)?; }
-        _ => unreachable!("vim_normal::execute_action called with non-vim-normal action: {:?}", action),
+        VimNormalAction::MoveLeft         => move_left(state),
+        VimNormalAction::MoveRight        => move_right(state),
+        VimNormalAction::MoveDown         => move_down(state),
+        VimNormalAction::MoveUp           => move_up(state),
+        VimNormalAction::MoveLineStart    => move_line_start(state),
+        VimNormalAction::MoveLineEnd      => move_line_end(state),
+        VimNormalAction::MoveFileStart    => move_file_start(state),
+        VimNormalAction::MoveFileEnd      => move_file_end(state),
+        VimNormalAction::MoveWordForward  => move_word_forward(state),
+        VimNormalAction::MoveWordBackward => move_word_backward(state),
+        VimNormalAction::MoveWordEnd      => move_word_end(state),
+        VimNormalAction::SetPendingOp(op) => { state.vim.pending_op = Some(op); }
+        VimNormalAction::ClearPendingOp   => { state.vim.pending_op = None; }
+        VimNormalAction::EnterInsert      => enter_insert(state),
+        VimNormalAction::EnterInsertAfter => enter_insert_after(state),
+        VimNormalAction::EnterInsertEOL   => enter_insert_eol(state),
+        VimNormalAction::InsertLineBelow  => insert_line_below(state),
+        VimNormalAction::InsertLineAbove  => insert_line_above(state),
+        VimNormalAction::DeleteChar       => delete_char(state),
+        VimNormalAction::DeleteLine       => delete_line(state),
+        VimNormalAction::YankLine         => yank_line(state),
+        VimNormalAction::PasteBelow       => paste_below(state),
+        VimNormalAction::PasteAbove       => paste_above(state),
+        VimNormalAction::Undo             => undo(state),
+        VimNormalAction::ToggleTodo       => toggle_todo(state),
+        VimNormalAction::BeginEditLine    => { crate::app::actions::vim_begin_edit_line(state)?; }
     }
     Ok(EventOutcome::Continue)
 }

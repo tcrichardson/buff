@@ -61,32 +61,7 @@ pub enum UiAction {
     FocusVimNormal,
 
     // VimNormal actions
-    VimMoveLeft,
-    VimMoveRight,
-    VimMoveUp,
-    VimMoveDown,
-    VimMoveWordForward,
-    VimMoveWordBackward,
-    VimMoveWordEnd,
-    VimMoveLineStart,
-    VimMoveLineEnd,
-    VimMoveFileStart,
-    VimMoveFileEnd,
-    VimSetPendingOp(char),
-    VimClearPendingOp,
-    VimEnterInsert,
-    VimEnterInsertAfter,
-    VimEnterInsertEOL,
-    VimInsertLineBelow,
-    VimInsertLineAbove,
-    VimDeleteChar,
-    VimDeleteLine,
-    VimYankLine,
-    VimPasteBelow,
-    VimPasteAbove,
-    VimUndo,
-    VimToggleTodo,
-    VimBeginEditLine,
+    VimNormal(VimNormalAction),
     // VimInsert actions
     VimInsertChar(char),
     VimInsertNewline,
@@ -120,6 +95,36 @@ pub enum ChatAction {
     ScrollDown,
     PageUp,
     PageDown,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum VimNormalAction {
+    MoveLeft,
+    MoveRight,
+    MoveUp,
+    MoveDown,
+    MoveWordForward,
+    MoveWordBackward,
+    MoveWordEnd,
+    MoveLineStart,
+    MoveLineEnd,
+    MoveFileStart,
+    MoveFileEnd,
+    SetPendingOp(char),
+    ClearPendingOp,
+    EnterInsert,
+    EnterInsertAfter,
+    EnterInsertEOL,
+    InsertLineBelow,
+    InsertLineAbove,
+    DeleteChar,
+    DeleteLine,
+    YankLine,
+    PasteBelow,
+    PasteAbove,
+    Undo,
+    ToggleTodo,
+    BeginEditLine,
 }
 
 /// Step back one Unicode scalar from `pos`. Returns 0 if already at start.
@@ -355,32 +360,7 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
             state.focus = Focus::VimNormal;
         }
 
-        UiAction::VimMoveLeft
-        | UiAction::VimMoveRight
-        | UiAction::VimMoveUp
-        | UiAction::VimMoveDown
-        | UiAction::VimMoveLineStart
-        | UiAction::VimMoveLineEnd
-        | UiAction::VimMoveFileStart
-        | UiAction::VimMoveFileEnd
-        | UiAction::VimMoveWordForward
-        | UiAction::VimMoveWordBackward
-        | UiAction::VimMoveWordEnd
-        | UiAction::VimSetPendingOp(_)
-        | UiAction::VimClearPendingOp
-        | UiAction::VimEnterInsert
-        | UiAction::VimEnterInsertAfter
-        | UiAction::VimEnterInsertEOL
-        | UiAction::VimInsertLineBelow
-        | UiAction::VimInsertLineAbove
-        | UiAction::VimDeleteChar
-        | UiAction::VimDeleteLine
-        | UiAction::VimYankLine
-        | UiAction::VimPasteBelow
-        | UiAction::VimPasteAbove
-        | UiAction::VimUndo
-        | UiAction::VimToggleTodo
-        | UiAction::VimBeginEditLine => return vim_normal::execute_action(state, action),
+        UiAction::VimNormal(a) => return vim_normal::execute_action(state, a),
         UiAction::VimInsertChar(_)
         | UiAction::VimInsertNewline
         | UiAction::VimInsertBackspace
@@ -471,7 +451,7 @@ mod tests {
         state.focus = Focus::VimNormal;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Char('j'))),
-            Some(UiAction::VimMoveDown)
+            Some(UiAction::VimNormal(VimNormalAction::MoveDown))
         );
     }
 
@@ -482,7 +462,7 @@ mod tests {
         state.focus = Focus::VimNormal;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Down)),
-            Some(UiAction::VimMoveDown)
+            Some(UiAction::VimNormal(VimNormalAction::MoveDown))
         );
     }
 
@@ -493,7 +473,7 @@ mod tests {
         state.focus = Focus::VimNormal;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Enter)),
-            Some(UiAction::VimBeginEditLine)
+            Some(UiAction::VimNormal(VimNormalAction::BeginEditLine))
         );
     }
 
@@ -1019,7 +999,7 @@ mod tests {
         state.focus = Focus::VimNormal;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Char('h'))),
-            Some(UiAction::VimMoveLeft)
+            Some(UiAction::VimNormal(VimNormalAction::MoveLeft))
         );
     }
 
@@ -1030,7 +1010,7 @@ mod tests {
         state.focus = Focus::VimNormal;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Left)),
-            Some(UiAction::VimMoveLeft)
+            Some(UiAction::VimNormal(VimNormalAction::MoveLeft))
         );
     }
 
@@ -1042,7 +1022,7 @@ mod tests {
         state.vim.pending_op = Some('d');
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Char('d'))),
-            Some(UiAction::VimDeleteLine)
+            Some(UiAction::VimNormal(VimNormalAction::DeleteLine))
         );
     }
 
@@ -1054,7 +1034,7 @@ mod tests {
         state.vim.pending_op = Some('g');
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Char('g'))),
-            Some(UiAction::VimMoveFileStart)
+            Some(UiAction::VimNormal(VimNormalAction::MoveFileStart))
         );
     }
 
@@ -1066,7 +1046,7 @@ mod tests {
         state.vim.pending_op = Some('d');
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Char('x'))),
-            Some(UiAction::VimClearPendingOp)
+            Some(UiAction::VimNormal(VimNormalAction::ClearPendingOp))
         );
     }
 
@@ -1123,7 +1103,7 @@ mod tests {
         state.focus = Focus::VimInsert;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Right)),
-            Some(UiAction::VimMoveRight)
+            Some(UiAction::VimNormal(VimNormalAction::MoveRight))
         );
     }
 
@@ -1135,7 +1115,7 @@ mod tests {
         state.doc.lines = vec!["hello".to_string()];
         state.vim.cursor_line = 0;
         state.vim.cursor_col = 0;
-        execute_action(&mut state, UiAction::VimMoveRight).unwrap();
+        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::MoveRight)).unwrap();
         assert_eq!(state.vim.cursor_col, 1);
     }
 
@@ -1147,7 +1127,7 @@ mod tests {
         state.doc.lines = vec!["hi".to_string()];
         state.vim.cursor_line = 0;
         state.vim.cursor_col = 1; // on 'i', last char
-        execute_action(&mut state, UiAction::VimMoveRight).unwrap();
+        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::MoveRight)).unwrap();
         assert_eq!(state.vim.cursor_col, 1, "cursor should not move past last char");
     }
 
@@ -1158,7 +1138,7 @@ mod tests {
         state.focus = Focus::VimNormal;
         state.doc.lines = vec!["line 0".to_string(), "line 1".to_string()];
         state.vim.cursor_line = 0;
-        execute_action(&mut state, UiAction::VimMoveDown).unwrap();
+        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::MoveDown)).unwrap();
         assert_eq!(state.vim.cursor_line, 1);
     }
 
@@ -1169,7 +1149,7 @@ mod tests {
         state.focus = Focus::VimNormal;
         state.doc.lines = vec!["line 0".to_string()];
         state.vim.cursor_line = 0;
-        execute_action(&mut state, UiAction::VimMoveUp).unwrap();
+        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::MoveUp)).unwrap();
         assert_eq!(state.vim.cursor_line, 0);
     }
 
@@ -1179,7 +1159,7 @@ mod tests {
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
         state.doc.lines = vec!["a".to_string(), "b".to_string(), "c".to_string()];
-        execute_action(&mut state, UiAction::VimMoveFileEnd).unwrap();
+        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::MoveFileEnd)).unwrap();
         assert_eq!(state.vim.cursor_line, 2);
     }
 
@@ -1189,7 +1169,7 @@ mod tests {
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
         state.doc.lines = vec!["hello".to_string()];
-        execute_action(&mut state, UiAction::VimEnterInsert).unwrap();
+        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::EnterInsert)).unwrap();
         assert_eq!(state.focus, Focus::VimInsert);
     }
 
@@ -1200,7 +1180,7 @@ mod tests {
         state.focus = Focus::VimNormal;
         state.doc.lines = vec!["hello".to_string()];
         assert!(state.vim.undo_stack.is_empty());
-        execute_action(&mut state, UiAction::VimEnterInsert).unwrap();
+        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::EnterInsert)).unwrap();
         assert_eq!(state.vim.undo_stack.len(), 1);
     }
 
@@ -1209,9 +1189,9 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
-        execute_action(&mut state, UiAction::VimSetPendingOp('d')).unwrap();
+        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::SetPendingOp('d'))).unwrap();
         assert_eq!(state.vim.pending_op, Some('d'));
-        execute_action(&mut state, UiAction::VimClearPendingOp).unwrap();
+        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::ClearPendingOp)).unwrap();
         assert!(state.vim.pending_op.is_none());
     }
 
@@ -1278,7 +1258,7 @@ mod tests {
         state.focus = Focus::VimNormal;
         state.doc.lines = vec!["keep".to_string(), "delete me".to_string(), "keep2".to_string()];
         state.vim.cursor_line = 1;
-        execute_action(&mut state, UiAction::VimDeleteLine).unwrap();
+        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::DeleteLine)).unwrap();
         assert_eq!(state.doc.lines.len(), 2);
         assert_eq!(state.doc.lines[0], "keep");
         assert_eq!(state.vim.yank_buffer, vec!["delete me".to_string()]);
@@ -1291,7 +1271,7 @@ mod tests {
         state.focus = Focus::VimNormal;
         state.doc.lines = vec!["yanked".to_string()];
         state.vim.cursor_line = 0;
-        execute_action(&mut state, UiAction::VimYankLine).unwrap();
+        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::YankLine)).unwrap();
         assert_eq!(state.doc.lines.len(), 1, "line should still be there");
         assert_eq!(state.vim.yank_buffer, vec!["yanked".to_string()]);
     }
@@ -1304,7 +1284,7 @@ mod tests {
         state.doc.lines = vec!["line 0".to_string(), "line 2".to_string()];
         state.vim.yank_buffer = vec!["line 1".to_string()];
         state.vim.cursor_line = 0;
-        execute_action(&mut state, UiAction::VimPasteBelow).unwrap();
+        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::PasteBelow)).unwrap();
         assert_eq!(state.doc.lines[1], "line 1");
         assert_eq!(state.vim.cursor_line, 1);
     }
@@ -1316,11 +1296,11 @@ mod tests {
         state.focus = Focus::VimNormal;
         state.doc.lines = vec!["original".to_string()];
         // Simulate entering insert and making a change
-        execute_action(&mut state, UiAction::VimEnterInsert).unwrap(); // pushes snapshot
+        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::EnterInsert)).unwrap(); // pushes snapshot
         state.doc.lines[0] = "modified".to_string();
         execute_action(&mut state, UiAction::VimExitInsert).unwrap();
         // Now undo
-        execute_action(&mut state, UiAction::VimUndo).unwrap();
+        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::Undo)).unwrap();
         assert_eq!(state.doc.lines[0], "original");
     }
 
@@ -1337,7 +1317,7 @@ mod tests {
             "- [ ] a task".to_string(),
         ];
         state.vim.cursor_line = 4;
-        execute_action(&mut state, UiAction::VimToggleTodo).unwrap();
+        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::ToggleTodo)).unwrap();
         assert_eq!(state.doc.lines[4], "- [x] a task");
     }
 
@@ -1359,8 +1339,8 @@ mod tests {
         state.vim.cursor_line = 3;
         assert!(matches!(state.context, Context::Notes));
         // Move down through empty line into To-dos
-        execute_action(&mut state, UiAction::VimMoveDown).unwrap();
-        execute_action(&mut state, UiAction::VimMoveDown).unwrap();
+        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::MoveDown)).unwrap();
+        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::MoveDown)).unwrap();
         assert_eq!(state.vim.cursor_line, 5);
         assert!(matches!(state.context, Context::Todos));
     }

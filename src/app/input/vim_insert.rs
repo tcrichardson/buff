@@ -1,5 +1,5 @@
 use crate::app::state::{AppState, Focus};
-use crate::app::input::{EventOutcome, UiAction};
+use crate::app::input::{EventOutcome, UiAction, VimNormalAction};
 use anyhow::Result;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -9,10 +9,10 @@ pub(super) fn key_to_action(_state: &AppState, key: KeyEvent) -> Option<UiAction
         KeyCode::Enter     => Some(UiAction::VimInsertNewline),
         KeyCode::Backspace => Some(UiAction::VimInsertBackspace),
         KeyCode::Tab       => Some(UiAction::VimInsertTab),
-        KeyCode::Left      => Some(UiAction::VimMoveLeft),
-        KeyCode::Right     => Some(UiAction::VimMoveRight),
-        KeyCode::Up        => Some(UiAction::VimMoveUp),
-        KeyCode::Down      => Some(UiAction::VimMoveDown),
+        KeyCode::Left      => Some(UiAction::VimNormal(VimNormalAction::MoveLeft)),
+        KeyCode::Right     => Some(UiAction::VimNormal(VimNormalAction::MoveRight)),
+        KeyCode::Up        => Some(UiAction::VimNormal(VimNormalAction::MoveUp)),
+        KeyCode::Down      => Some(UiAction::VimNormal(VimNormalAction::MoveDown)),
         KeyCode::Char('w') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             Some(UiAction::VimInsertDeleteWordBefore)
         }
