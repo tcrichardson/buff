@@ -278,6 +278,7 @@ fn fire_meeting_llm_call(
         model: state.config.llm_model.clone(),
         system: Some(MEETING_ASSISTANT_SYSTEM_PROMPT.to_string()),
         messages: request_messages,
+        api_key: state.config.llm_api_key.clone(),
     };
     crate::app::llm::spawn(req, tx);
     Ok(())
@@ -397,6 +398,7 @@ fn handle_ask(state: &mut AppState, text: &str) -> anyhow::Result<()> {
             model: state.config.llm_model.clone(),
             system: Some(MEETING_ASSISTANT_SYSTEM_PROMPT.to_string()),
             messages: request_messages,
+            api_key: state.config.llm_api_key.clone(),
         };
         crate::app::llm::spawn(req, tx);
         return Ok(());
@@ -422,6 +424,7 @@ fn handle_ask(state: &mut AppState, text: &str) -> anyhow::Result<()> {
         model: state.config.llm_model.clone(),
         system,
         messages: request_messages,
+        api_key: state.config.llm_api_key.clone(),
     };
     crate::app::llm::spawn(req, tx);
     Ok(())

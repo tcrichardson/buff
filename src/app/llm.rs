@@ -38,6 +38,7 @@ pub struct ChatRequest {
     pub model: String,
     pub system: Option<String>,
     pub messages: Vec<ChatMessage>,
+    pub api_key: Option<String>,
 }
 
 /// Result of parsing one line of an SSE stream.
@@ -100,7 +101,11 @@ pub fn spawn(req: ChatRequest, tx: Sender<LlmEvent>) {
         let url = format!("{}/chat/completions", req.base_url.trim_end_matches('/'));
         let body = build_body(&req);
 
-        let resp = match ureq::post(&url).send_json(body) {
+        let mut request = ureq::post(&url);
+        if let Some(key) = &req.api_key {
+            request = request.set("Authorization", &format!("Bearer {}", key));
+        }
+        let resp = match request.send_json(body) {
             Ok(resp) => resp,
             Err(ureq::Error::Status(code, _)) => {
                 let _ = tx.send(LlmEvent::Error {
@@ -196,6 +201,7 @@ mod tests {
             model: "m".to_string(),
             system: Some("sys".to_string()),
             messages: vec![ChatMessage { role: ChatRole::User, content: "hi".to_string() }],
+            api_key: None,
         };
         let body = super::build_body(&req);
         assert_eq!(body["model"], "m");
@@ -214,8 +220,24 @@ mod tests {
             model: "m".to_string(),
             system: Some(String::new()),
             messages: vec![ChatMessage { role: ChatRole::User, content: "hi".to_string() }],
+            api_key: None,
         };
         let body = super::build_body(&req);
         assert_eq!(body["messages"][0]["role"], "user");
+    }
+
+    #[test]
+    fn build_body_does_not_include_api_key() {
+        let req = ChatRequest {
+            id: 1,
+            base_url: "http://x/v1".to_string(),
+            model: "m".to_string(),
+            system: None,
+            messages: vec![ChatMessage { role: ChatRole::User, content: "hi".to_string() }],
+            api_key: Some("sk-secret".to_string()),
+        };
+        let body = super::build_body(&req);
+        let json = body.to_string();
+        assert!(!json.contains("sk-secret"), "API key must not appear in request body");
     }
 }

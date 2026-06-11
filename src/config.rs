@@ -54,6 +54,7 @@ pub struct Config {
     pub llm_base_url: String,
     pub llm_model: String,
     pub llm_system_prompt: String,
+    pub llm_api_key: Option<String>,
     pub chat_visible: bool,
     pub theme: String,
     pub theme_overrides: ThemeOverrides,
@@ -72,6 +73,7 @@ impl Default for Config {
             llm_base_url: "http://localhost:1234/v1".to_string(),
             llm_model: "google/gemma-4-12b-qat".to_string(),
             llm_system_prompt: String::new(),
+            llm_api_key: None,
             chat_visible: true,
             theme: "light".to_string(),
             theme_overrides: ThemeOverrides::default(),
@@ -337,6 +339,26 @@ mod tests {
     fn config_path_uses_xdg_location() {
         let path = config_path();
         assert!(path.to_string_lossy().contains(".config/buff/config.toml"));
+    }
+
+    #[test]
+    fn llm_api_key_default_is_none() {
+        let config = Config::default();
+        assert!(config.llm_api_key.is_none());
+    }
+
+    #[test]
+    fn parse_llm_api_key_from_toml() {
+        let toml = r#"llm_api_key = "sk-test-key""#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.llm_api_key, Some("sk-test-key".to_string()));
+    }
+
+    #[test]
+    fn llm_api_key_none_when_absent() {
+        let toml = r#"llm_base_url = "http://example.com/v1""#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert!(config.llm_api_key.is_none());
     }
 }
 
