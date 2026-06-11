@@ -16,44 +16,41 @@ pub enum EventOutcome {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum UiAction {
-    // Universal
     Quit,
+    Global(GlobalAction),
+    Overlay(OverlayAction),
+    Focus(FocusAction),
+    Capture(CaptureAction),
+    VimNormal(VimNormalAction),
+    VimInsert(VimInsertAction),
+    RightPanel(RightPanelAction),
+    Chat(ChatAction),
+}
 
-    // Help overlay
-    CloseHelp,
-
-    // Global hotkeys
+#[derive(Debug, PartialEq, Eq)]
+pub enum GlobalAction {
     GoToday,
     PrevDay,
     NextDay,
+    ToggleChat,
+}
 
-    // Escape handling (context-dependent)
+#[derive(Debug, PartialEq, Eq)]
+pub enum OverlayAction {
+    OpenHelp,
+    CloseHelp,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum FocusAction {
+    SwitchToCapture,
     ExitCaptureMode,
     ExitVimNormal,
-
-    // Capture mode
-    Capture(CaptureAction),
-
-    // Navigate mode (legacy placeholders)
-    OpenHelp,
-    SwitchToCapture,
     FocusVimNormal,
-
-    // VimNormal actions
-    VimNormal(VimNormalAction),
-    // VimInsert actions
-    VimInsert(VimInsertAction),
-
-    // Right panel
     FocusRightPanel,
-    RightPanel(RightPanelAction),
     RightPanelBlur,
-
-    // Chat panel
-    ToggleChat,
     FocusChat,
     ChatBlur,
-    Chat(ChatAction),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -225,7 +222,7 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     // 2. Help overlay — only handles its own keys
     if state.overlay == Overlay::Help {
         return match key.code {
-            KeyCode::Esc | KeyCode::Char('?') => Some(UiAction::CloseHelp),
+            KeyCode::Esc | KeyCode::Char('?') => Some(UiAction::Overlay(OverlayAction::CloseHelp)),
             _ => None,
         };
     }
@@ -233,8 +230,8 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     // 3. Global Ctrl hotkeys (Ctrl-J handled later in Capture mode)
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         match key.code {
-            KeyCode::Char('t') => return Some(UiAction::GoToday),
-            KeyCode::Char('l') => return Some(UiAction::ToggleChat),
+            KeyCode::Char('t') => return Some(UiAction::Global(GlobalAction::GoToday)),
+            KeyCode::Char('l') => return Some(UiAction::Global(GlobalAction::ToggleChat)),
             _ => {} // fall through — Ctrl-J is handled in Capture; others ignored per mode
         }
     }
@@ -243,10 +240,10 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     if key.code == KeyCode::Tab {
         match state.focus {
             Focus::Capture => return Some(UiAction::Capture(CaptureAction::TypeIndent)),
-            Focus::VimNormal => return Some(UiAction::FocusRightPanel),
+            Focus::VimNormal => return Some(UiAction::Focus(FocusAction::FocusRightPanel)),
             Focus::VimInsert => {} // fall through to vim_insert::key_to_action
-            Focus::Chat => return Some(UiAction::FocusRightPanel),
-            Focus::RightPanel => return Some(UiAction::FocusVimNormal),
+            Focus::Chat => return Some(UiAction::Focus(FocusAction::FocusRightPanel)),
+            Focus::RightPanel => return Some(UiAction::Focus(FocusAction::FocusVimNormal)),
         };
     }
 
@@ -254,9 +251,9 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     if key.code == KeyCode::BackTab {
         return match state.focus {
             Focus::Capture => Some(UiAction::Capture(CaptureAction::RemoveIndent)),
-            Focus::VimNormal | Focus::VimInsert => Some(UiAction::FocusRightPanel),
-            Focus::Chat => Some(UiAction::FocusVimNormal),
-            Focus::RightPanel => Some(UiAction::FocusVimNormal),
+            Focus::VimNormal | Focus::VimInsert => Some(UiAction::Focus(FocusAction::FocusRightPanel)),
+            Focus::Chat => Some(UiAction::Focus(FocusAction::FocusVimNormal)),
+            Focus::RightPanel => Some(UiAction::Focus(FocusAction::FocusVimNormal)),
         };
     }
 
@@ -267,13 +264,13 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
                 if state.editing.is_some() {
                     Some(UiAction::Capture(CaptureAction::CancelEdit))
                 } else {
-                    Some(UiAction::ExitCaptureMode)  // stays flat until Task 6
+                    Some(UiAction::Focus(FocusAction::ExitCaptureMode))
                 }
             }
-            Focus::VimNormal => Some(UiAction::SwitchToCapture),
+            Focus::VimNormal => Some(UiAction::Focus(FocusAction::SwitchToCapture)),
             Focus::VimInsert => Some(UiAction::VimInsert(VimInsertAction::ExitInsert)),
-            Focus::RightPanel => Some(UiAction::RightPanelBlur),
-            Focus::Chat => Some(UiAction::ChatBlur),
+            Focus::RightPanel => Some(UiAction::Focus(FocusAction::RightPanelBlur)),
+            Focus::Chat => Some(UiAction::Focus(FocusAction::ChatBlur)),
         };
     }
 
@@ -282,8 +279,8 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
         || (matches!(state.focus, Focus::Capture) && state.input.is_empty());
     if can_navigate {
         match key.code {
-            KeyCode::Char('[') => return Some(UiAction::PrevDay),
-            KeyCode::Char(']') => return Some(UiAction::NextDay),
+            KeyCode::Char('[') => return Some(UiAction::Global(GlobalAction::PrevDay)),
+            KeyCode::Char(']') => return Some(UiAction::Global(GlobalAction::NextDay)),
             _ => {}
         }
     }
@@ -300,82 +297,69 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
 
 pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOutcome> {
     match action {
-        UiAction::Quit => return Ok(EventOutcome::Quit),
+        UiAction::Quit           => return Ok(EventOutcome::Quit),
+        UiAction::Global(a)      => execute_global(state, a)?,
+        UiAction::Overlay(a)     => execute_overlay(state, a),
+        UiAction::Focus(a)       => execute_focus(state, a),
+        UiAction::Capture(a)     => return capture::execute_action(state, a),
+        UiAction::VimNormal(a)   => return vim_normal::execute_action(state, a),
+        UiAction::VimInsert(a)   => return vim_insert::execute_action(state, a),
+        UiAction::RightPanel(a)  => return right_panel::execute_action(state, a),
+        UiAction::Chat(a)        => return chat::execute_action(state, a),
+    }
+    if state.should_quit {
+        return Ok(EventOutcome::Quit);
+    }
+    Ok(EventOutcome::Continue)
+}
 
-        // Help overlay
-        UiAction::CloseHelp => {
-            state.overlay = Overlay::None;
-        }
-
-        // Global hotkeys
-        UiAction::GoToday => {
+fn execute_global(state: &mut AppState, action: GlobalAction) -> Result<()> {
+    match action {
+        GlobalAction::GoToday => {
             crate::app::actions::go_today(state)?;
             state.status.clear();
         }
-        UiAction::PrevDay => {
-            crate::app::actions::go_prev_day(state)?;
-        }
-        UiAction::NextDay => {
-            crate::app::actions::go_next_day(state)?;
-        }
-
-        UiAction::ExitCaptureMode => {
-            state.focus = Focus::VimNormal;
-            // Sync the vim cursor to the document anchor so the cursor starts
-            // at the same line that was visible at the top in Capture mode.
-            state.vim.cursor_line = state.doc_anchor_line;
-            state.vim.cursor_col = 0;
-        }
-        UiAction::ExitVimNormal => {
-            state.focus = Focus::Capture;
-        }
-
-        UiAction::Capture(a) => return capture::execute_action(state, a),
-        UiAction::OpenHelp => {
-            state.overlay = Overlay::Help;
-        }
-        UiAction::SwitchToCapture => {
-            state.focus = Focus::Capture;
-            state.doc_anchor_line =
-                crate::app::context::context_heading_line(&state.doc.lines, &state.context);
-        }
-        UiAction::FocusVimNormal => {
-            state.focus = Focus::VimNormal;
-        }
-
-        UiAction::VimNormal(a) => return vim_normal::execute_action(state, a),
-        UiAction::VimInsert(a) => return vim_insert::execute_action(state, a),
-
-        // Right panel
-        UiAction::FocusRightPanel => {
-            state.right_panel_selected = 0;
-            state.focus = Focus::RightPanel;
-        }
-        UiAction::RightPanelBlur => {
-            state.focus = Focus::Capture;
-        }
-        UiAction::RightPanel(a) => return right_panel::execute_action(state, a),
-
-        // Chat panel
-        UiAction::ToggleChat => {
+        GlobalAction::PrevDay    => crate::app::actions::go_prev_day(state)?,
+        GlobalAction::NextDay    => crate::app::actions::go_next_day(state)?,
+        GlobalAction::ToggleChat => {
             state.chat.visible = !state.chat.visible;
             if !state.chat.visible && state.focus == Focus::Chat {
                 state.focus = Focus::Capture;
             }
         }
-        UiAction::FocusChat => {
-            state.focus = Focus::Chat;
-        }
-        UiAction::ChatBlur => {
-            state.focus = Focus::Capture;
-        }
-        UiAction::Chat(a) => return chat::execute_action(state, a),
     }
+    Ok(())
+}
 
-    if state.should_quit {
-        return Ok(EventOutcome::Quit);
+fn execute_overlay(state: &mut AppState, action: OverlayAction) {
+    match action {
+        OverlayAction::OpenHelp  => state.overlay = Overlay::Help,
+        OverlayAction::CloseHelp => state.overlay = Overlay::None,
     }
-    Ok(EventOutcome::Continue)
+}
+
+fn execute_focus(state: &mut AppState, action: FocusAction) {
+    match action {
+        FocusAction::ExitCaptureMode => {
+            state.focus = Focus::VimNormal;
+            state.vim.cursor_line = state.doc_anchor_line;
+            state.vim.cursor_col = 0;
+        }
+        FocusAction::ExitVimNormal   => state.focus = Focus::Capture,
+        FocusAction::SwitchToCapture => {
+            state.focus = Focus::Capture;
+            state.doc_anchor_line =
+                crate::app::context::context_heading_line(&state.doc.lines, &state.context);
+        }
+        FocusAction::FocusVimNormal  => state.focus = Focus::VimNormal,
+        FocusAction::FocusRightPanel => {
+            state.right_panel_selected = 0;
+            state.focus = Focus::RightPanel;
+        }
+        FocusAction::RightPanelBlur  => state.focus = Focus::Capture,
+        FocusAction::FocusChat       => state.focus = Focus::Chat,
+        FocusAction::ChatBlur        => state.focus = Focus::Capture,
+    }
 }
 
 #[cfg(test)]
@@ -463,7 +447,7 @@ mod tests {
         // input is empty by default
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Char('['))),
-            Some(UiAction::PrevDay)
+            Some(UiAction::Global(GlobalAction::PrevDay))
         );
     }
 
@@ -497,7 +481,7 @@ mod tests {
         state.overlay = Overlay::Help;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Esc)),
-            Some(UiAction::CloseHelp)
+            Some(UiAction::Overlay(OverlayAction::CloseHelp))
         );
     }
 
@@ -528,7 +512,7 @@ mod tests {
         state.focus = Focus::Capture;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Esc)),
-            Some(UiAction::ExitCaptureMode)
+            Some(UiAction::Focus(FocusAction::ExitCaptureMode))
         );
     }
 
@@ -537,14 +521,14 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
-        assert_eq!(key_to_action(&state, make_key(KeyCode::Esc)), Some(UiAction::SwitchToCapture));
+        assert_eq!(key_to_action(&state, make_key(KeyCode::Esc)), Some(UiAction::Focus(FocusAction::SwitchToCapture)));
     }
 
     #[test]
     fn ctrl_t_goes_today() {
         let tmp = tempfile::tempdir().unwrap();
         let state = test_state(&tmp);
-        assert_eq!(key_to_action(&state, ctrl(KeyCode::Char('t'))), Some(UiAction::GoToday));
+        assert_eq!(key_to_action(&state, ctrl(KeyCode::Char('t'))), Some(UiAction::Global(GlobalAction::GoToday)));
     }
 
     #[test]
@@ -711,7 +695,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         assert_eq!(state.focus, Focus::Capture); // default focus
-        execute_action(&mut state, UiAction::ExitCaptureMode).unwrap();
+        execute_action(&mut state, UiAction::Focus(FocusAction::ExitCaptureMode)).unwrap();
         assert_eq!(state.focus, Focus::VimNormal);
     }
 
@@ -720,7 +704,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
-        execute_action(&mut state, UiAction::ExitVimNormal).unwrap();
+        execute_action(&mut state, UiAction::Focus(FocusAction::ExitVimNormal)).unwrap();
         assert_eq!(state.focus, Focus::Capture);
     }
 
@@ -729,7 +713,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
-        execute_action(&mut state, UiAction::OpenHelp).unwrap();
+        execute_action(&mut state, UiAction::Overlay(OverlayAction::OpenHelp)).unwrap();
         assert_eq!(state.overlay, Overlay::Help);
     }
 
@@ -738,7 +722,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
-        execute_action(&mut state, UiAction::SwitchToCapture).unwrap();
+        execute_action(&mut state, UiAction::Focus(FocusAction::SwitchToCapture)).unwrap();
         assert_eq!(state.focus, Focus::Capture);
     }
 
@@ -747,7 +731,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.overlay = Overlay::Help;
-        execute_action(&mut state, UiAction::CloseHelp).unwrap();
+        execute_action(&mut state, UiAction::Overlay(OverlayAction::CloseHelp)).unwrap();
         assert_eq!(state.overlay, Overlay::None);
     }
 
@@ -769,7 +753,7 @@ mod tests {
         state.focus = Focus::VimNormal;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Tab)),
-            Some(UiAction::FocusRightPanel)
+            Some(UiAction::Focus(FocusAction::FocusRightPanel))
         );
     }
 
@@ -780,7 +764,7 @@ mod tests {
         state.focus = Focus::Chat;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Tab)),
-            Some(UiAction::FocusRightPanel)
+            Some(UiAction::Focus(FocusAction::FocusRightPanel))
         );
     }
 
@@ -791,7 +775,7 @@ mod tests {
         state.focus = Focus::Chat;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Esc)),
-            Some(UiAction::ChatBlur)
+            Some(UiAction::Focus(FocusAction::ChatBlur))
         );
     }
 
@@ -826,7 +810,7 @@ mod tests {
     fn focus_chat_sets_focus() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
-        execute_action(&mut state, UiAction::FocusChat).unwrap();
+        execute_action(&mut state, UiAction::Focus(FocusAction::FocusChat)).unwrap();
         assert_eq!(state.focus, Focus::Chat);
     }
 
@@ -914,7 +898,7 @@ mod tests {
         state.focus = Focus::RightPanel;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Tab)),
-            Some(UiAction::FocusVimNormal)
+            Some(UiAction::Focus(FocusAction::FocusVimNormal))
         );
     }
 
@@ -929,7 +913,7 @@ mod tests {
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
         };
-        assert_eq!(key_to_action(&state, key), Some(UiAction::FocusRightPanel));
+        assert_eq!(key_to_action(&state, key), Some(UiAction::Focus(FocusAction::FocusRightPanel)));
     }
 
     #[test]
@@ -943,7 +927,7 @@ mod tests {
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
         };
-        assert_eq!(key_to_action(&state, key), Some(UiAction::FocusVimNormal));
+        assert_eq!(key_to_action(&state, key), Some(UiAction::Focus(FocusAction::FocusVimNormal)));
     }
 
     #[test]
@@ -958,7 +942,7 @@ mod tests {
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
         };
-        assert_eq!(key_to_action(&state, key), Some(UiAction::FocusVimNormal));
+        assert_eq!(key_to_action(&state, key), Some(UiAction::Focus(FocusAction::FocusVimNormal)));
     }
 
     #[test]
@@ -966,7 +950,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::RightPanel;
-        execute_action(&mut state, UiAction::FocusVimNormal).unwrap();
+        execute_action(&mut state, UiAction::Focus(FocusAction::FocusVimNormal)).unwrap();
         assert_eq!(state.focus, Focus::VimNormal);
     }
 
@@ -1362,7 +1346,7 @@ mod tests {
         state.vim.cursor_line = 5; // inside ## Notes
         state.doc_anchor_line = 5; // synced by vim_update_context
 
-        execute_action(&mut state, UiAction::SwitchToCapture).unwrap();
+        execute_action(&mut state, UiAction::Focus(FocusAction::SwitchToCapture)).unwrap();
 
         assert_eq!(state.focus, Focus::Capture);
         // Anchor should jump to "## Notes" heading at line 4, not stay at 5

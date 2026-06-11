@@ -1,5 +1,5 @@
 use crate::app::state::{AppState, Focus, UndoEntry};
-use crate::app::input::{EventOutcome, UiAction, VimNormalAction};
+use crate::app::input::{EventOutcome, FocusAction, OverlayAction, UiAction, VimNormalAction};
 use anyhow::Result;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -39,8 +39,8 @@ pub(super) fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction>
         KeyCode::Char('P') => Some(UiAction::VimNormal(VimNormalAction::PasteAbove)),
         KeyCode::Char('u') => Some(UiAction::VimNormal(VimNormalAction::Undo)),
         KeyCode::Char('t') => Some(UiAction::VimNormal(VimNormalAction::ToggleTodo)),
-        KeyCode::Char('?') => Some(UiAction::OpenHelp),     // stays flat until Task 6
-        KeyCode::Tab       => Some(UiAction::SwitchToCapture), // stays flat until Task 6
+        KeyCode::Char('?') => Some(UiAction::Overlay(OverlayAction::OpenHelp)),
+        KeyCode::Tab       => Some(UiAction::Focus(FocusAction::SwitchToCapture)),
         KeyCode::Enter     => Some(UiAction::VimNormal(VimNormalAction::BeginEditLine)),
         KeyCode::Esc       => None,
         _ => None,
