@@ -214,84 +214,100 @@ pub(super) fn word_end(line: &str, col: usize) -> usize {
 }
 
 pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
-    // 1. Ctrl-C always quits regardless of mode
-    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
-        return Some(UiAction::Quit);
+    if let Some(action) = global_quit(key) {
+        return Some(action);
     }
-
-    // 2. Help overlay — only handles its own keys
     if state.overlay == Overlay::Help {
-        return match key.code {
-            KeyCode::Esc | KeyCode::Char('?') => Some(UiAction::Overlay(OverlayAction::CloseHelp)),
-            _ => None,
-        };
+        return overlay_keys(key);
     }
+    global_ctrl_hotkeys(key)
+        .or_else(|| focus_cycle_keys(state, key))
+        .or_else(|| esc_keys(state, key))
+        .or_else(|| day_navigation(state, key))
+        .or_else(|| mode_dispatch(state, key))
+}
 
-    // 3. Global Ctrl hotkeys (Ctrl-J handled later in Capture mode)
-    if key.modifiers.contains(KeyModifiers::CONTROL) {
-        match key.code {
-            KeyCode::Char('t') => return Some(UiAction::Global(GlobalAction::GoToday)),
-            KeyCode::Char('l') => return Some(UiAction::Global(GlobalAction::ToggleChat)),
-            _ => {} // fall through — Ctrl-J is handled in Capture; others ignored per mode
-        }
+fn global_quit(key: KeyEvent) -> Option<UiAction> {
+    (key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c'))
+        .then_some(UiAction::Quit)
+}
+
+fn overlay_keys(key: KeyEvent) -> Option<UiAction> {
+    match key.code {
+        KeyCode::Esc | KeyCode::Char('?') => Some(UiAction::Overlay(OverlayAction::CloseHelp)),
+        _ => None,
     }
+}
 
-    // 4. Tab — focus cycle (or indent in capture mode)
-    if key.code == KeyCode::Tab {
-        match state.focus {
-            Focus::Capture => return Some(UiAction::Capture(CaptureAction::TypeIndent)),
-            Focus::VimNormal => return Some(UiAction::Focus(FocusAction::FocusRightPanel)),
-            Focus::VimInsert => {} // fall through to vim_insert::key_to_action
-            Focus::Chat => return Some(UiAction::Focus(FocusAction::FocusRightPanel)),
-            Focus::RightPanel => return Some(UiAction::Focus(FocusAction::FocusVimNormal)),
-        };
+fn global_ctrl_hotkeys(key: KeyEvent) -> Option<UiAction> {
+    if !key.modifiers.contains(KeyModifiers::CONTROL) {
+        return None;
     }
+    match key.code {
+        KeyCode::Char('t') => Some(UiAction::Global(GlobalAction::GoToday)),
+        KeyCode::Char('l') => Some(UiAction::Global(GlobalAction::ToggleChat)),
+        _ => None,
+    }
+}
 
-    // 4b. BackTab — reverse focus cycle (or un-indent in capture mode)
-    if key.code == KeyCode::BackTab {
-        return match state.focus {
-            Focus::Capture => Some(UiAction::Capture(CaptureAction::RemoveIndent)),
-            Focus::VimNormal | Focus::VimInsert => Some(UiAction::Focus(FocusAction::FocusRightPanel)),
-            Focus::Chat => Some(UiAction::Focus(FocusAction::FocusVimNormal)),
+fn focus_cycle_keys(state: &AppState, key: KeyEvent) -> Option<UiAction> {
+    match key.code {
+        KeyCode::Tab => match state.focus {
+            Focus::Capture   => Some(UiAction::Capture(CaptureAction::TypeIndent)),
+            Focus::VimNormal => Some(UiAction::Focus(FocusAction::FocusRightPanel)),
+            Focus::VimInsert => None, // falls through to vim_insert::key_to_action
+            Focus::Chat      => Some(UiAction::Focus(FocusAction::FocusRightPanel)),
             Focus::RightPanel => Some(UiAction::Focus(FocusAction::FocusVimNormal)),
-        };
+        },
+        KeyCode::BackTab => match state.focus {
+            Focus::Capture              => Some(UiAction::Capture(CaptureAction::RemoveIndent)),
+            Focus::VimNormal | Focus::VimInsert => Some(UiAction::Focus(FocusAction::FocusRightPanel)),
+            Focus::Chat                 => Some(UiAction::Focus(FocusAction::FocusVimNormal)),
+            Focus::RightPanel           => Some(UiAction::Focus(FocusAction::FocusVimNormal)),
+        },
+        _ => None,
     }
+}
 
-    // 5. Esc handling (context-dependent)
-    if key.code == KeyCode::Esc {
-        return match state.focus {
-            Focus::Capture => {
-                if state.editing.is_some() {
-                    Some(UiAction::Capture(CaptureAction::CancelEdit))
-                } else {
-                    Some(UiAction::Focus(FocusAction::ExitCaptureMode))
-                }
+fn esc_keys(state: &AppState, key: KeyEvent) -> Option<UiAction> {
+    if key.code != KeyCode::Esc {
+        return None;
+    }
+    match state.focus {
+        Focus::Capture => {
+            if state.editing.is_some() {
+                Some(UiAction::Capture(CaptureAction::CancelEdit))
+            } else {
+                Some(UiAction::Focus(FocusAction::ExitCaptureMode))
             }
-            Focus::VimNormal => Some(UiAction::Focus(FocusAction::SwitchToCapture)),
-            Focus::VimInsert => Some(UiAction::VimInsert(VimInsertAction::ExitInsert)),
-            Focus::RightPanel => Some(UiAction::Focus(FocusAction::RightPanelBlur)),
-            Focus::Chat => Some(UiAction::Focus(FocusAction::ChatBlur)),
-        };
+        }
+        Focus::VimNormal  => Some(UiAction::Focus(FocusAction::SwitchToCapture)),
+        Focus::VimInsert  => Some(UiAction::VimInsert(VimInsertAction::ExitInsert)),
+        Focus::RightPanel => Some(UiAction::Focus(FocusAction::RightPanelBlur)),
+        Focus::Chat       => Some(UiAction::Focus(FocusAction::ChatBlur)),
     }
+}
 
-    // 6. [ and ] day navigation — only when can_navigate
+fn day_navigation(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     let can_navigate = matches!(state.focus, Focus::VimNormal)
         || (matches!(state.focus, Focus::Capture) && state.input.is_empty());
-    if can_navigate {
-        match key.code {
-            KeyCode::Char('[') => return Some(UiAction::Global(GlobalAction::PrevDay)),
-            KeyCode::Char(']') => return Some(UiAction::Global(GlobalAction::NextDay)),
-            _ => {}
-        }
+    if !can_navigate {
+        return None;
     }
+    match key.code {
+        KeyCode::Char('[') => Some(UiAction::Global(GlobalAction::PrevDay)),
+        KeyCode::Char(']') => Some(UiAction::Global(GlobalAction::NextDay)),
+        _ => None,
+    }
+}
 
-    // 7. Mode-specific handling
+fn mode_dispatch(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     match state.focus {
-        Focus::Capture => capture::key_to_action(state, key),
+        Focus::Capture    => capture::key_to_action(state, key),
         Focus::RightPanel => right_panel::key_to_action(state, key),
-        Focus::Chat => chat::key_to_action(state, key),
-        Focus::VimNormal => vim_normal::key_to_action(state, key),
-        Focus::VimInsert => vim_insert::key_to_action(state, key),
+        Focus::Chat       => chat::key_to_action(state, key),
+        Focus::VimNormal  => vim_normal::key_to_action(state, key),
+        Focus::VimInsert  => vim_insert::key_to_action(state, key),
     }
 }
 
