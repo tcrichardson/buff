@@ -28,34 +28,13 @@ pub enum UiAction {
     NextDay,
 
     // Escape handling (context-dependent)
-    CancelEdit,
     ExitCaptureMode,
     ExitVimNormal,
 
     // Capture mode
-    TypeChar(char),
-    DeleteChar,
-    TypeNewline,
-    TypeIndent,
-    PrependIndent,
-    RemoveIndent,
-    SubmitInput,
-    CommitEdit,
-
-    // Capture mode — cursor movement
-    MoveCursorLeft,
-    MoveCursorRight,
-    MoveCursorLineStart,
-    MoveCursorLineEnd,
+    Capture(CaptureAction),
 
     // Navigate mode (legacy placeholders)
-    SelectNext,
-    SelectPrev,
-    SelectFirst,
-    SelectLast,
-    ToggleSelected,
-    BeginEdit,
-    ResumeHeading,
     OpenHelp,
     SwitchToCapture,
     FocusVimNormal,
@@ -100,6 +79,30 @@ pub enum VimInsertAction {
     DeleteWordBefore,
     InsertTab,
     ExitInsert,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum CaptureAction {
+    TypeChar(char),
+    DeleteChar,
+    TypeNewline,
+    TypeIndent,
+    PrependIndent,
+    RemoveIndent,
+    SubmitInput,
+    CommitEdit,
+    MoveCursorLeft,
+    MoveCursorRight,
+    MoveCursorLineStart,
+    MoveCursorLineEnd,
+    SelectNext,
+    SelectPrev,
+    SelectFirst,
+    SelectLast,
+    ToggleSelected,
+    BeginEdit,
+    ResumeHeading,
+    CancelEdit,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -239,7 +242,7 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     // 4. Tab — focus cycle (or indent in capture mode)
     if key.code == KeyCode::Tab {
         match state.focus {
-            Focus::Capture => return Some(UiAction::TypeIndent),
+            Focus::Capture => return Some(UiAction::Capture(CaptureAction::TypeIndent)),
             Focus::VimNormal => return Some(UiAction::FocusRightPanel),
             Focus::VimInsert => {} // fall through to vim_insert::key_to_action
             Focus::Chat => return Some(UiAction::FocusRightPanel),
@@ -250,7 +253,7 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     // 4b. BackTab — reverse focus cycle (or un-indent in capture mode)
     if key.code == KeyCode::BackTab {
         return match state.focus {
-            Focus::Capture => Some(UiAction::RemoveIndent),
+            Focus::Capture => Some(UiAction::Capture(CaptureAction::RemoveIndent)),
             Focus::VimNormal | Focus::VimInsert => Some(UiAction::FocusRightPanel),
             Focus::Chat => Some(UiAction::FocusVimNormal),
             Focus::RightPanel => Some(UiAction::FocusVimNormal),
@@ -262,9 +265,9 @@ pub fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction> {
         return match state.focus {
             Focus::Capture => {
                 if state.editing.is_some() {
-                    Some(UiAction::CancelEdit)
+                    Some(UiAction::Capture(CaptureAction::CancelEdit))
                 } else {
-                    Some(UiAction::ExitCaptureMode)
+                    Some(UiAction::ExitCaptureMode)  // stays flat until Task 6
                 }
             }
             Focus::VimNormal => Some(UiAction::SwitchToCapture),
@@ -316,12 +319,6 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
             crate::app::actions::go_next_day(state)?;
         }
 
-        // Escape handling
-        UiAction::CancelEdit => {
-            state.editing = None;
-            state.input.clear();
-            state.cursor_pos = 0;
-        }
         UiAction::ExitCaptureMode => {
             state.focus = Focus::VimNormal;
             // Sync the vim cursor to the document anchor so the cursor starts
@@ -333,26 +330,7 @@ pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOut
             state.focus = Focus::Capture;
         }
 
-        // Capture mode actions
-        UiAction::TypeChar(_)
-        | UiAction::DeleteChar
-        | UiAction::TypeNewline
-        | UiAction::TypeIndent
-        | UiAction::PrependIndent
-        | UiAction::RemoveIndent
-        | UiAction::SubmitInput
-        | UiAction::CommitEdit
-        | UiAction::MoveCursorLeft
-        | UiAction::MoveCursorRight
-        | UiAction::MoveCursorLineStart
-        | UiAction::MoveCursorLineEnd
-        | UiAction::SelectNext
-        | UiAction::SelectPrev
-        | UiAction::SelectFirst
-        | UiAction::SelectLast
-        | UiAction::ToggleSelected
-        | UiAction::BeginEdit
-        | UiAction::ResumeHeading => return capture::execute_action(state, action),
+        UiAction::Capture(a) => return capture::execute_action(state, a),
         UiAction::OpenHelp => {
             state.overlay = Overlay::Help;
         }
@@ -497,7 +475,7 @@ mod tests {
         state.input.push('x');
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Char('['))),
-            Some(UiAction::TypeChar('['))
+            Some(UiAction::Capture(CaptureAction::TypeChar('[')))
         );
     }
 
@@ -508,7 +486,7 @@ mod tests {
         state.focus = Focus::Capture;
         assert_eq!(
             key_to_action(&state, ctrl(KeyCode::Char('j'))),
-            Some(UiAction::TypeNewline)
+            Some(UiAction::Capture(CaptureAction::TypeNewline))
         );
     }
 
@@ -539,7 +517,7 @@ mod tests {
         state.editing = Some(0);
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Esc)),
-            Some(UiAction::CancelEdit)
+            Some(UiAction::Capture(CaptureAction::CancelEdit))
         );
     }
 
@@ -592,7 +570,7 @@ mod tests {
     fn type_char_appends_to_input() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
-        execute_action(&mut state, UiAction::TypeChar('a')).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::TypeChar('a'))).unwrap();
         assert_eq!(state.input, "a");
     }
 
@@ -600,8 +578,8 @@ mod tests {
     fn type_char_multiple_appends_in_order() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
-        execute_action(&mut state, UiAction::TypeChar('h')).unwrap();
-        execute_action(&mut state, UiAction::TypeChar('i')).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::TypeChar('h'))).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::TypeChar('i'))).unwrap();
         assert_eq!(state.input, "hi");
     }
 
@@ -611,7 +589,7 @@ mod tests {
         let mut state = test_state(&tmp);
         state.input = "ac".to_string();
         state.cursor_pos = 1; // between 'a' and 'c'
-        execute_action(&mut state, UiAction::TypeChar('b')).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::TypeChar('b'))).unwrap();
         assert_eq!(state.input, "abc");
         assert_eq!(state.cursor_pos, 2);
     }
@@ -622,7 +600,7 @@ mod tests {
         let mut state = test_state(&tmp);
         state.input = "ab".to_string();
         state.cursor_pos = 2; // cursor at end
-        execute_action(&mut state, UiAction::DeleteChar).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::DeleteChar)).unwrap();
         assert_eq!(state.input, "a");
         assert_eq!(state.cursor_pos, 1);
     }
@@ -633,7 +611,7 @@ mod tests {
         let mut state = test_state(&tmp);
         state.input = "abc".to_string();
         state.cursor_pos = 2; // between 'b' and 'c'
-        execute_action(&mut state, UiAction::DeleteChar).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::DeleteChar)).unwrap();
         assert_eq!(state.input, "ac");
         assert_eq!(state.cursor_pos, 1);
     }
@@ -644,7 +622,7 @@ mod tests {
         let mut state = test_state(&tmp);
         state.input = "abc".to_string();
         state.cursor_pos = 0;
-        execute_action(&mut state, UiAction::DeleteChar).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::DeleteChar)).unwrap();
         assert_eq!(state.input, "abc");
         assert_eq!(state.cursor_pos, 0);
     }
@@ -653,7 +631,7 @@ mod tests {
     fn delete_char_on_empty_input_is_noop() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
-        execute_action(&mut state, UiAction::DeleteChar).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::DeleteChar)).unwrap();
         assert_eq!(state.input, "");
     }
 
@@ -661,7 +639,7 @@ mod tests {
     fn type_newline_pushes_newline_char() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
-        execute_action(&mut state, UiAction::TypeNewline).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::TypeNewline)).unwrap();
         assert_eq!(state.input, "\n");
     }
 
@@ -671,7 +649,7 @@ mod tests {
         let mut state = test_state(&tmp);
         state.input = "ab".to_string();
         state.cursor_pos = 1; // between 'a' and 'b'
-        execute_action(&mut state, UiAction::TypeNewline).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::TypeNewline)).unwrap();
         assert_eq!(state.input, "a\nb");
         assert_eq!(state.cursor_pos, 2);
     }
@@ -680,7 +658,7 @@ mod tests {
     fn type_indent_inserts_two_spaces() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
-        execute_action(&mut state, UiAction::TypeIndent).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::TypeIndent)).unwrap();
         assert_eq!(state.input, "->");
         assert_eq!(state.cursor_pos, 2);
     }
@@ -691,7 +669,7 @@ mod tests {
         let mut state = test_state(&tmp);
         state.input = "ab".to_string();
         state.cursor_pos = 1; // between 'a' and 'b'
-        execute_action(&mut state, UiAction::TypeIndent).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::TypeIndent)).unwrap();
         assert_eq!(state.input, "a->b");
         assert_eq!(state.cursor_pos, 3);
     }
@@ -702,7 +680,7 @@ mod tests {
         let mut state = test_state(&tmp);
         state.editing = Some(0);
         state.input = "hello".to_string();
-        execute_action(&mut state, UiAction::CancelEdit).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::CancelEdit)).unwrap();
         assert!(state.editing.is_none());
         assert!(state.input.is_empty());
     }
@@ -713,7 +691,7 @@ mod tests {
         let mut state = test_state(&tmp);
         state.input = "hello".to_string();
         state.cursor_pos = 3;
-        execute_action(&mut state, UiAction::SubmitInput).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::SubmitInput)).unwrap();
         assert_eq!(state.cursor_pos, 0);
     }
 
@@ -724,7 +702,7 @@ mod tests {
         state.editing = Some(0);
         state.input = "hello".to_string();
         state.cursor_pos = 3;
-        execute_action(&mut state, UiAction::CancelEdit).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::CancelEdit)).unwrap();
         assert_eq!(state.cursor_pos, 0);
     }
 
@@ -780,7 +758,7 @@ mod tests {
         state.focus = Focus::Capture;
         assert_eq!(
             key_to_action(&state, make_key(KeyCode::Tab)),
-            Some(UiAction::TypeIndent)
+            Some(UiAction::Capture(CaptureAction::TypeIndent))
         );
     }
 
@@ -863,7 +841,7 @@ mod tests {
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
         };
-        assert_eq!(key_to_action(&state, key), Some(UiAction::RemoveIndent));
+        assert_eq!(key_to_action(&state, key), Some(UiAction::Capture(CaptureAction::RemoveIndent)));
     }
 
     #[test]
@@ -872,7 +850,7 @@ mod tests {
         let mut state = test_state(&tmp);
         state.input = "->item".to_string();
         state.cursor_pos = 6;
-        execute_action(&mut state, UiAction::RemoveIndent).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::RemoveIndent)).unwrap();
         assert_eq!(state.input, "item");
     }
 
@@ -882,7 +860,7 @@ mod tests {
         let mut state = test_state(&tmp);
         state.input = "->item".to_string();
         state.cursor_pos = 6; // at end
-        execute_action(&mut state, UiAction::RemoveIndent).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::RemoveIndent)).unwrap();
         assert_eq!(state.cursor_pos, 4); // 6 - 2
     }
 
@@ -892,7 +870,7 @@ mod tests {
         let mut state = test_state(&tmp);
         state.input = "->item".to_string();
         state.cursor_pos = 1; // inside the "->"
-        execute_action(&mut state, UiAction::RemoveIndent).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::RemoveIndent)).unwrap();
         assert_eq!(state.cursor_pos, 0); // clamped to line start
     }
 
@@ -902,7 +880,7 @@ mod tests {
         let mut state = test_state(&tmp);
         state.input = "item".to_string();
         state.cursor_pos = 2;
-        execute_action(&mut state, UiAction::RemoveIndent).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::RemoveIndent)).unwrap();
         assert_eq!(state.input, "item");
         assert_eq!(state.cursor_pos, 2);
     }
@@ -913,7 +891,7 @@ mod tests {
         let mut state = test_state(&tmp);
         state.input = "parent\n->child".to_string();
         state.cursor_pos = 14; // at end of "->child"
-        execute_action(&mut state, UiAction::RemoveIndent).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::RemoveIndent)).unwrap();
         assert_eq!(state.input, "parent\nchild");
         assert_eq!(state.cursor_pos, 12); // 14 - 2
     }
@@ -924,7 +902,7 @@ mod tests {
         let mut state = test_state(&tmp);
         state.input = "->item".to_string();
         state.cursor_pos = 0; // at line start
-        execute_action(&mut state, UiAction::RemoveIndent).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::RemoveIndent)).unwrap();
         assert_eq!(state.input, "item");
         assert_eq!(state.cursor_pos, 0); // at line start, no adjustment
     }
@@ -1354,7 +1332,7 @@ mod tests {
         state.vim.cursor_line = 0;
         state.vim.cursor_col = 0;
         state.input = "/todo test".to_string();
-        execute_action(&mut state, UiAction::SubmitInput).unwrap();
+        execute_action(&mut state, UiAction::Capture(CaptureAction::SubmitInput)).unwrap();
         // After submit, the doc anchor should be set to the context heading (## Notes at line 2),
         // not to the newly added content. This keeps the current section near the top of the
         // viewport as entries accumulate below it.

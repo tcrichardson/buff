@@ -1,5 +1,5 @@
 use crate::app::state::AppState;
-use crate::app::input::{EventOutcome, UiAction};
+use crate::app::input::{CaptureAction, EventOutcome, UiAction};
 use anyhow::Result;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -7,60 +7,64 @@ pub(super) fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction>
     match key.code {
         KeyCode::Enter => {
             if state.editing.is_some() {
-                Some(UiAction::CommitEdit)
+                Some(UiAction::Capture(CaptureAction::CommitEdit))
             } else {
-                Some(UiAction::SubmitInput)
+                Some(UiAction::Capture(CaptureAction::SubmitInput))
             }
         }
-        KeyCode::Backspace => Some(UiAction::DeleteChar),
+        KeyCode::Backspace => Some(UiAction::Capture(CaptureAction::DeleteChar)),
         KeyCode::Char('j') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            Some(UiAction::TypeNewline)
+            Some(UiAction::Capture(CaptureAction::TypeNewline))
         }
         KeyCode::Char(c)
             if !key.modifiers.contains(KeyModifiers::CONTROL) && !c.is_control() =>
         {
-            Some(UiAction::TypeChar(c))
+            Some(UiAction::Capture(CaptureAction::TypeChar(c)))
         }
-        KeyCode::Left => Some(UiAction::MoveCursorLeft),
-        KeyCode::Right => Some(UiAction::MoveCursorRight),
-        KeyCode::Home => Some(UiAction::MoveCursorLineStart),
-        KeyCode::End => Some(UiAction::MoveCursorLineEnd),
+        KeyCode::Left  => Some(UiAction::Capture(CaptureAction::MoveCursorLeft)),
+        KeyCode::Right => Some(UiAction::Capture(CaptureAction::MoveCursorRight)),
+        KeyCode::Home  => Some(UiAction::Capture(CaptureAction::MoveCursorLineStart)),
+        KeyCode::End   => Some(UiAction::Capture(CaptureAction::MoveCursorLineEnd)),
         KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            Some(UiAction::MoveCursorLineStart)
+            Some(UiAction::Capture(CaptureAction::MoveCursorLineStart))
         }
         KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            Some(UiAction::MoveCursorLineEnd)
+            Some(UiAction::Capture(CaptureAction::MoveCursorLineEnd))
         }
         KeyCode::Char('.') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            Some(UiAction::PrependIndent)
+            Some(UiAction::Capture(CaptureAction::PrependIndent))
         }
         KeyCode::Up | KeyCode::Down => None,
         _ => None,
     }
 }
 
-pub(super) fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOutcome> {
+pub(super) fn execute_action(state: &mut AppState, action: CaptureAction) -> Result<EventOutcome> {
     match action {
-        UiAction::TypeChar(c)         => type_char(state, c),
-        UiAction::DeleteChar          => delete_char(state),
-        UiAction::TypeNewline         => type_newline(state),
-        UiAction::TypeIndent          => type_indent(state),
-        UiAction::PrependIndent       => prepend_indent(state),
-        UiAction::RemoveIndent        => remove_indent(state),
-        UiAction::SubmitInput         => submit_input(state)?,
-        UiAction::CommitEdit          => crate::app::actions::commit_edit(state)?,
-        UiAction::MoveCursorLeft      => move_cursor_left(state),
-        UiAction::MoveCursorRight     => move_cursor_right(state),
-        UiAction::MoveCursorLineStart => move_cursor_line_start(state),
-        UiAction::MoveCursorLineEnd   => move_cursor_line_end(state),
-        UiAction::SelectNext          => crate::app::actions::select_next(state),
-        UiAction::SelectPrev          => crate::app::actions::select_prev(state),
-        UiAction::SelectFirst         => crate::app::actions::select_first(state),
-        UiAction::SelectLast          => crate::app::actions::select_last(state),
-        UiAction::ToggleSelected      => crate::app::actions::toggle_selected(state),
-        UiAction::BeginEdit           => crate::app::actions::begin_edit_selected(state),
-        UiAction::ResumeHeading       => crate::app::actions::resume_selected_heading(state),
-        _ => unreachable!("capture::execute_action called with non-capture action: {:?}", action),
+        CaptureAction::TypeChar(c)         => type_char(state, c),
+        CaptureAction::DeleteChar          => delete_char(state),
+        CaptureAction::TypeNewline         => type_newline(state),
+        CaptureAction::TypeIndent          => type_indent(state),
+        CaptureAction::PrependIndent       => prepend_indent(state),
+        CaptureAction::RemoveIndent        => remove_indent(state),
+        CaptureAction::SubmitInput         => submit_input(state)?,
+        CaptureAction::CommitEdit          => crate::app::actions::commit_edit(state)?,
+        CaptureAction::MoveCursorLeft      => move_cursor_left(state),
+        CaptureAction::MoveCursorRight     => move_cursor_right(state),
+        CaptureAction::MoveCursorLineStart => move_cursor_line_start(state),
+        CaptureAction::MoveCursorLineEnd   => move_cursor_line_end(state),
+        CaptureAction::SelectNext          => crate::app::actions::select_next(state),
+        CaptureAction::SelectPrev          => crate::app::actions::select_prev(state),
+        CaptureAction::SelectFirst         => crate::app::actions::select_first(state),
+        CaptureAction::SelectLast          => crate::app::actions::select_last(state),
+        CaptureAction::ToggleSelected      => crate::app::actions::toggle_selected(state),
+        CaptureAction::BeginEdit           => crate::app::actions::begin_edit_selected(state),
+        CaptureAction::ResumeHeading       => crate::app::actions::resume_selected_heading(state),
+        CaptureAction::CancelEdit          => {
+            state.editing = None;
+            state.input.clear();
+            state.cursor_pos = 0;
+        }
     }
     Ok(EventOutcome::Continue)
 }
@@ -121,8 +125,6 @@ fn submit_input(state: &mut AppState) -> Result<()> {
     crate::app::actions::dispatch(state, cmd)?;
     state.input.clear();
     state.cursor_pos = 0;
-    // After any submission, anchor to the current context heading so the section
-    // stays near the top of the viewport as entries accumulate below it.
     state.doc_anchor_line =
         crate::app::context::context_heading_line(&state.doc.lines, &state.context);
     Ok(())
