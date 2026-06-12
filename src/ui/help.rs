@@ -32,6 +32,8 @@ Commands:
   /today, Ctrl-T   jump to today
   /ask message     ask the local LLM (streams to chat)
   /clear           clear the chat conversation
+  /light           switch to light theme
+  /dark            switch to dark theme
 
 Chat panel:
   Ctrl-L           show/hide chat panel
