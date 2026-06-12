@@ -956,6 +956,21 @@ mod tests {
     }
 
     #[test]
+    fn render_todo_done_with_inline_italic() {
+        let t = th();
+        let line = render_line_kind(LineKind::TodoDone("", "hello *world*"), &t);
+        let base = Style::default().fg(t.todo_done).add_modifier(Modifier::CROSSED_OUT);
+        assert_eq!(
+            line,
+            Line::from(vec![
+                Span::styled("☑ ", Style::default().fg(t.todo_done)),
+                Span::styled("hello ", base),
+                Span::styled("world", base.add_modifier(Modifier::ITALIC)),
+            ])
+        );
+    }
+
+    #[test]
     fn render_quote_with_inline_bold() {
         let t = th();
         let line = render_line_kind(LineKind::Quote("hello **world**"), &t);
