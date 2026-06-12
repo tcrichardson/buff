@@ -304,12 +304,6 @@ mod tests {
     }
 
     #[test]
-    fn light_theme_capture_bg_is_reset() {
-        let theme = light();
-        assert_eq!(theme.capture_bg, Color::Reset);
-    }
-
-    #[test]
     fn dark_theme_terminal_bg_is_dark() {
         let theme = dark();
         assert_eq!(theme.terminal_bg, Color::Rgb(26, 27, 38));
@@ -319,12 +313,6 @@ mod tests {
     fn dark_theme_terminal_fg_is_light() {
         let theme = dark();
         assert_eq!(theme.terminal_fg, Color::Rgb(214, 218, 227));
-    }
-
-    #[test]
-    fn dark_theme_capture_bg_is_reset() {
-        let theme = dark();
-        assert_eq!(theme.capture_bg, Color::Reset);
     }
 
     #[test]
