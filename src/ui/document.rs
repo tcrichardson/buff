@@ -990,4 +990,69 @@ mod tests {
             ])
         );
     }
+
+    #[test]
+    fn parse_inline_formatting_italic_stars() {
+        let spans = parse_inline_formatting("hello *world*", Style::default());
+        assert_eq!(
+            spans,
+            vec![
+                Span::raw("hello "),
+                Span::styled("world", Style::default().add_modifier(Modifier::ITALIC)),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_inline_formatting_italic_underscores() {
+        let spans = parse_inline_formatting("hello _world_", Style::default());
+        assert_eq!(
+            spans,
+            vec![
+                Span::raw("hello "),
+                Span::styled("world", Style::default().add_modifier(Modifier::ITALIC)),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_inline_formatting_mixed_bold_and_italic() {
+        let spans = parse_inline_formatting("**bold** and *italic*", Style::default());
+        assert_eq!(
+            spans,
+            vec![
+                Span::styled("bold", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(" and "),
+                Span::styled("italic", Style::default().add_modifier(Modifier::ITALIC)),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_inline_formatting_italic_with_trailing_text() {
+        let spans = parse_inline_formatting("hello *world* today", Style::default());
+        assert_eq!(
+            spans,
+            vec![
+                Span::raw("hello "),
+                Span::styled("world", Style::default().add_modifier(Modifier::ITALIC)),
+                Span::raw(" today"),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_inline_formatting_italic_preserves_base_style() {
+        let base = Style::default()
+            .fg(ratatui::style::Color::Red)
+            .add_modifier(Modifier::BOLD);
+        let spans = parse_inline_formatting("plain *italic*", base);
+        assert_eq!(
+            spans,
+            vec![
+                Span::styled("plain ", base),
+                Span::styled("italic", base.add_modifier(Modifier::ITALIC)),
+            ]
+        );
+    }
 }
