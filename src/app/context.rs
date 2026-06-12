@@ -53,12 +53,12 @@ fn count_l3_headings(lines: &[String], start: usize, end: usize) -> usize {
 /// Used to update `state.context` automatically as the vim cursor moves.
 pub fn context_at_line(lines: &[String], cursor_line: usize) -> Context {
     if lines.is_empty() || cursor_line >= lines.len() {
-        return Context::Notes;
+        return Context::Title;
     }
 
     let boundary = match enclosing_l2_heading(lines, cursor_line) {
         Some(b) => b,
-        None => return Context::Notes,
+        None => return Context::Title,
     };
 
     let section = &lines[boundary];
@@ -125,6 +125,7 @@ fn find_nth_l3_heading_in_section(
 /// Falls back to `0` (top of document) if the heading cannot be located.
 pub fn context_heading_line(lines: &[String], context: &Context) -> usize {
     match context {
+        Context::Title => 0,
         Context::Section { heading_line, .. } => *heading_line,
         Context::Notes => find_heading(lines, "## Notes").unwrap_or(0),
         Context::Todos => find_heading(lines, "## To-dos").unwrap_or(0),
@@ -194,9 +195,9 @@ mod tests {
     // --- context_at_line integration tests (moved from state.rs) ---
 
     #[test]
-    fn cursor_above_all_sections_is_notes() {
+    fn cursor_above_all_sections_is_title() {
         let doc = lines("some preamble\n## Meetings");
-        assert_eq!(context_at_line(&doc, 0), Context::Notes);
+        assert_eq!(context_at_line(&doc, 0), Context::Title);
     }
 
     #[test]
@@ -236,6 +237,12 @@ mod tests {
     fn cursor_in_note_block() {
         let doc = lines("## Notes\n### My Note\ncontent");
         assert_eq!(context_at_line(&doc, 2), Context::NoteBlock(0));
+    }
+
+    #[test]
+    fn context_heading_line_title_returns_zero() {
+        let doc = lines("## Meetings\n\n## Notes\nstuff\n\n## To-dos\n");
+        assert_eq!(context_heading_line(&doc, &Context::Title), 0);
     }
 
     #[test]
@@ -285,6 +292,6 @@ mod tests {
 
     #[test]
     fn cursor_on_empty_lines_vec() {
-        assert_eq!(context_at_line(&[], 0), Context::Notes);
+        assert_eq!(context_at_line(&[], 0), Context::Title);
     }
 }

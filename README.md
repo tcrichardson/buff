@@ -19,13 +19,19 @@ Type at the bottom bar and press **Enter**. Plain text is stored as-is. Use slas
 | Command | What it does |
 |---|---|
 | `/meeting "Name"` | Start a meeting context. Subsequent entries go under `### HH:MM Name` until you leave. |
+| `/note "Name"` | Start a named note block context. Subsequent entries go under `### Name`. |
 | `/note` | Switch context to Notes (the default). |
+| `/section "Name"` | Add a sub-section one heading level deeper (max `######`). Works inside meetings and note blocks. |
 | `/todo Buy milk` | Add a to-do to the central To-dos list. If you're in a meeting, it gets tagged `_(Meeting Name)_`. |
-| `/leave` | Exit the current meeting context and return to Notes. |
+| `/leave` | Exit the current meeting or note context and return to Notes. |
+| `/start` | Record the meeting start time (current HH:MM) as metadata. Also activates the meeting assistant in the chat panel. |
+| `/end` | Record the meeting end time (current HH:MM) and trigger AI summary generation. |
+| `/scheduled HH:MM` | Record the scheduled start time for the current meeting. |
+| `/purpose text` | Record the purpose of the current meeting as metadata. |
+| `/topic text` | Record the topic of the current note block as metadata. |
 | `/goto 2026-06-05` | Jump to a specific date. |
 | `/today` | Jump to today's note. |
-| `/ask "How are you?"` | Ask the local LLM; reply streams into the chat panel. |
-| `/ask <message>` | Same, without quotes. |
+| `/ask <message>` | Ask the local LLM; reply streams into the chat panel. While in meeting assistant mode (after `/start`), the LLM has the meeting context injected automatically. |
 | `/clear` | Clear the current day's chat conversation. |
 | `/help` | Show the help overlay. |
 | `/quit` | Exit. |
@@ -75,14 +81,22 @@ Press **Esc** from capture mode to move focus into the document and navigate wit
 |---|---|
 | `j` / `k` or `↑` / `↓` | Move cursor up/down |
 | `h` / `l` or `←` / `→` | Move cursor left/right |
-| `g` / `G` | Jump to first / last line |
-| `Space` or `x` | Toggle a to-do done / not done |
-| `e` | Move to end of word |
-| `dd` | Delete the current line |
+| `w` / `b` | Move to start of next / previous word |
+| `e` | Move to end of current/next word |
+| `0` / `$` | Jump to start / end of line |
+| `gg` / `G` | Jump to first / last line |
+| `t` | Toggle a to-do done / not done |
+| `x` | Delete character under cursor |
+| `dd` | Delete the current line (also yanks it) |
 | `yy` | Yank (copy) the current line |
-| `p` | Paste yanked line after cursor |
+| `p` | Paste yanked line below cursor |
+| `P` | Paste yanked line above cursor |
 | `u` | Undo last edit |
-| `i` | Enter vim insert mode |
+| `i` | Enter insert mode at cursor |
+| `a` | Enter insert mode after cursor |
+| `A` | Enter insert mode at end of line |
+| `o` | Insert new line below and enter insert mode |
+| `O` | Insert new line above and enter insert mode |
 | `Enter` | Open the current line for editing in the capture box |
 | `?` | Open help overlay |
 | `Esc` | Return to capture mode |
@@ -96,6 +110,8 @@ Press **i** from normal mode to edit the document directly at the cursor positio
 | `←` / `→` / `↑` / `↓` | Move cursor |
 | `Backspace` | Delete character before cursor |
 | `Enter` | Insert newline |
+| `Tab` | Insert two spaces |
+| `Ctrl+W` | Delete word before cursor |
 | Any character | Insert at cursor |
 | `Esc` | Return to normal mode |
 
@@ -115,7 +131,11 @@ All entry types — plain text, bullets, to-dos, meeting headings, and Markdown 
 
 ### Right panel
 
-A persistent panel on the right side of the terminal always shows the current month calendar (today highlighted, days with notes marked with `·`) and, below it, all incomplete to-dos from the last 7 days grouped by date.
+A persistent panel on the right side of the terminal shows three sections stacked vertically:
+
+1. **Calendar** — current month with today highlighted and days that have notes marked with `·`
+2. **Agenda** — meetings with a scheduled time (`/scheduled HH:MM`) for today's note, shown when present
+3. **To-do list** — all incomplete to-dos from the last 7 days, grouped by date
 
 | Key | Action |
 |---|---|
@@ -135,7 +155,8 @@ A middle panel streams replies from a local LM Studio server (or any OpenAI-comp
 | `Ctrl-L` | Show / hide the chat panel |
 | `/ask <message>` | Send a message; the reply streams token-by-token |
 | `/clear` | Erase the current day's conversation |
-| `j` / `k` or `↑` / `↓` | Scroll the chat history |
+| `j` / `k` or `↑` / `↓` | Scroll the chat history one line |
+| `PageUp` / `PageDown` | Scroll the chat history ten lines |
 | `Esc` or `Tab` | Return focus to the document |
 
 The chat panel is visible by default. If LM Studio is not running, a red error line appears and the app stays responsive.
@@ -157,13 +178,15 @@ notes_dir = "~/Documents/buff"   # where daily files are stored
 timestamp_entries = false          # prefix every entry with HH:MM
 week_starts_on = "sunday"          # calendar layout: sunday or monday
 date_format = "%Y-%m-%d-%a"       # day-file naming pattern
-panel_width = 30                   # right panel width in terminal columns
+panel_width = 30                   # right panel width in terminal columns (or "25%" for percentage)
 todo_lookback_days = 7             # days to scan for incomplete to-dos
+capture_height = 5                 # height of the capture bar in rows
 
 # Chat / LLM settings
 llm_base_url = "http://localhost:1234/v1"   # OpenAI-compatible local server
 llm_model = "google/gemma-4-12b-qat"        # model id served by LM Studio
-llm_system_prompt = ""                       # optional system prompt
+llm_system_prompt = ""                       # optional system prompt for general chat
+llm_api_key = ""                             # API key (leave empty for local servers)
 chat_visible = true                          # show the chat panel on startup
 
 # Theme
@@ -205,6 +228,8 @@ Set the theme with the `theme` config field. You can override any individual col
 | `todo_done` | `green` | `"lightgreen"`, `"#66bb6a"` |
 | `todo_overdue` | `red` | `"lightred"`, `"#ef5350"` |
 | `vim_cursor_line` | `#dbeafe` | `"lightgray"`, `"#e3f2fd"` |
+| `capture_bg` | `reset` | `"white"`, `"#fafafa"` |
+| `metadata` | `darkgray` | `"gray"`, `"#757575"` |
 
 Colors can be specified as:
 - **Named colors**: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`, `darkgray`, `white`, `reset`
@@ -245,12 +270,14 @@ Requires Rust 1.85+ (edition 2024).
 ## Architecture
 
 - **Pure core** (`src/model/`, `src/storage/`, `src/config/`, `src/app/command.rs`, `src/app/actions.rs`) holds all behavior and is unit-tested with string/temp-dir fixtures. No terminal dependency.
-- **TUI layer** (`src/ui/`) is a thin Ratatui front-end that renders state and routes key events into the core. The right panel (`src/ui/right_panel.rs`) is a self-contained module handling calendar rendering, todo collection, and panel display.
+- **Input layer** (`src/app/input/`) translates raw `crossterm` key events into typed `UiAction` values, dispatched per focus mode (capture, vim normal, vim insert, right panel, chat). Global hotkeys and focus-cycle keys are resolved before mode dispatch.
+- **LLM layer** (`src/app/llm.rs`) spawns background threads for streaming OpenAI-compatible requests and sends `LlmEvent` values back to the event loop via an `mpsc` channel. Meeting assistant mode injects live meeting context before each request.
+- **TUI layer** (`src/ui/`) is a thin Ratatui front-end that renders state and routes key events into the core. The right panel (`src/ui/right_panel.rs`) is a self-contained module handling calendar rendering, agenda display, todo collection, and panel display.
 - **Markdown handling** uses an anchored structural model: the file is kept as a `Vec<String>` of lines; mutations splice specific lines and re-index, so untouched lines are preserved verbatim. Saves are atomic (temp file + rename).
 - **Vim editing** is built on top of the line-based model: `VimState` tracks cursor position, undo history, and yank buffer; normal mode provides line-oriented operations (`dd`, `yy`, `p`, `u`) while insert mode allows direct character editing.
 
 ## Future features (not yet implemented)
 
-- Phase 2 assistant prompts (e.g. `/summarize`, smart suggestions) on top of the existing chat infrastructure
-- Automated to-do tracking, rollover, and migration between days
+- `/summarize` command for arbitrary note summarization (the meeting assistant's `/end` auto-summary is already implemented)
+- Automated to-do rollover and migration between days
 - Vector index for semantic search across notes

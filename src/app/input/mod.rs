@@ -1315,6 +1315,7 @@ mod tests {
         ];
         // Cursor starts in Notes section
         state.vim.cursor_line = 3;
+        crate::app::actions::vim_update_context(&mut state);
         assert!(matches!(state.context, Context::Notes));
         // Move down through empty line into To-dos
         execute_action(&mut state, UiAction::VimNormal(VimNormalAction::MoveDown)).unwrap();
@@ -1331,6 +1332,7 @@ mod tests {
         state.doc.lines = vec!["# Day".to_string(), String::new(), "## Notes".to_string(), "line".to_string()];
         state.vim.cursor_line = 0;
         state.vim.cursor_col = 0;
+        state.context = Context::Notes;
         state.input = "/todo test".to_string();
         execute_action(&mut state, UiAction::Capture(CaptureAction::SubmitInput)).unwrap();
         // After submit, the doc anchor should be set to the context heading (## Notes at line 2),

@@ -147,7 +147,7 @@ fn handle_entry(state: &mut AppState, text: &str) -> anyhow::Result<()> {
     };
     let block = crate::model::writer::format_entry(text, time);
     let target = match &state.context {
-        Context::Notes | Context::Todos => crate::model::day::EntryTarget::Notes,
+        Context::Title | Context::Notes | Context::Todos => crate::model::day::EntryTarget::Notes,
         Context::Meeting(ord) => crate::model::day::EntryTarget::Meeting(*ord),
         Context::NoteBlock(ord) => crate::model::day::EntryTarget::NoteBlock(*ord),
         Context::Section { heading_line, level } => {
@@ -172,7 +172,7 @@ fn handle_note(state: &mut AppState, name: Option<String>) -> anyhow::Result<()>
         state.update_context_display();
         after_doc_mutation(state)
     } else {
-        state.context = Context::Notes;
+        state.context = Context::Title;
         state.update_context_display();
         state.status.clear();
         Ok(())
@@ -190,7 +190,7 @@ fn handle_todo(state: &mut AppState, text: &str) -> anyhow::Result<()> {
 }
 
 fn handle_leave(state: &mut AppState) {
-    state.context = Context::Notes;
+    state.context = Context::Title;
     state.update_context_display();
     state.status.clear();
 }
@@ -482,7 +482,7 @@ fn handle_section(state: &mut AppState, name: &str) -> anyhow::Result<()> {
     let current_level: u8 = match &state.context {
         Context::Meeting(_) | Context::NoteBlock(_) => 3,
         Context::Section { level, .. } => *level,
-        Context::Notes | Context::Todos => {
+        Context::Title | Context::Notes | Context::Todos => {
             state.status = "Not in a meeting or note".to_string();
             return Ok(());
         }
@@ -497,7 +497,7 @@ fn handle_section(state: &mut AppState, name: &str) -> anyhow::Result<()> {
         Context::Section { heading_line, level } => {
             crate::model::day::EntryTarget::Section { heading_line: *heading_line, level: *level }
         }
-        Context::Notes | Context::Todos => unreachable!(),
+        Context::Title | Context::Notes | Context::Todos => unreachable!(),
     };
     let next_level = current_level + 1;
     let heading_line = state.doc.add_section_heading(&target, next_level, name);
@@ -765,7 +765,7 @@ mod tests {
         let mut state = test_state(&tmp);
         dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
         dispatch(&mut state, Command::Leave).unwrap();
-        assert_eq!(state.context, Context::Notes);
+        assert_eq!(state.context, Context::Title);
     }
 
     #[test]
@@ -774,7 +774,7 @@ mod tests {
         let mut state = test_state(&tmp);
         dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
         dispatch(&mut state, Command::Note(None)).unwrap();
-        assert_eq!(state.context, Context::Notes);
+        assert_eq!(state.context, Context::Title);
     }
 
     #[test]
@@ -1177,7 +1177,7 @@ mod tests {
         let mut state = test_state(&tmp);
         dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
         dispatch(&mut state, Command::Note(None)).unwrap(); // leave the meeting context
-        assert_eq!(state.context, Context::Notes);
+        assert_eq!(state.context, Context::Title);
 
         let idx = state
             .selectables
@@ -1231,7 +1231,7 @@ mod tests {
         let mut state = test_state(&tmp);
         dispatch(&mut state, Command::Note(Some("Idea Bucket".to_string()))).unwrap();
         dispatch(&mut state, Command::Note(None)).unwrap();
-        assert_eq!(state.context, Context::Notes);
+        assert_eq!(state.context, Context::Title);
     }
 
     #[test]
@@ -1241,7 +1241,7 @@ mod tests {
         let mut state = test_state(&tmp);
         dispatch(&mut state, Command::Note(Some("Idea Bucket".to_string()))).unwrap();
         dispatch(&mut state, Command::Note(None)).unwrap(); // leave the note context
-        assert_eq!(state.context, Context::Notes);
+        assert_eq!(state.context, Context::Title);
 
         let idx = state
             .selectables
@@ -1844,7 +1844,7 @@ mod tests {
         dispatch(&mut state, Command::Section("Updates".to_string())).unwrap();
         // Leave the section context
         dispatch(&mut state, Command::Note(None)).unwrap();
-        assert_eq!(state.context, Context::Notes);
+        assert_eq!(state.context, Context::Title);
 
         // Navigate to the #### Updates heading
         let idx = state

@@ -30,6 +30,7 @@ pub enum Focus {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Context {
+    Title,
     Notes,
     Meeting(usize),
     NoteBlock(usize),
@@ -111,7 +112,7 @@ impl AppState {
             Document::new_for_date(date)
         };
         let selectables = doc.selectables();
-        let context_display = "context: Notes".to_string();
+        let context_display = "context: Day".to_string();
         let dates_with_notes = storage::dates_with_notes(&notes_dir, &config.date_format);
         let panel_todos = right_panel::collect_panel_todos(&notes_dir, date, &config);
         let panel_agenda = right_panel::collect_agenda_items(&doc);
@@ -122,7 +123,7 @@ impl AppState {
             date,
             notes_dir,
             config: config.clone(),
-            context: Context::Notes,
+            context: Context::Title,
             focus: Focus::Capture,
             selected: 0,
             status: String::new(),
@@ -163,6 +164,13 @@ impl AppState {
 
     pub fn update_context_display(&mut self) {
         self.context_display = match self.context {
+            Context::Title => {
+                let name = self.doc.lines
+                    .first()
+                    .map(|l| l.trim_start_matches("# ").trim_start())
+                    .unwrap_or("Day");
+                format!("context: {}", name)
+            }
             Context::Notes => "context: Notes".to_string(),
             Context::Meeting(ord) => {
                 let meetings = self.doc.meetings();
