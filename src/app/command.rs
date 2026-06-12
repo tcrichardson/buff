@@ -20,6 +20,8 @@ pub enum Command {
     Section(String),
     Unknown(String),
     InvalidArgs(String),
+    Light,
+    Dark,
 }
 
 fn parse_hhmm(s: &str) -> bool {
@@ -129,6 +131,8 @@ pub fn parse(input: &str) -> Command {
                 Command::Section(name.to_string())
             }
         }
+        "/light" => Command::Light,
+        "/dark" => Command::Dark,
         _ => {
             let word = cmd.trim_start_matches('/');
             Command::Unknown(word.to_string())
@@ -385,5 +389,15 @@ mod tests {
     #[test]
     fn parse_whitespace_only() {
         assert_eq!(parse("   "), Command::Entry("".to_string()));
+    }
+
+    #[test]
+    fn parse_light() {
+        assert_eq!(parse("/light"), Command::Light);
+    }
+
+    #[test]
+    fn parse_dark() {
+        assert_eq!(parse("/dark"), Command::Dark);
     }
 }

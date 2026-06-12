@@ -129,6 +129,8 @@ pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
         Command::InvalidArgs(msg)  => state.status = msg,
         Command::Today             => { go_today(state)?; state.status.clear(); }
         Command::Goto(Some(date))  => { go_to_date(state, date)?; state.status.clear(); }
+        Command::Light             => { state.config.theme = "light".to_string(); state.status = "Theme: light".to_string(); }
+        Command::Dark              => { state.config.theme = "dark".to_string(); state.status = "Theme: dark".to_string(); }
         Command::Goto(None)        => state.status = "usage: /goto YYYY-MM-DD".to_string(),
     }
     Ok(())
@@ -2041,5 +2043,26 @@ mod tests {
             "user message should be in history"
         );
         assert!(state.chat.pending);
+    }
+
+    #[test]
+    fn dispatch_light_sets_theme() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        assert_eq!(state.config.theme, "light"); // default
+        dispatch(&mut state, Command::Dark).unwrap();
+        assert_eq!(state.config.theme, "dark");
+        assert_eq!(state.status, "Theme: dark");
+    }
+
+    #[test]
+    fn dispatch_dark_then_light() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut state = test_state(&tmp);
+        dispatch(&mut state, Command::Dark).unwrap();
+        assert_eq!(state.config.theme, "dark");
+        dispatch(&mut state, Command::Light).unwrap();
+        assert_eq!(state.config.theme, "light");
+        assert_eq!(state.status, "Theme: light");
     }
 }
