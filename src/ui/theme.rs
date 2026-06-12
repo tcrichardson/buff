@@ -21,6 +21,8 @@ pub struct Theme {
     pub vim_cursor_line: Color,
     pub capture_bg: Color,
     pub metadata: Color,
+    pub terminal_bg: Color,
+    pub terminal_fg: Color,
 }
 
 pub fn light() -> Theme {
@@ -43,6 +45,8 @@ pub fn light() -> Theme {
         vim_cursor_line: Color::Rgb(219, 234, 254),
         capture_bg: Color::Reset,
         metadata: Color::DarkGray,
+        terminal_bg: Color::Reset,
+        terminal_fg: Color::Reset,
     }
 }
 
@@ -66,6 +70,8 @@ pub fn dark() -> Theme {
         vim_cursor_line: Color::Rgb(40, 44, 52),
         capture_bg: Color::Reset,
         metadata: Color::Gray,
+        terminal_bg: Color::Rgb(18, 18, 18),
+        terminal_fg: Color::White,
     }
 }
 
@@ -281,5 +287,29 @@ mod tests {
         overrides.metadata = Some("cyan".to_string());
         let theme = resolve_theme("light", &overrides);
         assert_eq!(theme.metadata, Color::Cyan);
+    }
+
+    #[test]
+    fn light_theme_terminal_bg_is_reset() {
+        let theme = light();
+        assert_eq!(theme.terminal_bg, Color::Reset);
+    }
+
+    #[test]
+    fn light_theme_terminal_fg_is_reset() {
+        let theme = light();
+        assert_eq!(theme.terminal_fg, Color::Reset);
+    }
+
+    #[test]
+    fn dark_theme_terminal_bg_is_dark() {
+        let theme = dark();
+        assert_eq!(theme.terminal_bg, Color::Rgb(18, 18, 18));
+    }
+
+    #[test]
+    fn dark_theme_terminal_fg_is_white() {
+        let theme = dark();
+        assert_eq!(theme.terminal_fg, Color::White);
     }
 }
