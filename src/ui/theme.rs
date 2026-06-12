@@ -149,6 +149,8 @@ pub fn resolve_theme(name: &str, overrides: &ThemeOverrides) -> Theme {
     apply!(vim_cursor_line);
     apply!(capture_bg);
     apply!(metadata);
+    apply!(terminal_bg);
+    apply!(terminal_fg);
 
     theme
 }
@@ -311,5 +313,21 @@ mod tests {
     fn dark_theme_terminal_fg_is_white() {
         let theme = dark();
         assert_eq!(theme.terminal_fg, Color::White);
+    }
+
+    #[test]
+    fn resolve_applies_terminal_bg_override() {
+        let mut overrides = ThemeOverrides::default();
+        overrides.terminal_bg = Some("#1e1e1e".to_string());
+        let theme = resolve_theme("light", &overrides);
+        assert_eq!(theme.terminal_bg, Color::Rgb(30, 30, 30));
+    }
+
+    #[test]
+    fn resolve_applies_terminal_fg_override() {
+        let mut overrides = ThemeOverrides::default();
+        overrides.terminal_fg = Some("cyan".to_string());
+        let theme = resolve_theme("light", &overrides);
+        assert_eq!(theme.terminal_fg, Color::Cyan);
     }
 }

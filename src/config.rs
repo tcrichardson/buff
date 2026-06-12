@@ -150,6 +150,8 @@ pub struct ThemeOverrides {
     pub vim_cursor_line: Option<String>,
     pub capture_bg: Option<String>,
     pub metadata: Option<String>,
+    pub terminal_bg: Option<String>,
+    pub terminal_fg: Option<String>,
 }
 
 #[cfg(test)]
