@@ -1000,6 +1000,89 @@ mod tests {
     }
 
     #[test]
+    fn render_plain_with_inline_italic() {
+        let t = th();
+        let line = render_line_kind(LineKind::Plain("hello *world*"), &t);
+        assert_eq!(
+            line,
+            Line::from(vec![
+                Span::raw("hello "),
+                Span::styled("world", Style::default().add_modifier(Modifier::ITALIC)),
+            ])
+        );
+    }
+
+    #[test]
+    fn render_bullet_with_inline_italic() {
+        let line = render_line_kind(LineKind::Bullet("", "hello *world*"), &th());
+        assert_eq!(
+            line,
+            Line::from(vec![
+                Span::raw("• "),
+                Span::raw("hello "),
+                Span::styled("world", Style::default().add_modifier(Modifier::ITALIC)),
+            ])
+        );
+    }
+
+    #[test]
+    fn render_todo_unchecked_with_inline_italic() {
+        let line = render_line_kind(LineKind::TodoUnchecked("", "hello *world*"), &th());
+        assert_eq!(
+            line,
+            Line::from(vec![
+                Span::raw("☐ "),
+                Span::raw("hello "),
+                Span::styled("world", Style::default().add_modifier(Modifier::ITALIC)),
+            ])
+        );
+    }
+
+    #[test]
+    fn render_quote_with_inline_italic() {
+        let t = th();
+        let line = render_line_kind(LineKind::Quote("hello *world*"), &t);
+        let base = Style::default().add_modifier(Modifier::ITALIC);
+        assert_eq!(
+            line,
+            Line::from(vec![
+                Span::styled(
+                    "│ ",
+                    Style::default().fg(t.quote_marker).add_modifier(Modifier::ITALIC),
+                ),
+                Span::styled("hello ", base),
+                Span::styled("world", base.add_modifier(Modifier::ITALIC)),
+            ])
+        );
+    }
+
+    #[test]
+    fn render_ordered_with_inline_italic() {
+        let line = render_line_kind(LineKind::Ordered("1. hello *world*"), &th());
+        assert_eq!(
+            line,
+            Line::from(vec![
+                Span::raw("1. hello "),
+                Span::styled("world", Style::default().add_modifier(Modifier::ITALIC)),
+            ])
+        );
+    }
+
+    #[test]
+    fn render_meta_field_with_inline_italic() {
+        let t = th();
+        let line = render_line_kind(LineKind::MetaField("hello *world*"), &t);
+        let base = Style::default().fg(t.metadata).add_modifier(Modifier::ITALIC);
+        assert_eq!(
+            line,
+            Line::from(vec![
+                Span::styled("hello ", base),
+                Span::styled("world", base.add_modifier(Modifier::ITALIC)),
+            ])
+        );
+    }
+
+    #[test]
     fn parse_inline_formatting_italic_stars() {
         let spans = parse_inline_formatting("hello *world*", Style::default());
         assert_eq!(
@@ -1062,5 +1145,11 @@ mod tests {
                 Span::styled("italic", base.add_modifier(Modifier::ITALIC)),
             ]
         );
+    }
+
+    #[test]
+    fn parse_inline_formatting_unmatched_italic_is_plain() {
+        let spans = parse_inline_formatting("hello *world", Style::default());
+        assert_eq!(spans, vec![Span::raw("hello *world")]);
     }
 }
