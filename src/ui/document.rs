@@ -127,26 +127,34 @@ fn parse_inline_formatting<'a>(text: &'a str, base_style: Style) -> Vec<Span<'a>
     while !rest.is_empty() {
         let star_pos = rest.find("**");
         let under_pos = rest.find("__");
+        // Ignore a single `*` or `_` that is the first character of a double marker.
+        let single_star_pos = rest.find('*').filter(|&p| star_pos != Some(p));
+        let single_under_pos = rest.find('_').filter(|&p| under_pos != Some(p));
 
-        let start = match (star_pos, under_pos) {
-            (Some(s), Some(u)) => s.min(u),
-            (Some(s), None) => s,
-            (None, Some(u)) => u,
-            (None, None) => break,
+        let candidates = [
+            (star_pos, "**", Modifier::BOLD),
+            (under_pos, "__", Modifier::BOLD),
+            (single_star_pos, "*", Modifier::ITALIC),
+            (single_under_pos, "_", Modifier::ITALIC),
+        ];
+        let Some((start, marker, modifier)) = candidates
+            .into_iter()
+            .filter_map(|(pos, marker, modifier)| pos.map(|p| (p, marker, modifier)))
+            .min_by_key(|(p, _, _)| *p)
+        else {
+            break;
         };
 
-        let marker = if star_pos == Some(start) { "**" } else { "__" };
-
-        let after_open = &rest[start + 2..];
+        let after_open = &rest[start + marker.len()..];
         if let Some(end) = after_open.find(marker) {
             if start > 0 {
                 spans.push(Span::styled(&rest[..start], base_style));
             }
-            let bold_text = &after_open[..end];
-            spans.push(Span::styled(bold_text, base_style.add_modifier(Modifier::BOLD)));
-            rest = &after_open[end + 2..];
+            let styled_text = &after_open[..end];
+            spans.push(Span::styled(styled_text, base_style.add_modifier(modifier)));
+            rest = &after_open[end + marker.len()..];
         } else {
-            // Unmatched opening marker — treat remaining text as plain
+            // Unmatched opening marker — treat remaining text as plain.
             break;
         }
     }
