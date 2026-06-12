@@ -230,6 +230,10 @@ Set the theme with the `theme` config field. You can override any individual col
 | `vim_cursor_line` | `#dbeafe` | `"lightgray"`, `"#e3f2fd"` |
 | `capture_bg` | `reset` | `"white"`, `"#fafafa"` |
 | `metadata` | `darkgray` | `"gray"`, `"#757575"` |
+| `terminal_bg` | `reset` | `"black"`, `"#121212"` |
+| `terminal_fg` | `reset` | `"white"`, `"#e0e0e0"` |
+
+> **Note:** The `dark` theme sets `terminal_bg` to `#121212` and `terminal_fg` to `white` by default, so it renders correctly on terminals with a light background. Override these in `[theme_overrides]` to customise or restore terminal-inherited colours (`reset`).
 
 Colors can be specified as:
 - **Named colors**: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`, `darkgray`, `white`, `reset`
