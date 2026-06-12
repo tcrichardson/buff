@@ -42,7 +42,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, theme: &crate::ui::the
         .direction(Direction::Horizontal)
         .constraints([Constraint::Min(0), Constraint::Length(30)])
         .split(header_area);
-    let ascii_art = r#"_             __  __
+    let ascii_art = r#" _             __  __
 | |__  _   _  / _|/ _|
 | '_ \| | | || |_ | |_
 | |_) | |_| ||  _||  _|
