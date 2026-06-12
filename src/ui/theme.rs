@@ -52,26 +52,26 @@ pub fn light() -> Theme {
 
 pub fn dark() -> Theme {
     Theme {
-        heading1: Color::White,
-        heading2: Color::Cyan,
-        heading3: Color::Yellow,
-        heading4: Color::Magenta,
-        heading5: Color::Green,
-        heading6: Color::Gray,
-        border_focused: Color::Cyan,
-        border_unfocused: Color::DarkGray,
-        notes_panel_bg: Color::Reset,
-        panel_bg: Color::Rgb(220, 220, 220),
-        chat_panel_bg: Color::Rgb(230, 230, 240),
-        quote_marker: Color::Magenta,
-        code: Color::DarkGray,
-        todo_done: Color::Green,
-        todo_overdue: Color::Red,
-        vim_cursor_line: Color::Rgb(40, 44, 52),
+        heading1: Color::Rgb(226, 232, 240),
+        heading2: Color::Rgb(144, 205, 244),
+        heading3: Color::Rgb(127, 188, 232),
+        heading4: Color::Rgb(147, 197, 253),
+        heading5: Color::Rgb(165, 180, 252),
+        heading6: Color::Rgb(148, 163, 184),
+        border_focused: Color::Rgb(99, 179, 237),
+        border_unfocused: Color::Rgb(42, 46, 63),
+        notes_panel_bg: Color::Rgb(26, 27, 38),
+        panel_bg: Color::Rgb(36, 40, 59),
+        chat_panel_bg: Color::Rgb(31, 35, 53),
+        quote_marker: Color::Rgb(183, 148, 244),
+        code: Color::Rgb(139, 149, 167),
+        todo_done: Color::Rgb(104, 211, 145),
+        todo_overdue: Color::Rgb(252, 129, 129),
+        vim_cursor_line: Color::Rgb(41, 46, 66),
         capture_bg: Color::Reset,
-        metadata: Color::Gray,
-        terminal_bg: Color::Rgb(18, 18, 18),
-        terminal_fg: Color::White,
+        metadata: Color::Rgb(107, 116, 136),
+        terminal_bg: Color::Rgb(26, 27, 38),
+        terminal_fg: Color::Rgb(214, 218, 227),
     }
 }
 
@@ -201,15 +201,15 @@ mod tests {
     }
 
     #[test]
-    fn dark_theme_heading1_is_white() {
+    fn dark_theme_heading1_is_near_white() {
         let theme = dark();
-        assert_eq!(theme.heading1, Color::White);
+        assert_eq!(theme.heading1, Color::Rgb(226, 232, 240));
     }
 
     #[test]
-    fn dark_theme_heading2_is_cyan() {
+    fn dark_theme_heading2_is_light_blue() {
         let theme = dark();
-        assert_eq!(theme.heading2, Color::Cyan);
+        assert_eq!(theme.heading2, Color::Rgb(144, 205, 244));
     }
 
     #[test]
@@ -222,9 +222,9 @@ mod tests {
     #[test]
     fn resolve_dark_theme() {
         let theme = resolve_theme("dark", &ThemeOverrides::default());
-        assert_eq!(theme.heading1, Color::White);
-        assert_eq!(theme.heading2, Color::Cyan);
-        assert_eq!(theme.border_focused, Color::Cyan);
+        assert_eq!(theme.heading1, Color::Rgb(226, 232, 240));
+        assert_eq!(theme.heading2, Color::Rgb(144, 205, 244));
+        assert_eq!(theme.border_focused, Color::Rgb(99, 179, 237));
     }
 
     #[test]
@@ -267,7 +267,7 @@ mod tests {
     #[test]
     fn dark_theme_has_vim_cursor_line() {
         let theme = dark();
-        assert_eq!(theme.vim_cursor_line, Color::Rgb(40, 44, 52));
+        assert_eq!(theme.vim_cursor_line, Color::Rgb(41, 46, 66));
     }
 
     #[test]
@@ -312,13 +312,19 @@ mod tests {
     #[test]
     fn dark_theme_terminal_bg_is_dark() {
         let theme = dark();
-        assert_eq!(theme.terminal_bg, Color::Rgb(18, 18, 18));
+        assert_eq!(theme.terminal_bg, Color::Rgb(26, 27, 38));
     }
 
     #[test]
-    fn dark_theme_terminal_fg_is_white() {
+    fn dark_theme_terminal_fg_is_light() {
         let theme = dark();
-        assert_eq!(theme.terminal_fg, Color::White);
+        assert_eq!(theme.terminal_fg, Color::Rgb(214, 218, 227));
+    }
+
+    #[test]
+    fn dark_theme_capture_bg_is_reset() {
+        let theme = dark();
+        assert_eq!(theme.capture_bg, Color::Reset);
     }
 
     #[test]
