@@ -656,11 +656,11 @@ mod tests {
             .unwrap();
 
         let buffer = terminal.backend().buffer();
-        // light theme panel_bg = Color::Rgb(221, 232, 245)
+        // light theme panel_bg = Color::Rgb(238, 241, 246)
         let has_panel_bg = buffer
             .content
             .iter()
-            .any(|cell| cell.style().bg == Some(Color::Rgb(221, 232, 245)));
+            .any(|cell| cell.style().bg == Some(Color::Rgb(238, 241, 246)));
         assert!(has_panel_bg, "expected light theme panel_bg color in right panel");
     }
 

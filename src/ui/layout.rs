@@ -472,9 +472,9 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
         terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
         let buffer = terminal.backend().buffer();
-        // h4 color = Color::Rgb(106, 27, 154) in light theme
+        // h4 color = Color::Rgb(49, 130, 206) in light theme
         let has_h4_color = buffer.content.iter().any(|cell| {
-            cell.style().fg == Some(ratatui::style::Color::Rgb(106, 27, 154))
+            cell.style().fg == Some(ratatui::style::Color::Rgb(49, 130, 206))
         });
         assert!(has_h4_color, "expected h4 heading color applied");
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
@@ -491,9 +491,9 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
         terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
         let buffer = terminal.backend().buffer();
-        // light theme h1 = Color::Black
+        // light theme h1 = Color::Rgb(26, 54, 93)
         let has_h1_color = buffer.content.iter().any(|cell| {
-            cell.style().fg == Some(ratatui::style::Color::Black)
+            cell.style().fg == Some(ratatui::style::Color::Rgb(26, 54, 93))
                 && cell.style().add_modifier.contains(ratatui::style::Modifier::BOLD)
         });
         assert!(has_h1_color, "expected h1 theme color with BOLD");
@@ -549,9 +549,9 @@ mod tests {
         terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
 
         let buffer = terminal.backend().buffer();
-        // light theme vim_cursor_line = Color::Rgb(219, 234, 254)
+        // light theme vim_cursor_line = Color::Rgb(224, 231, 255)
         let has_highlight = buffer.content.iter().any(|cell| {
-            cell.style().bg == Some(Color::Rgb(219, 234, 254))
+            cell.style().bg == Some(Color::Rgb(224, 231, 255))
         });
         assert!(
             has_highlight,

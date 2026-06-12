@@ -27,26 +27,26 @@ pub struct Theme {
 
 pub fn light() -> Theme {
     Theme {
-        heading1: Color::Rgb(22, 22, 107),
-        heading2: Color::Rgb(31, 31, 151),
-        heading3: Color::Rgb(51, 51, 213),
-        heading4: Color::Rgb(96, 96, 222),
-        heading5: Color::Rgb(96, 96, 222),
-        heading6: Color::DarkGray,
-        border_focused: Color::Rgb(2, 119, 189),
-        border_unfocused: Color::DarkGray,
-        notes_panel_bg: Color::Rgb(245, 245, 253),
-        panel_bg: Color::Rgb(228, 228, 250),
-        chat_panel_bg: Color::Rgb(245, 245, 253),
-        quote_marker: Color::Rgb(123, 31, 162),
-        code: Color::DarkGray,
-        todo_done: Color::Green,
-        todo_overdue: Color::Red,
-        vim_cursor_line: Color::Rgb(219, 234, 254),
+        heading1: Color::Rgb(26, 54, 93),
+        heading2: Color::Rgb(44, 82, 130),
+        heading3: Color::Rgb(43, 108, 176),
+        heading4: Color::Rgb(49, 130, 206),
+        heading5: Color::Rgb(66, 153, 225),
+        heading6: Color::Rgb(113, 128, 150),
+        border_focused: Color::Rgb(49, 130, 206),
+        border_unfocused: Color::Rgb(208, 215, 222),
+        notes_panel_bg: Color::Rgb(250, 251, 252),
+        panel_bg: Color::Rgb(238, 241, 246),
+        chat_panel_bg: Color::Rgb(244, 246, 250),
+        quote_marker: Color::Rgb(128, 90, 213),
+        code: Color::Rgb(113, 128, 150),
+        todo_done: Color::Rgb(56, 161, 105),
+        todo_overdue: Color::Rgb(197, 48, 48),
+        vim_cursor_line: Color::Rgb(224, 231, 255),
         capture_bg: Color::Reset,
-        metadata: Color::DarkGray,
-        terminal_bg: Color::Reset,
-        terminal_fg: Color::Reset,
+        metadata: Color::Rgb(160, 174, 192),
+        terminal_bg: Color::Rgb(250, 251, 252),
+        terminal_fg: Color::Rgb(43, 48, 64),
     }
 }
 
@@ -197,7 +197,7 @@ mod tests {
     #[test]
     fn light_theme_heading2_is_blue() {
         let theme = light();
-        assert_eq!(theme.heading2, Color::Rgb(2, 119, 189));
+        assert_eq!(theme.heading2, Color::Rgb(44, 82, 130));
     }
 
     #[test]
@@ -215,8 +215,8 @@ mod tests {
     #[test]
     fn resolve_light_theme() {
         let theme = resolve_theme("light", &ThemeOverrides::default());
-        assert_eq!(theme.heading2, Color::Rgb(2, 119, 189));
-        assert_eq!(theme.border_focused, Color::Rgb(2, 119, 189));
+        assert_eq!(theme.heading2, Color::Rgb(44, 82, 130));
+        assert_eq!(theme.border_focused, Color::Rgb(49, 130, 206));
     }
 
     #[test]
@@ -230,7 +230,7 @@ mod tests {
     #[test]
     fn resolve_unknown_theme_falls_back_to_light() {
         let theme = resolve_theme("bogus", &ThemeOverrides::default());
-        assert_eq!(theme.heading2, Color::Rgb(2, 119, 189));
+        assert_eq!(theme.heading2, Color::Rgb(44, 82, 130));
     }
 
     #[test]
@@ -246,8 +246,8 @@ mod tests {
         let mut overrides = ThemeOverrides::default();
         overrides.heading1 = Some("notacolor".to_string());
         let theme = resolve_theme("light", &overrides);
-        // light default for heading1 is Black
-        assert_eq!(theme.heading1, Color::Black);
+        // light default for heading1 is Rgb(26, 54, 93)
+        assert_eq!(theme.heading1, Color::Rgb(26, 54, 93));
     }
 
     #[test]
@@ -261,7 +261,7 @@ mod tests {
     #[test]
     fn light_theme_has_vim_cursor_line() {
         let theme = light();
-        assert_eq!(theme.vim_cursor_line, Color::Rgb(219, 234, 254));
+        assert_eq!(theme.vim_cursor_line, Color::Rgb(224, 231, 255));
     }
 
     #[test]
@@ -292,15 +292,21 @@ mod tests {
     }
 
     #[test]
-    fn light_theme_terminal_bg_is_reset() {
+    fn light_theme_terminal_bg_is_near_white() {
         let theme = light();
-        assert_eq!(theme.terminal_bg, Color::Reset);
+        assert_eq!(theme.terminal_bg, Color::Rgb(250, 251, 252));
     }
 
     #[test]
-    fn light_theme_terminal_fg_is_reset() {
+    fn light_theme_terminal_fg_is_slate() {
         let theme = light();
-        assert_eq!(theme.terminal_fg, Color::Reset);
+        assert_eq!(theme.terminal_fg, Color::Rgb(43, 48, 64));
+    }
+
+    #[test]
+    fn light_theme_capture_bg_is_reset() {
+        let theme = light();
+        assert_eq!(theme.capture_bg, Color::Reset);
     }
 
     #[test]
