@@ -149,7 +149,26 @@ as-is: `parse_*`, `resolve_applies_valid_override`, `resolve_hex_override`,
 Optionally add `light_theme_capture_bg_is_reset` / `dark_theme_capture_bg_is_reset`
 to lock in the documented "tracks the canvas" behavior.
 
-### 3. `README.md` — Themes section
+### 3. Rendering tests that consume `light()`
+
+The `test_theme()` fixtures in `src/ui/layout.rs` and `src/ui/right_panel.rs` both
+return `light()`, so several render tests assert specific light-theme colors and
+must be updated to the new palette:
+
+- `src/ui/layout.rs::render_h1_uses_theme_color` → `heading1 = Rgb(26, 54, 93)`
+  (no longer `Color::Black`); keep the `BOLD` modifier check.
+- `src/ui/layout.rs::render_h4_h5_h6_headings` → `heading4 = Rgb(49, 130, 206)`
+  (was `Rgb(106, 27, 154)`).
+- `src/ui/layout.rs::render_vim_normal_cursor_line_uses_vim_cursor_line_bg`
+  → `vim_cursor_line = Rgb(224, 231, 255)` (was `Rgb(219, 234, 254)`).
+- `src/ui/right_panel.rs::panel_uses_theme_panel_bg` → `panel_bg = Rgb(238, 241, 246)`
+  (was `Rgb(221, 232, 245)`).
+
+Note: the full suite currently has **7 failing tests** because the previous
+light-theme edit changed values without updating these assertions. This redesign
+brings code, tests, and docs back into agreement.
+
+### 4. `README.md` — Themes section
 
 - Update the theme descriptions table: `light` = "calm blue heading ramp on a
   clean near-white canvas"; `dark` = "calm blue heading ramp on a deep
