@@ -4,6 +4,13 @@ use ratatui::style::{Modifier, Style};
 use ratatui::widgets::Block;
 
 pub fn render(frame: &mut ratatui::Frame, app: &AppState, theme: &crate::ui::theme::Theme) {
+    // Paint the terminal canvas with the theme's base background and foreground.
+    // All panel widgets render on top of this layer.
+    frame.render_widget(
+        Block::default().style(Style::default().bg(theme.terminal_bg).fg(theme.terminal_fg)),
+        frame.area(),
+    );
+
     // Full-width outer vertical split: header | middle (panels) | status | input
     let input_line_count = app.input.split('\n').count().max(1) as u16;
     let input_height = (input_line_count + 2).clamp(app.config.capture_height, 12);
@@ -549,6 +556,33 @@ mod tests {
         assert!(
             has_highlight,
             "expected vim_cursor_line background on the cursor line, got none"
+        );
+    }
+
+    #[test]
+    fn render_terminal_bg_paints_canvas() {
+        use ratatui::style::Color;
+        let doc = Document::new_for_date(NaiveDate::from_ymd_opt(2026, 6, 4).unwrap());
+        let app = test_app(doc, Focus::Capture, 0);
+
+        // Build a custom theme with a distinctive terminal_bg and terminal_fg.
+        let mut theme = crate::ui::theme::light();
+        theme.terminal_bg = Color::Rgb(99, 0, 99);
+        theme.terminal_fg = Color::Rgb(200, 200, 0);
+
+        let backend = TestBackend::new(80, 24);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|frame| render(frame, &app, &theme)).unwrap();
+
+        let buffer = terminal.backend().buffer();
+        // At least one cell should carry the terminal_bg as its background.
+        let has_canvas_bg = buffer
+            .content
+            .iter()
+            .any(|cell| cell.style().bg == Some(Color::Rgb(99, 0, 99)));
+        assert!(
+            has_canvas_bg,
+            "expected terminal_bg to appear in at least one canvas cell"
         );
     }
 }
