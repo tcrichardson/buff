@@ -362,5 +362,26 @@ mod tests {
         let config: Config = toml::from_str(toml).unwrap();
         assert!(config.llm_api_key.is_none());
     }
+
+    #[test]
+    fn parse_terminal_bg_and_fg_overrides_from_toml() {
+        let toml = r##"
+            theme = "dark"
+            [theme_overrides]
+            terminal_bg = "#1e1e1e"
+            terminal_fg = "white"
+        "##;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.theme_overrides.terminal_bg, Some("#1e1e1e".to_string()));
+        assert_eq!(config.theme_overrides.terminal_fg, Some("white".to_string()));
+    }
+
+    #[test]
+    fn terminal_overrides_absent_are_none() {
+        let toml = r#"theme = "dark""#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert!(config.theme_overrides.terminal_bg.is_none());
+        assert!(config.theme_overrides.terminal_fg.is_none());
+    }
 }
 
