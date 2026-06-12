@@ -205,35 +205,35 @@ buff ships with two built-in themes:
 
 | Theme | Description |
 |---|---|
-| `light` (default) | Clean light-blue focused borders with colored headings |
-| `dark` | Cyan-focused borders with white headings for dark terminals |
+| `light` (default) | Calm blue heading ramp on a clean near-white canvas |
+| `dark` | Calm blue heading ramp on a deep slate-indigo canvas |
 
 Set the theme with the `theme` config field. You can override any individual color via the `[theme_overrides]` table:
 
 | Override key | Default (light) | Example values |
 |---|---|---|
-| `heading1` | `black` | `"red"`, `"#ff0000"` |
-| `heading2` | `#0277bd` | `"cyan"`, `"#00bcd4"` |
-| `heading3` | `#e65100` | `"yellow"`, `"#ff9800"` |
-| `heading4` | `#6a1b9a` | `"magenta"`, `"#9c27b0"` |
-| `heading5` | `#2e7d32` | `"green"`, `"#4caf50"` |
-| `heading6` | `darkgray` | `"gray"`, `"#757575"` |
-| `border_focused` | `#0277bd` | `"cyan"`, `"#0288d1"` |
-| `border_unfocused` | `darkgray` | `"gray"`, `"#9e9e9e"` |
-| `notes_panel_bg` | `reset` | `"white"`, `"#fafafa"` |
-| `panel_bg` | `#dde8f5` | `"lightgray"`, `"#e3f2fd"` |
-| `chat_panel_bg` | `#e6e6f0` | `"lightgray"`, `"#f3e5f5"` |
-| `quote_marker` | `#7b1fa2` | `"magenta"`, `"#ab47bc"` |
-| `code` | `darkgray` | `"gray"`, `"#616161"` |
-| `todo_done` | `green` | `"lightgreen"`, `"#66bb6a"` |
-| `todo_overdue` | `red` | `"lightred"`, `"#ef5350"` |
-| `vim_cursor_line` | `#dbeafe` | `"lightgray"`, `"#e3f2fd"` |
+| `heading1` | `#1a365d` | `"red"`, `"#ff0000"` |
+| `heading2` | `#2c5282` | `"cyan"`, `"#00bcd4"` |
+| `heading3` | `#2b6cb0` | `"yellow"`, `"#ff9800"` |
+| `heading4` | `#3182ce` | `"magenta"`, `"#9c27b0"` |
+| `heading5` | `#4299e1` | `"green"`, `"#4caf50"` |
+| `heading6` | `#718096` | `"gray"`, `"#757575"` |
+| `border_focused` | `#3182ce` | `"cyan"`, `"#0288d1"` |
+| `border_unfocused` | `#d0d7de` | `"gray"`, `"#9e9e9e"` |
+| `notes_panel_bg` | `#fafbfc` | `"white"`, `"#ffffff"` |
+| `panel_bg` | `#eef1f6` | `"lightgray"`, `"#e3f2fd"` |
+| `chat_panel_bg` | `#f4f6fa` | `"lightgray"`, `"#f3e5f5"` |
+| `quote_marker` | `#805ad5` | `"magenta"`, `"#ab47bc"` |
+| `code` | `#718096` | `"gray"`, `"#616161"` |
+| `todo_done` | `#38a169` | `"lightgreen"`, `"#66bb6a"` |
+| `todo_overdue` | `#c53030` | `"lightred"`, `"#ef5350"` |
+| `vim_cursor_line` | `#e0e7ff` | `"lightgray"`, `"#e3f2fd"` |
 | `capture_bg` | `reset` | `"white"`, `"#fafafa"` |
-| `metadata` | `darkgray` | `"gray"`, `"#757575"` |
-| `terminal_bg` | `reset` | `"black"`, `"#121212"` |
-| `terminal_fg` | `reset` | `"white"`, `"#e0e0e0"` |
+| `metadata` | `#a0aec0` | `"gray"`, `"#757575"` |
+| `terminal_bg` | `#fafbfc` | `"black"`, `"#121212"` |
+| `terminal_fg` | `#2b3040` | `"white"`, `"#e0e0e0"` |
 
-> **Note:** The `dark` theme sets `terminal_bg` to `#121212` and `terminal_fg` to `white` by default, so it renders correctly on terminals with a light background. Override these in `[theme_overrides]` to customise or restore terminal-inherited colours (`reset`).
+> **Note:** Both themes now paint their own canvas: `light` uses `terminal_bg` `#fafbfc` / `terminal_fg` `#2b3040`, and `dark` uses `#1a1b26` / `#d6dae3`. This makes buff render consistently regardless of your terminal's own colours. To restore terminal-inherited colours, set `terminal_bg` and `terminal_fg` to `"reset"` in `[theme_overrides]`.
 
 Colors can be specified as:
 - **Named colors**: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `gray`, `darkgray`, `white`, `reset`
