@@ -1,5 +1,5 @@
-use crate::app::state::AppState;
 use crate::app::input::{CaptureAction, EventOutcome, UiAction};
+use crate::app::state::AppState;
 use anyhow::Result;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -16,15 +16,13 @@ pub(super) fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction>
         KeyCode::Char('j') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             Some(UiAction::Capture(CaptureAction::TypeNewline))
         }
-        KeyCode::Char(c)
-            if !key.modifiers.contains(KeyModifiers::CONTROL) && !c.is_control() =>
-        {
+        KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) && !c.is_control() => {
             Some(UiAction::Capture(CaptureAction::TypeChar(c)))
         }
-        KeyCode::Left  => Some(UiAction::Capture(CaptureAction::MoveCursorLeft)),
+        KeyCode::Left => Some(UiAction::Capture(CaptureAction::MoveCursorLeft)),
         KeyCode::Right => Some(UiAction::Capture(CaptureAction::MoveCursorRight)),
-        KeyCode::Home  => Some(UiAction::Capture(CaptureAction::MoveCursorLineStart)),
-        KeyCode::End   => Some(UiAction::Capture(CaptureAction::MoveCursorLineEnd)),
+        KeyCode::Home => Some(UiAction::Capture(CaptureAction::MoveCursorLineStart)),
+        KeyCode::End => Some(UiAction::Capture(CaptureAction::MoveCursorLineEnd)),
         KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             Some(UiAction::Capture(CaptureAction::MoveCursorLineStart))
         }
@@ -41,26 +39,26 @@ pub(super) fn key_to_action(state: &AppState, key: KeyEvent) -> Option<UiAction>
 
 pub(super) fn execute_action(state: &mut AppState, action: CaptureAction) -> Result<EventOutcome> {
     match action {
-        CaptureAction::TypeChar(c)         => type_char(state, c),
-        CaptureAction::DeleteChar          => delete_char(state),
-        CaptureAction::TypeNewline         => type_newline(state),
-        CaptureAction::TypeIndent          => type_indent(state),
-        CaptureAction::PrependIndent       => prepend_indent(state),
-        CaptureAction::RemoveIndent        => remove_indent(state),
-        CaptureAction::SubmitInput         => submit_input(state)?,
-        CaptureAction::CommitEdit          => crate::app::actions::commit_edit(state)?,
-        CaptureAction::MoveCursorLeft      => move_cursor_left(state),
-        CaptureAction::MoveCursorRight     => move_cursor_right(state),
+        CaptureAction::TypeChar(c) => type_char(state, c),
+        CaptureAction::DeleteChar => delete_char(state),
+        CaptureAction::TypeNewline => type_newline(state),
+        CaptureAction::TypeIndent => type_indent(state),
+        CaptureAction::PrependIndent => prepend_indent(state),
+        CaptureAction::RemoveIndent => remove_indent(state),
+        CaptureAction::SubmitInput => submit_input(state)?,
+        CaptureAction::CommitEdit => crate::app::actions::commit_edit(state)?,
+        CaptureAction::MoveCursorLeft => move_cursor_left(state),
+        CaptureAction::MoveCursorRight => move_cursor_right(state),
         CaptureAction::MoveCursorLineStart => move_cursor_line_start(state),
-        CaptureAction::MoveCursorLineEnd   => move_cursor_line_end(state),
-        CaptureAction::SelectNext          => crate::app::actions::select_next(state),
-        CaptureAction::SelectPrev          => crate::app::actions::select_prev(state),
-        CaptureAction::SelectFirst         => crate::app::actions::select_first(state),
-        CaptureAction::SelectLast          => crate::app::actions::select_last(state),
-        CaptureAction::ToggleSelected      => crate::app::actions::toggle_selected(state),
-        CaptureAction::BeginEdit           => crate::app::actions::begin_edit_selected(state),
-        CaptureAction::ResumeHeading       => crate::app::actions::resume_selected_heading(state),
-        CaptureAction::CancelEdit          => {
+        CaptureAction::MoveCursorLineEnd => move_cursor_line_end(state),
+        CaptureAction::SelectNext => crate::app::actions::select_next(state),
+        CaptureAction::SelectPrev => crate::app::actions::select_prev(state),
+        CaptureAction::SelectFirst => crate::app::actions::select_first(state),
+        CaptureAction::SelectLast => crate::app::actions::select_last(state),
+        CaptureAction::ToggleSelected => crate::app::actions::toggle_selected(state),
+        CaptureAction::BeginEdit => crate::app::actions::begin_edit_selected(state),
+        CaptureAction::ResumeHeading => crate::app::actions::resume_selected_heading(state),
+        CaptureAction::CancelEdit => {
             state.editing = None;
             state.input.clear();
             state.cursor_pos = 0;

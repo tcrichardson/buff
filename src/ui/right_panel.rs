@@ -66,7 +66,12 @@ pub fn collect_agenda_items(doc: &Document) -> Vec<(String, String)> {
     doc.meetings_with_scheduled()
 }
 
-pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &crate::ui::theme::Theme) {
+pub fn render(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    app: &AppState,
+    theme: &crate::ui::theme::Theme,
+) {
     // Fill panel background with padding inset
     let bg_block = Block::default()
         .style(Style::default().bg(theme.panel_bg))
@@ -101,7 +106,12 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &cr
     }
 }
 
-fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &crate::ui::theme::Theme) {
+fn render_calendar(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    app: &AppState,
+    theme: &crate::ui::theme::Theme,
+) {
     let visible_month = (app.date.year(), app.date.month());
     let weeks_grid = calendar::weeks(visible_month, app.config.week_starts_on);
     let dates_with_notes = &app.dates_with_notes;
@@ -173,25 +183,44 @@ fn render_calendar(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme
         rows.push(Row::new(cells));
     }
 
-    let table = Table::new(rows, [Constraint::Length(3); 7])
-        .style(Style::default().bg(theme.panel_bg));
+    let table =
+        Table::new(rows, [Constraint::Length(3); 7]).style(Style::default().bg(theme.panel_bg));
     frame.render_widget(table, cal_chunks[2]);
 }
 
-fn render_agenda(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &crate::ui::theme::Theme) {
+fn render_agenda(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    app: &AppState,
+    theme: &crate::ui::theme::Theme,
+) {
     let mut lines: Vec<Line> = Vec::new();
-    lines.push(Line::styled("Agenda", Style::default().add_modifier(Modifier::BOLD)));
+    lines.push(Line::styled(
+        "Agenda",
+        Style::default().add_modifier(Modifier::BOLD),
+    ));
     for (time, name) in &app.panel_agenda {
-        lines.push(Line::styled(format!("{} - {}", time, name), Style::default()));
+        lines.push(Line::styled(
+            format!("{} - {}", time, name),
+            Style::default(),
+        ));
     }
     let widget = Paragraph::new(lines).style(Style::default().bg(theme.panel_bg));
     frame.render_widget(widget, area);
 }
 
-fn render_todo_list(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &crate::ui::theme::Theme) {
+fn render_todo_list(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    app: &AppState,
+    theme: &crate::ui::theme::Theme,
+) {
     let mut virtual_lines: Vec<Line> = Vec::new();
 
-    virtual_lines.push(Line::styled("To-dos", Style::default().add_modifier(Modifier::BOLD)));
+    virtual_lines.push(Line::styled(
+        "To-dos",
+        Style::default().add_modifier(Modifier::BOLD),
+    ));
 
     let mut current_date = None;
     for (flat_idx, todo) in app.panel_todos.iter().enumerate() {
@@ -203,8 +232,7 @@ fn render_todo_list(frame: &mut ratatui::Frame, area: Rect, app: &AppState, them
                 Style::default().add_modifier(Modifier::BOLD),
             ));
         }
-        let is_selected =
-            app.focus == Focus::RightPanel && flat_idx == app.right_panel_selected;
+        let is_selected = app.focus == Focus::RightPanel && flat_idx == app.right_panel_selected;
         let item_text = format!("☐ {}", todo.text);
         let style = if is_selected {
             Style::default().add_modifier(Modifier::REVERSED)
@@ -286,7 +314,11 @@ mod tests {
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("June 2026"), "expected 'June 2026', got: {}", content);
+        assert!(
+            content.contains("June 2026"),
+            "expected 'June 2026', got: {}",
+            content
+        );
     }
 
     #[test]
@@ -341,7 +373,11 @@ mod tests {
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("buy milk"), "expected 'buy milk', got: {}", content);
+        assert!(
+            content.contains("buy milk"),
+            "expected 'buy milk', got: {}",
+            content
+        );
     }
 
     #[test]
@@ -446,8 +482,7 @@ mod tests {
     #[test]
     fn mixed_todos_only_incomplete_returned() {
         let tmp = tempfile::tempdir().unwrap();
-        let content =
-            "# Day\n\n## Meetings\n\n## Notes\n\n## To-dos\n- [ ] buy milk\n- [x] done\n- [ ] call bank\n";
+        let content = "# Day\n\n## Meetings\n\n## Notes\n\n## To-dos\n- [ ] buy milk\n- [x] done\n- [ ] call bank\n";
         write_day(tmp.path(), jun5(), content);
         let config = Config::default();
         let todos = collect_panel_todos(tmp.path(), jun5(), &config);
@@ -543,7 +578,10 @@ mod tests {
         );
         let selectables = doc.selectables();
         assert!(
-            matches!(selectables[todos[0].todo_index].kind, SelectableKind::Todo { done: false }),
+            matches!(
+                selectables[todos[0].todo_index].kind,
+                SelectableKind::Todo { done: false }
+            ),
             "expected todo at todo_index {}, got {:?}",
             todos[0].todo_index,
             selectables[todos[0].todo_index].kind
@@ -661,7 +699,10 @@ mod tests {
             .content
             .iter()
             .any(|cell| cell.style().bg == Some(Color::Rgb(238, 241, 246)));
-        assert!(has_panel_bg, "expected light theme panel_bg color in right panel");
+        assert!(
+            has_panel_bg,
+            "expected light theme panel_bg color in right panel"
+        );
     }
 
     #[test]
@@ -711,7 +752,10 @@ mod tests {
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
-        assert!(!content.contains("Agenda"), "Agenda should not appear when empty");
+        assert!(
+            !content.contains("Agenda"),
+            "Agenda should not appear when empty"
+        );
     }
 
     #[test]
@@ -765,8 +809,16 @@ mod tests {
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("Agenda"), "expected 'Agenda' header, got: {}", content);
-        assert!(content.contains("09:30 - Standup"), "expected first agenda item, got: {}", content);
+        assert!(
+            content.contains("Agenda"),
+            "expected 'Agenda' header, got: {}",
+            content
+        );
+        assert!(
+            content.contains("09:30 - Standup"),
+            "expected first agenda item, got: {}",
+            content
+        );
         assert!(
             content.contains("14:00 - Design Review"),
             "expected second agenda item, got: {}",

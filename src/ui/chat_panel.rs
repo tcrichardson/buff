@@ -44,7 +44,11 @@ fn wrap_prefixed(
         .into_iter()
         .enumerate()
         .map(|(i, seg)| {
-            let p = if i == 0 { prefix.to_owned() } else { cont.to_owned() };
+            let p = if i == 0 {
+                prefix.to_owned()
+            } else {
+                cont.to_owned()
+            };
             let mut spans: Vec<Span<'static>> = vec![Span::styled(p, prefix_style)];
             spans.extend(parse_inline_formatting(&seg, content_style));
             Line::from(spans)
@@ -61,7 +65,7 @@ fn render_markdown_wrapped(
     theme: &crate::ui::theme::Theme,
     base_style: Style,
 ) -> Vec<Line<'static>> {
-    use crate::ui::markdown::{classify_line, parse_inline_formatting, LineKind};
+    use crate::ui::markdown::{LineKind, classify_line, parse_inline_formatting};
     use ratatui::style::Modifier;
 
     if width == 0 {
@@ -158,7 +162,12 @@ fn render_markdown_wrapped(
     }
 }
 
-pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &crate::ui::theme::Theme) {
+pub fn render(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    app: &AppState,
+    theme: &crate::ui::theme::Theme,
+) {
     let bg = Block::default()
         .style(Style::default().bg(theme.chat_panel_bg))
         .padding(Padding::new(1, 1, 0, 1));
@@ -212,7 +221,13 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &cr
         if !msg.content.is_empty() {
             let mut in_code = false;
             for raw in msg.content.split('\n') {
-                lines.extend(render_markdown_wrapped(raw, &mut in_code, width, theme, body_style));
+                lines.extend(render_markdown_wrapped(
+                    raw,
+                    &mut in_code,
+                    width,
+                    theme,
+                    body_style,
+                ));
             }
         }
 
@@ -234,10 +249,18 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &cr
     let height = body_area.height as usize;
     let total = lines.len();
     let max_top = total.saturating_sub(height);
-    let scroll = if app.focus == Focus::Chat { app.chat.scroll } else { 0 };
+    let scroll = if app.focus == Focus::Chat {
+        app.chat.scroll
+    } else {
+        0
+    };
     let top = max_top.saturating_sub(scroll);
     let end = (top + height).min(total);
-    let visible: Vec<Line> = if top < end { lines[top..end].to_vec() } else { Vec::new() };
+    let visible: Vec<Line> = if top < end {
+        lines[top..end].to_vec()
+    } else {
+        Vec::new()
+    };
     frame.render_widget(
         Paragraph::new(visible).style(Style::default().bg(theme.chat_panel_bg)),
         body_area,
@@ -287,18 +310,32 @@ mod tests {
     #[test]
     fn render_speaker_label_on_own_line() {
         let app = app_with_messages(vec![
-            ChatMessage { role: ChatRole::User, content: "hello".into() },
-            ChatMessage { role: ChatRole::Assistant, content: "world".into() },
+            ChatMessage {
+                role: ChatRole::User,
+                content: "hello".into(),
+            },
+            ChatMessage {
+                role: ChatRole::Assistant,
+                content: "world".into(),
+            },
         ]);
         let width = 40;
         let backend = TestBackend::new(width, 20);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|f| render(f, f.area(), &app, &crate::ui::theme::light())).unwrap();
+        terminal
+            .draw(|f| render(f, f.area(), &app, &crate::ui::theme::light()))
+            .unwrap();
         let buffer = terminal.backend().buffer();
         let rows: Vec<String> = buffer
             .content
             .chunks(width as usize)
-            .map(|row| row.iter().map(|c| c.symbol()).collect::<String>().trim().to_string())
+            .map(|row| {
+                row.iter()
+                    .map(|c| c.symbol())
+                    .collect::<String>()
+                    .trim()
+                    .to_string()
+            })
             .collect();
         // Label immediately precedes its content; messages separated by a blank row.
         let nonempty_rows: Vec<&String> = rows
@@ -312,34 +349,48 @@ mod tests {
             nonempty_rows
         );
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
-        assert!(!content.contains("You: "), "old prefixed format should be gone: {}", content);
-        assert!(!content.contains("AI: "), "old prefixed format should be gone: {}", content);
+        assert!(
+            !content.contains("You: "),
+            "old prefixed format should be gone: {}",
+            content
+        );
+        assert!(
+            !content.contains("AI: "),
+            "old prefixed format should be gone: {}",
+            content
+        );
     }
 
     #[test]
     fn render_user_content_is_dim() {
         fn cell_has_dim_at(buffer: &ratatui::buffer::Buffer, symbol: char) -> bool {
-            buffer
-                .content
-                .iter()
-                .any(|c| c.symbol() == symbol.to_string() && c.style().add_modifier.contains(Modifier::DIM))
+            buffer.content.iter().any(|c| {
+                c.symbol() == symbol.to_string() && c.style().add_modifier.contains(Modifier::DIM)
+            })
         }
 
         fn cell_not_dim_at(buffer: &ratatui::buffer::Buffer, symbol: char) -> bool {
-            buffer
-                .content
-                .iter()
-                .any(|c| c.symbol() == symbol.to_string() && !c.style().add_modifier.contains(Modifier::DIM))
+            buffer.content.iter().any(|c| {
+                c.symbol() == symbol.to_string() && !c.style().add_modifier.contains(Modifier::DIM)
+            })
         }
 
         // Plain user content is dim; plain assistant content is not.
         let app = app_with_messages(vec![
-            ChatMessage { role: ChatRole::User, content: "hello".into() },
-            ChatMessage { role: ChatRole::Assistant, content: "world".into() },
+            ChatMessage {
+                role: ChatRole::User,
+                content: "hello".into(),
+            },
+            ChatMessage {
+                role: ChatRole::Assistant,
+                content: "world".into(),
+            },
         ]);
         let backend = TestBackend::new(40, 20);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|f| render(f, f.area(), &app, &crate::ui::theme::light())).unwrap();
+        terminal
+            .draw(|f| render(f, f.area(), &app, &crate::ui::theme::light()))
+            .unwrap();
         let buffer = terminal.backend().buffer();
         assert!(
             cell_has_dim_at(buffer, 'h'),
@@ -352,12 +403,20 @@ mod tests {
 
         // User headings and code blocks are also dim.
         let app = app_with_messages(vec![
-            ChatMessage { role: ChatRole::User, content: "# Heading".into() },
-            ChatMessage { role: ChatRole::User, content: "`code`".into() },
+            ChatMessage {
+                role: ChatRole::User,
+                content: "# Heading".into(),
+            },
+            ChatMessage {
+                role: ChatRole::User,
+                content: "`code`".into(),
+            },
         ]);
         let backend = TestBackend::new(40, 20);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|f| render(f, f.area(), &app, &crate::ui::theme::light())).unwrap();
+        terminal
+            .draw(|f| render(f, f.area(), &app, &crate::ui::theme::light()))
+            .unwrap();
         let buffer = terminal.backend().buffer();
         assert!(
             cell_has_dim_at(buffer, 'H'),
@@ -371,12 +430,10 @@ mod tests {
 
     #[test]
     fn render_markdown_bullet_in_chat() {
-        let app = app_with_messages(vec![
-            ChatMessage {
-                role: ChatRole::Assistant,
-                content: "- first\n- second".into(),
-            },
-        ]);
+        let app = app_with_messages(vec![ChatMessage {
+            role: ChatRole::Assistant,
+            content: "- first\n- second".into(),
+        }]);
         let width = 40;
         let backend = TestBackend::new(width, 20);
         let mut terminal = Terminal::new(backend).unwrap();
@@ -387,7 +444,13 @@ mod tests {
         let rows: Vec<String> = buffer
             .content
             .chunks(width as usize)
-            .map(|row| row.iter().map(|c| c.symbol()).collect::<String>().trim().to_string())
+            .map(|row| {
+                row.iter()
+                    .map(|c| c.symbol())
+                    .collect::<String>()
+                    .trim()
+                    .to_string()
+            })
             .filter(|r| !r.is_empty())
             .collect();
         let first_idx = rows
@@ -407,10 +470,45 @@ mod tests {
 
     #[test]
     fn render_markdown_heading_in_chat() {
+        let app = app_with_messages(vec![ChatMessage {
+            role: ChatRole::Assistant,
+            content: "# Section".into(),
+        }]);
+        let backend = TestBackend::new(40, 20);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| render(f, f.area(), &app, &crate::ui::theme::light()))
+            .unwrap();
+        let content: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|c| c.symbol())
+            .collect();
+        // The heading text "Section" should appear; the "# " prefix should be stripped
+        assert!(
+            content.contains("Section"),
+            "heading text missing: {}",
+            content
+        );
+        assert!(
+            !content.contains("# Section"),
+            "heading markers should be stripped: {}",
+            content
+        );
+    }
+
+    #[test]
+    fn render_shows_message_text() {
         let app = app_with_messages(vec![
             ChatMessage {
+                role: ChatRole::User,
+                content: "ping".into(),
+            },
+            ChatMessage {
                 role: ChatRole::Assistant,
-                content: "# Section".into(),
+                content: "pong".into(),
             },
         ]);
         let backend = TestBackend::new(40, 20);
@@ -425,21 +523,6 @@ mod tests {
             .iter()
             .map(|c| c.symbol())
             .collect();
-        // The heading text "Section" should appear; the "# " prefix should be stripped
-        assert!(content.contains("Section"), "heading text missing: {}", content);
-        assert!(!content.contains("# Section"), "heading markers should be stripped: {}", content);
-    }
-
-    #[test]
-    fn render_shows_message_text() {
-        let app = app_with_messages(vec![
-            ChatMessage { role: ChatRole::User, content: "ping".into() },
-            ChatMessage { role: ChatRole::Assistant, content: "pong".into() },
-        ]);
-        let backend = TestBackend::new(40, 20);
-        let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|f| render(f, f.area(), &app, &crate::ui::theme::light())).unwrap();
-        let content: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
         assert!(content.contains("ping"), "got: {}", content);
         assert!(content.contains("pong"), "got: {}", content);
         assert!(content.contains("Chat"), "header missing: {}", content);
@@ -448,15 +531,33 @@ mod tests {
     #[test]
     fn render_shows_thinking_indicator() {
         let mut app = app_with_messages(vec![
-            ChatMessage { role: ChatRole::User, content: "q".into() },
-            ChatMessage { role: ChatRole::Assistant, content: String::new() },
+            ChatMessage {
+                role: ChatRole::User,
+                content: "q".into(),
+            },
+            ChatMessage {
+                role: ChatRole::Assistant,
+                content: String::new(),
+            },
         ]);
         app.chat.pending = true;
         let backend = TestBackend::new(40, 20);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|f| render(f, f.area(), &app, &crate::ui::theme::light())).unwrap();
-        let content: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
-        assert!(content.contains('…'), "thinking indicator missing: {}", content);
+        terminal
+            .draw(|f| render(f, f.area(), &app, &crate::ui::theme::light()))
+            .unwrap();
+        let content: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|c| c.symbol())
+            .collect();
+        assert!(
+            content.contains('…'),
+            "thinking indicator missing: {}",
+            content
+        );
     }
 
     #[test]
@@ -532,7 +633,11 @@ mod tests {
             .iter()
             .map(|c| c.symbol())
             .collect();
-        assert!(content.contains("Chat"), "header should show 'Chat': {}", content);
+        assert!(
+            content.contains("Chat"),
+            "header should show 'Chat': {}",
+            content
+        );
         assert!(
             !content.contains("Chat ["),
             "should not show meeting bracket outside meeting mode: {}",

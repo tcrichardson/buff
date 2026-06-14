@@ -36,11 +36,11 @@ pub fn classify_line<'a>(line: &'a str, in_code: &mut bool) -> LineKind<'a> {
 
     for (prefix, level) in [
         ("###### ", 6u8),
-        ("##### ",  5),
-        ("#### ",   4),
-        ("### ",    3),
-        ("## ",     2),
-        ("# ",      1),
+        ("##### ", 5),
+        ("#### ", 4),
+        ("### ", 3),
+        ("## ", 2),
+        ("# ", 1),
     ] {
         if let Some(rest) = line.strip_prefix(prefix) {
             return LineKind::Heading(level, rest);
@@ -147,9 +147,10 @@ pub fn parse_inline_formatting(text: &str, base_style: Style) -> Vec<Span<'stati
 /// All string data is cloned to owned, so callers have no lifetime constraints.
 pub fn render_line_kind(kind: LineKind<'_>, theme: &Theme) -> Line<'static> {
     match kind {
-        LineKind::Code(line) => {
-            Line::from(Span::styled(line.to_owned(), Style::default().fg(theme.code)))
-        }
+        LineKind::Code(line) => Line::from(Span::styled(
+            line.to_owned(),
+            Style::default().fg(theme.code),
+        )),
         LineKind::Heading(level, text) => Line::from(Span::styled(
             text.to_owned(),
             Style::default()
@@ -250,43 +251,64 @@ mod tests {
     #[test]
     fn classify_heading1() {
         let mut in_code = false;
-        assert_eq!(classify_line("# Title", &mut in_code), LineKind::Heading(1, "Title"));
+        assert_eq!(
+            classify_line("# Title", &mut in_code),
+            LineKind::Heading(1, "Title")
+        );
     }
 
     #[test]
     fn classify_heading2() {
         let mut in_code = false;
-        assert_eq!(classify_line("## Notes", &mut in_code), LineKind::Heading(2, "Notes"));
+        assert_eq!(
+            classify_line("## Notes", &mut in_code),
+            LineKind::Heading(2, "Notes")
+        );
     }
 
     #[test]
     fn classify_heading3() {
         let mut in_code = false;
-        assert_eq!(classify_line("### Sub", &mut in_code), LineKind::Heading(3, "Sub"));
+        assert_eq!(
+            classify_line("### Sub", &mut in_code),
+            LineKind::Heading(3, "Sub")
+        );
     }
 
     #[test]
     fn classify_heading4() {
         let mut in_code = false;
-        assert_eq!(classify_line("#### Deep", &mut in_code), LineKind::Heading(4, "Deep"));
+        assert_eq!(
+            classify_line("#### Deep", &mut in_code),
+            LineKind::Heading(4, "Deep")
+        );
     }
 
     #[test]
     fn classify_heading5() {
         let mut in_code = false;
-        assert_eq!(classify_line("##### Five", &mut in_code), LineKind::Heading(5, "Five"));
+        assert_eq!(
+            classify_line("##### Five", &mut in_code),
+            LineKind::Heading(5, "Five")
+        );
     }
 
     #[test]
     fn classify_heading6() {
         let mut in_code = false;
-        assert_eq!(classify_line("###### Six", &mut in_code), LineKind::Heading(6, "Six"));
+        assert_eq!(
+            classify_line("###### Six", &mut in_code),
+            LineKind::Heading(6, "Six")
+        );
     }
 
     #[test]
     fn classify_todo_unchecked() {
         let mut in_code = false;
-        assert_eq!(classify_line("- [ ] task", &mut in_code), LineKind::TodoUnchecked("", "task"));
+        assert_eq!(
+            classify_line("- [ ] task", &mut in_code),
+            LineKind::TodoUnchecked("", "task")
+        );
     }
 
     #[test]
@@ -301,7 +323,10 @@ mod tests {
     #[test]
     fn classify_todo_done_lowercase_x() {
         let mut in_code = false;
-        assert_eq!(classify_line("- [x] done", &mut in_code), LineKind::TodoDone("", "done"));
+        assert_eq!(
+            classify_line("- [x] done", &mut in_code),
+            LineKind::TodoDone("", "done")
+        );
     }
 
     #[test]
@@ -316,7 +341,10 @@ mod tests {
     #[test]
     fn classify_quote_with_text() {
         let mut in_code = false;
-        assert_eq!(classify_line("> hello", &mut in_code), LineKind::Quote("hello"));
+        assert_eq!(
+            classify_line("> hello", &mut in_code),
+            LineKind::Quote("hello")
+        );
     }
 
     #[test]
@@ -328,19 +356,28 @@ mod tests {
     #[test]
     fn classify_bullet_dash() {
         let mut in_code = false;
-        assert_eq!(classify_line("- item", &mut in_code), LineKind::Bullet("", "item"));
+        assert_eq!(
+            classify_line("- item", &mut in_code),
+            LineKind::Bullet("", "item")
+        );
     }
 
     #[test]
     fn classify_bullet_star() {
         let mut in_code = false;
-        assert_eq!(classify_line("* item", &mut in_code), LineKind::Bullet("", "item"));
+        assert_eq!(
+            classify_line("* item", &mut in_code),
+            LineKind::Bullet("", "item")
+        );
     }
 
     #[test]
     fn classify_bullet_plus() {
         let mut in_code = false;
-        assert_eq!(classify_line("+ item", &mut in_code), LineKind::Bullet("", "item"));
+        assert_eq!(
+            classify_line("+ item", &mut in_code),
+            LineKind::Bullet("", "item")
+        );
     }
 
     #[test]
@@ -355,13 +392,19 @@ mod tests {
     #[test]
     fn classify_ordered() {
         let mut in_code = false;
-        assert_eq!(classify_line("1. first", &mut in_code), LineKind::Ordered("1. first"));
+        assert_eq!(
+            classify_line("1. first", &mut in_code),
+            LineKind::Ordered("1. first")
+        );
     }
 
     #[test]
     fn classify_plain() {
         let mut in_code = false;
-        assert_eq!(classify_line("just text", &mut in_code), LineKind::Plain("just text"));
+        assert_eq!(
+            classify_line("just text", &mut in_code),
+            LineKind::Plain("just text")
+        );
     }
 
     // --- render_line_kind ---
@@ -427,7 +470,9 @@ mod tests {
                 Span::styled("☑ ", Style::default().fg(t.todo_done)),
                 Span::styled(
                     "done",
-                    Style::default().fg(t.todo_done).add_modifier(Modifier::CROSSED_OUT)
+                    Style::default()
+                        .fg(t.todo_done)
+                        .add_modifier(Modifier::CROSSED_OUT)
                 ),
             ])
         );
@@ -442,7 +487,9 @@ mod tests {
             Line::from(vec![
                 Span::styled(
                     "│ ",
-                    Style::default().fg(t.quote_marker).add_modifier(Modifier::ITALIC)
+                    Style::default()
+                        .fg(t.quote_marker)
+                        .add_modifier(Modifier::ITALIC)
                 ),
                 Span::styled("hello", Style::default().add_modifier(Modifier::ITALIC)),
             ])
@@ -657,7 +704,9 @@ mod tests {
     fn render_todo_done_with_inline_bold() {
         let t = th();
         let line = render_line_kind(LineKind::TodoDone("", "hello **world**"), &t);
-        let base = Style::default().fg(t.todo_done).add_modifier(Modifier::CROSSED_OUT);
+        let base = Style::default()
+            .fg(t.todo_done)
+            .add_modifier(Modifier::CROSSED_OUT);
         assert_eq!(
             line,
             Line::from(vec![
@@ -678,7 +727,9 @@ mod tests {
             Line::from(vec![
                 Span::styled(
                     "│ ",
-                    Style::default().fg(t.quote_marker).add_modifier(Modifier::ITALIC),
+                    Style::default()
+                        .fg(t.quote_marker)
+                        .add_modifier(Modifier::ITALIC),
                 ),
                 Span::styled("hello ", base),
                 Span::styled("world", base.add_modifier(Modifier::BOLD)),

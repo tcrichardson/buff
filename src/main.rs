@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
-use ratatui::crossterm::event::{Event, KeyEventKind};
-use ratatui::crossterm::{execute, cursor::SetCursorStyle};
 use buff::app::state::Focus;
+use ratatui::crossterm::event::{Event, KeyEventKind};
+use ratatui::crossterm::{cursor::SetCursorStyle, execute};
 
 fn main() {
     if let Err(e) = run() {
@@ -63,7 +63,7 @@ fn set_cursor_style(focus: &Focus) -> Result<()> {
     let style = match focus {
         Focus::VimNormal => SetCursorStyle::SteadyBlock,
         Focus::VimInsert => SetCursorStyle::SteadyBar,
-        _                => SetCursorStyle::DefaultUserShape,
+        _ => SetCursorStyle::DefaultUserShape,
     };
     execute!(std::io::stdout(), style)?;
     Ok(())

@@ -22,8 +22,8 @@ pub struct ChatMessage {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Focus {
     Capture,
-    VimNormal,   // was Navigate
-    VimInsert,   // new
+    VimNormal, // was Navigate
+    VimInsert, // new
     RightPanel,
     Chat,
 }
@@ -86,7 +86,7 @@ pub struct AppState {
     pub selected: usize,
     pub status: String,
     pub input: String,
-    pub cursor_pos: usize,  // byte offset into `input`; always <= input.len(), always on a char boundary
+    pub cursor_pos: usize, // byte offset into `input`; always <= input.len(), always on a char boundary
     pub overlay: Overlay,
     pub editing: Option<usize>,
     pub should_quit: bool,
@@ -165,7 +165,9 @@ impl AppState {
     pub fn update_context_display(&mut self) {
         self.context_display = match self.context {
             Context::Title => {
-                let name = self.doc.lines
+                let name = self
+                    .doc
+                    .lines
                     .first()
                     .map(|l| l.trim_start_matches("# ").trim_start())
                     .unwrap_or("Day");
@@ -187,7 +189,9 @@ impl AppState {
                 }
             }
             Context::Section { heading_line, .. } => {
-                let name = self.doc.lines
+                let name = self
+                    .doc
+                    .lines
                     .get(heading_line)
                     .map(|l| l.trim_start_matches('#').trim_start())
                     .unwrap_or("section");
@@ -254,9 +258,7 @@ impl AppState {
             return;
         };
         let summary = match self.chat.messages.last() {
-            Some(m) if m.role == ChatRole::Assistant && !m.content.is_empty() => {
-                m.content.clone()
-            }
+            Some(m) if m.role == ChatRole::Assistant && !m.content.is_empty() => m.content.clone(),
             _ => return,
         };
         self.doc.add_meeting_summary(ord, &summary);
@@ -296,15 +298,15 @@ mod tests {
         let mut state = AppState::open_day(tmp.path().to_path_buf(), config, date).unwrap();
 
         state.chat.meeting_ordinal = Some(0);
-        state.chat.messages = vec![
-            ChatMessage { role: ChatRole::Assistant, content: "hello meeting".into() },
-        ];
+        state.chat.messages = vec![ChatMessage {
+            role: ChatRole::Assistant,
+            content: "hello meeting".into(),
+        }];
         state.save_chat().unwrap();
 
         // Meeting sidecar should exist
-        let meeting_path = crate::storage::meeting_chat_path_for(
-            tmp.path(), date, "%Y-%m-%d-%a", 0
-        );
+        let meeting_path =
+            crate::storage::meeting_chat_path_for(tmp.path(), date, "%Y-%m-%d-%a", 0);
         assert!(meeting_path.exists(), "meeting sidecar should be written");
 
         // Daily sidecar should NOT exist (no daily messages)
@@ -327,19 +329,25 @@ mod tests {
         state.chat.meeting_ordinal = Some(0);
         state.chat.summarizing = true;
         state.chat.active_request = 42;
-        state.chat.messages = vec![
-            ChatMessage {
-                role: ChatRole::Assistant,
-                content: "#### Meeting Summary\n**Key Decisions:** Ship it".into(),
-            },
-        ];
+        state.chat.messages = vec![ChatMessage {
+            role: ChatRole::Assistant,
+            content: "#### Meeting Summary\n**Key Decisions:** Ship it".into(),
+        }];
 
         state.handle_llm_event(LlmEvent::Done { id: 42 });
 
         // Summary should now be in the document
         let text = state.doc.to_text();
-        assert!(text.contains("#### Meeting Summary"), "summary missing: {}", text);
-        assert!(text.contains("**Key Decisions:** Ship it"), "content missing: {}", text);
+        assert!(
+            text.contains("#### Meeting Summary"),
+            "summary missing: {}",
+            text
+        );
+        assert!(
+            text.contains("**Key Decisions:** Ship it"),
+            "content missing: {}",
+            text
+        );
 
         // Meeting mode should be cleared
         assert_eq!(state.chat.meeting_ordinal, None);
@@ -379,8 +387,14 @@ mod tests {
     #[test]
     fn chat_message_json_roundtrip() {
         let msgs = vec![
-            ChatMessage { role: ChatRole::User, content: "hi".to_string() },
-            ChatMessage { role: ChatRole::Assistant, content: "hello".to_string() },
+            ChatMessage {
+                role: ChatRole::User,
+                content: "hi".to_string(),
+            },
+            ChatMessage {
+                role: ChatRole::Assistant,
+                content: "hello".to_string(),
+            },
         ];
         let json = serde_json::to_string(&msgs).unwrap();
         let back: Vec<ChatMessage> = serde_json::from_str(&json).unwrap();
@@ -412,32 +426,53 @@ mod tests {
     fn token_appends_to_last_assistant() {
         let mut s = chat_state_with(
             vec![
-                ChatMessage { role: ChatRole::User, content: "q".into() },
-                ChatMessage { role: ChatRole::Assistant, content: String::new() },
+                ChatMessage {
+                    role: ChatRole::User,
+                    content: "q".into(),
+                },
+                ChatMessage {
+                    role: ChatRole::Assistant,
+                    content: String::new(),
+                },
             ],
             5,
             true,
         );
-        s.handle_llm_event(LlmEvent::Token { id: 5, text: "Hel".into() });
-        s.handle_llm_event(LlmEvent::Token { id: 5, text: "lo".into() });
+        s.handle_llm_event(LlmEvent::Token {
+            id: 5,
+            text: "Hel".into(),
+        });
+        s.handle_llm_event(LlmEvent::Token {
+            id: 5,
+            text: "lo".into(),
+        });
         assert_eq!(s.chat.messages.last().unwrap().content, "Hello");
     }
 
     #[test]
     fn stale_token_is_ignored() {
         let mut s = chat_state_with(
-            vec![ChatMessage { role: ChatRole::Assistant, content: String::new() }],
+            vec![ChatMessage {
+                role: ChatRole::Assistant,
+                content: String::new(),
+            }],
             5,
             true,
         );
-        s.handle_llm_event(LlmEvent::Token { id: 4, text: "nope".into() });
+        s.handle_llm_event(LlmEvent::Token {
+            id: 4,
+            text: "nope".into(),
+        });
         assert_eq!(s.chat.messages.last().unwrap().content, "");
     }
 
     #[test]
     fn done_clears_pending() {
         let mut s = chat_state_with(
-            vec![ChatMessage { role: ChatRole::Assistant, content: "hi".into() }],
+            vec![ChatMessage {
+                role: ChatRole::Assistant,
+                content: "hi".into(),
+            }],
             5,
             true,
         );
@@ -449,13 +484,22 @@ mod tests {
     fn error_before_tokens_removes_empty_placeholder_and_sets_status() {
         let mut s = chat_state_with(
             vec![
-                ChatMessage { role: ChatRole::User, content: "q".into() },
-                ChatMessage { role: ChatRole::Assistant, content: String::new() },
+                ChatMessage {
+                    role: ChatRole::User,
+                    content: "q".into(),
+                },
+                ChatMessage {
+                    role: ChatRole::Assistant,
+                    content: String::new(),
+                },
             ],
             5,
             true,
         );
-        s.handle_llm_event(LlmEvent::Error { id: 5, message: "boom".into() });
+        s.handle_llm_event(LlmEvent::Error {
+            id: 5,
+            message: "boom".into(),
+        });
         assert!(!s.chat.pending);
         assert_eq!(s.chat.messages.len(), 1); // empty assistant removed
         assert_eq!(s.chat.status.as_deref(), Some("boom"));

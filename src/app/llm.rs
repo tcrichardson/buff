@@ -74,7 +74,9 @@ pub fn parse_sse_line(line: &str) -> SseLine {
 /// Build the OpenAI-compatible request body for a chat completion.
 fn build_body(req: &ChatRequest) -> serde_json::Value {
     let mut messages: Vec<serde_json::Value> = Vec::new();
-    if let Some(system) = &req.system && !system.is_empty() {
+    if let Some(system) = &req.system
+        && !system.is_empty()
+    {
         messages.push(serde_json::json!({"role": "system", "content": system}));
     }
     for m in &req.messages {
@@ -182,7 +184,14 @@ mod tests {
 
     #[test]
     fn event_id_accessor() {
-        assert_eq!(LlmEvent::Token { id: 7, text: "x".into() }.id(), 7);
+        assert_eq!(
+            LlmEvent::Token {
+                id: 7,
+                text: "x".into()
+            }
+            .id(),
+            7
+        );
         assert_eq!(LlmEvent::Done { id: 9 }.id(), 9);
     }
 
@@ -200,7 +209,10 @@ mod tests {
             base_url: "http://x/v1".to_string(),
             model: "m".to_string(),
             system: Some("sys".to_string()),
-            messages: vec![ChatMessage { role: ChatRole::User, content: "hi".to_string() }],
+            messages: vec![ChatMessage {
+                role: ChatRole::User,
+                content: "hi".to_string(),
+            }],
             api_key: None,
         };
         let body = super::build_body(&req);
@@ -219,7 +231,10 @@ mod tests {
             base_url: "http://x/v1".to_string(),
             model: "m".to_string(),
             system: Some(String::new()),
-            messages: vec![ChatMessage { role: ChatRole::User, content: "hi".to_string() }],
+            messages: vec![ChatMessage {
+                role: ChatRole::User,
+                content: "hi".to_string(),
+            }],
             api_key: None,
         };
         let body = super::build_body(&req);
@@ -233,11 +248,17 @@ mod tests {
             base_url: "http://x/v1".to_string(),
             model: "m".to_string(),
             system: None,
-            messages: vec![ChatMessage { role: ChatRole::User, content: "hi".to_string() }],
+            messages: vec![ChatMessage {
+                role: ChatRole::User,
+                content: "hi".to_string(),
+            }],
             api_key: Some("sk-secret".to_string()),
         };
         let body = super::build_body(&req);
         let json = body.to_string();
-        assert!(!json.contains("sk-secret"), "API key must not appear in request body");
+        assert!(
+            !json.contains("sk-secret"),
+            "API key must not appear in request body"
+        );
     }
 }

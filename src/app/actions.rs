@@ -50,7 +50,7 @@ pub fn go_next_day(state: &mut AppState) -> anyhow::Result<()> {
 /// Re-derive context from the current vim cursor position and update state.context + display.
 pub fn vim_update_context(state: &mut AppState) {
     use crate::app::context::context_at_line;
-    state.doc_anchor_line = state.vim.cursor_line;  // keep anchor in sync
+    state.doc_anchor_line = state.vim.cursor_line; // keep anchor in sync
     state.context = context_at_line(&state.doc.lines, state.vim.cursor_line);
     state.update_context_display();
 }
@@ -63,8 +63,7 @@ pub fn after_vim_edit(state: &mut AppState) -> anyhow::Result<()> {
         crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
     state.panel_todos =
         crate::ui::right_panel::collect_panel_todos(&state.notes_dir, state.date, &state.config);
-    state.panel_agenda =
-        crate::ui::right_panel::collect_agenda_items(&state.doc);
+    state.panel_agenda = crate::ui::right_panel::collect_agenda_items(&state.doc);
     vim_update_context(state);
     Ok(())
 }
@@ -74,7 +73,7 @@ pub fn after_vim_edit(state: &mut AppState) -> anyhow::Result<()> {
 /// were inserted at the bottom of the appropriate section, so we scan backward
 /// from the end of the document for the first non-blank, non-section-header
 /// content line that could be the new entry.
-/// 
+///
 /// Simple heuristic: cursor goes to the last non-empty line in the document.
 /// Jump the vim cursor to the last non-empty line after new content is added,
 /// or update the document scroll anchor in Capture mode so the new content stays visible.
@@ -101,37 +100,48 @@ fn after_doc_mutation(state: &mut AppState) -> anyhow::Result<()> {
         crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
     state.panel_todos =
         crate::ui::right_panel::collect_panel_todos(&state.notes_dir, state.date, &state.config);
-    state.panel_agenda =
-        crate::ui::right_panel::collect_agenda_items(&state.doc);
+    state.panel_agenda = crate::ui::right_panel::collect_agenda_items(&state.doc);
     state.status.clear();
     Ok(())
 }
 
 pub fn dispatch(state: &mut AppState, cmd: Command) -> anyhow::Result<()> {
     match cmd {
-        Command::Entry(text)       => handle_entry(state, &text)?,
-        Command::Meeting(name)     => handle_meeting(state, &name)?,
-        Command::Note(name)        => handle_note(state, name)?,
-        Command::Todo(text)        => handle_todo(state, &text)?,
-        Command::Leave             => handle_leave(state),
-        Command::Help              => state.overlay = crate::app::state::Overlay::Help,
-        Command::Quit              => state.should_quit = true,
-        Command::Summarize         => handle_summarize(state),
-        Command::Ask(text)         => handle_ask(state, &text)?,
-        Command::Clear             => handle_clear(state)?,
-        Command::Start             => handle_start(state)?,
-        Command::End               => handle_end(state)?,
-        Command::Scheduled(time)   => handle_scheduled(state, &time)?,
-        Command::Purpose(text)     => handle_purpose(state, &text)?,
-        Command::Topic(text)       => handle_topic(state, &text)?,
-        Command::Section(name)     => handle_section(state, &name)?,
-        Command::Unknown(word)     => state.status = format!("Unknown command: /{}", word),
-        Command::InvalidArgs(msg)  => state.status = msg,
-        Command::Today             => { go_today(state)?; state.status.clear(); }
-        Command::Goto(Some(date))  => { go_to_date(state, date)?; state.status.clear(); }
-        Command::Light             => { state.config.theme = "light".to_string(); state.status = "Theme: light".to_string(); }
-        Command::Dark              => { state.config.theme = "dark".to_string(); state.status = "Theme: dark".to_string(); }
-        Command::Goto(None)        => state.status = "usage: /goto YYYY-MM-DD".to_string(),
+        Command::Entry(text) => handle_entry(state, &text)?,
+        Command::Meeting(name) => handle_meeting(state, &name)?,
+        Command::Note(name) => handle_note(state, name)?,
+        Command::Todo(text) => handle_todo(state, &text)?,
+        Command::Leave => handle_leave(state),
+        Command::Help => state.overlay = crate::app::state::Overlay::Help,
+        Command::Quit => state.should_quit = true,
+        Command::Summarize => handle_summarize(state),
+        Command::Ask(text) => handle_ask(state, &text)?,
+        Command::Clear => handle_clear(state)?,
+        Command::Start => handle_start(state)?,
+        Command::End => handle_end(state)?,
+        Command::Scheduled(time) => handle_scheduled(state, &time)?,
+        Command::Purpose(text) => handle_purpose(state, &text)?,
+        Command::Topic(text) => handle_topic(state, &text)?,
+        Command::Section(name) => handle_section(state, &name)?,
+        Command::Unknown(word) => state.status = format!("Unknown command: /{}", word),
+        Command::InvalidArgs(msg) => state.status = msg,
+        Command::Today => {
+            go_today(state)?;
+            state.status.clear();
+        }
+        Command::Goto(Some(date)) => {
+            go_to_date(state, date)?;
+            state.status.clear();
+        }
+        Command::Light => {
+            state.config.theme = "light".to_string();
+            state.status = "Theme: light".to_string();
+        }
+        Command::Dark => {
+            state.config.theme = "dark".to_string();
+            state.status = "Theme: dark".to_string();
+        }
+        Command::Goto(None) => state.status = "usage: /goto YYYY-MM-DD".to_string(),
     }
     Ok(())
 }
@@ -152,9 +162,13 @@ fn handle_entry(state: &mut AppState, text: &str) -> anyhow::Result<()> {
         Context::Title | Context::Notes | Context::Todos => crate::model::day::EntryTarget::Notes,
         Context::Meeting(ord) => crate::model::day::EntryTarget::Meeting(*ord),
         Context::NoteBlock(ord) => crate::model::day::EntryTarget::NoteBlock(*ord),
-        Context::Section { heading_line, level } => {
-            crate::model::day::EntryTarget::Section { heading_line: *heading_line, level: *level }
-        }
+        Context::Section {
+            heading_line,
+            level,
+        } => crate::model::day::EntryTarget::Section {
+            heading_line: *heading_line,
+            level: *level,
+        },
     };
     state.doc.add_block(&target, &block);
     after_doc_mutation(state)
@@ -230,7 +244,10 @@ fn build_meeting_context_message(
 
     Some(crate::app::state::ChatMessage {
         role: crate::app::state::ChatRole::User,
-        content: format!("Here is the current state of the meeting:\n{}", section_text),
+        content: format!(
+            "Here is the current state of the meeting:\n{}",
+            section_text
+        ),
     })
 }
 
@@ -296,12 +313,7 @@ fn handle_start(state: &mut AppState) -> anyhow::Result<()> {
     };
     if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
         let time = state.current_time_hhmm();
-        crate::model::writer::set_metadata_field(
-            &mut state.doc.lines,
-            heading,
-            "Started",
-            &time,
-        );
+        crate::model::writer::set_metadata_field(&mut state.doc.lines, heading, "Started", &time);
         after_doc_mutation(state)?;
     }
 
@@ -340,12 +352,7 @@ fn handle_end(state: &mut AppState) -> anyhow::Result<()> {
     };
     if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
         let time = state.current_time_hhmm();
-        crate::model::writer::set_metadata_field(
-            &mut state.doc.lines,
-            heading,
-            "Ended",
-            &time,
-        );
+        crate::model::writer::set_metadata_field(&mut state.doc.lines, heading, "Ended", &time);
         after_doc_mutation(state)?;
     }
 
@@ -435,12 +442,13 @@ fn handle_ask(state: &mut AppState, text: &str) -> anyhow::Result<()> {
 fn handle_scheduled(state: &mut AppState, time: &str) -> anyhow::Result<()> {
     let ord = match &state.context {
         Context::Meeting(ord) => *ord,
-        _ => { state.status = "Not in a meeting".to_string(); return Ok(()); }
+        _ => {
+            state.status = "Not in a meeting".to_string();
+            return Ok(());
+        }
     };
     if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
-        crate::model::writer::set_metadata_field(
-            &mut state.doc.lines, heading, "Scheduled", time,
-        );
+        crate::model::writer::set_metadata_field(&mut state.doc.lines, heading, "Scheduled", time);
         after_doc_mutation(state)?;
     }
     Ok(())
@@ -455,9 +463,7 @@ fn handle_purpose(state: &mut AppState, text: &str) -> anyhow::Result<()> {
         }
     };
     if let Some(heading) = state.doc.meetings().get(ord).map(|m| m.heading_line) {
-        crate::model::writer::set_metadata_field(
-            &mut state.doc.lines, heading, "Purpose", text,
-        );
+        crate::model::writer::set_metadata_field(&mut state.doc.lines, heading, "Purpose", text);
         after_doc_mutation(state)?;
     }
     Ok(())
@@ -472,9 +478,7 @@ fn handle_topic(state: &mut AppState, text: &str) -> anyhow::Result<()> {
         }
     };
     if let Some(heading) = state.doc.note_headings().get(ord).map(|n| n.heading_line) {
-        crate::model::writer::set_metadata_field(
-            &mut state.doc.lines, heading, "Topic", text,
-        );
+        crate::model::writer::set_metadata_field(&mut state.doc.lines, heading, "Topic", text);
         after_doc_mutation(state)?;
     }
     Ok(())
@@ -496,14 +500,21 @@ fn handle_section(state: &mut AppState, name: &str) -> anyhow::Result<()> {
     let target = match &state.context {
         Context::Meeting(ord) => crate::model::day::EntryTarget::Meeting(*ord),
         Context::NoteBlock(ord) => crate::model::day::EntryTarget::NoteBlock(*ord),
-        Context::Section { heading_line, level } => {
-            crate::model::day::EntryTarget::Section { heading_line: *heading_line, level: *level }
-        }
+        Context::Section {
+            heading_line,
+            level,
+        } => crate::model::day::EntryTarget::Section {
+            heading_line: *heading_line,
+            level: *level,
+        },
         Context::Title | Context::Notes | Context::Todos => unreachable!(),
     };
     let next_level = current_level + 1;
     let heading_line = state.doc.add_section_heading(&target, next_level, name);
-    state.context = Context::Section { heading_line, level: next_level };
+    state.context = Context::Section {
+        heading_line,
+        level: next_level,
+    };
     state.update_context_display();
     after_doc_mutation(state)
 }
@@ -542,10 +553,12 @@ pub fn toggle_selected(state: &mut AppState) {
             let _ = state.save();
             state.dates_with_notes =
                 crate::storage::dates_with_notes(&state.notes_dir, &state.config.date_format);
-            state.panel_todos =
-                crate::ui::right_panel::collect_panel_todos(&state.notes_dir, state.date, &state.config);
-            state.panel_agenda =
-                crate::ui::right_panel::collect_agenda_items(&state.doc);
+            state.panel_todos = crate::ui::right_panel::collect_panel_todos(
+                &state.notes_dir,
+                state.date,
+                &state.config,
+            );
+            state.panel_agenda = crate::ui::right_panel::collect_agenda_items(&state.doc);
         }
         Err(e) => {
             state.status = e.to_string();
@@ -597,10 +610,12 @@ pub fn resume_selected_heading(state: &mut AppState) {
                 return;
             }
             SelectableKind::MarkdownHeading => {
-                let level = crate::model::parser::heading_level(&sel.text)
-                    .unwrap_or(4) as u8;
+                let level = crate::model::parser::heading_level(&sel.text).unwrap_or(4) as u8;
                 let heading_line = sel.lines.start;
-                state.context = Context::Section { heading_line, level };
+                state.context = Context::Section {
+                    heading_line,
+                    level,
+                };
                 state.update_context_display();
                 state.focus = crate::app::state::Focus::Capture;
                 state.status.clear();
@@ -622,10 +637,12 @@ pub fn toggle_panel_todo(state: &mut AppState) -> anyhow::Result<()> {
         Ok(t) => t,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // File was removed since panel was loaded — refresh and return
-            state.panel_todos =
-                crate::ui::right_panel::collect_panel_todos(&state.notes_dir, state.date, &state.config);
-            state.panel_agenda =
-                crate::ui::right_panel::collect_agenda_items(&state.doc);
+            state.panel_todos = crate::ui::right_panel::collect_panel_todos(
+                &state.notes_dir,
+                state.date,
+                &state.config,
+            );
+            state.panel_agenda = crate::ui::right_panel::collect_agenda_items(&state.doc);
             return Ok(());
         }
         Err(e) => return Err(e.into()),
@@ -650,8 +667,7 @@ pub fn toggle_panel_todo(state: &mut AppState) -> anyhow::Result<()> {
     // Rebuild panel_todos (the toggled item is now done, drops off the list)
     state.panel_todos =
         crate::ui::right_panel::collect_panel_todos(&state.notes_dir, state.date, &state.config);
-    state.panel_agenda =
-        crate::ui::right_panel::collect_agenda_items(&state.doc);
+    state.panel_agenda = crate::ui::right_panel::collect_agenda_items(&state.doc);
 
     // Refresh dates_with_notes after writing the file
     state.dates_with_notes =
@@ -1310,8 +1326,11 @@ mod tests {
 
         dispatch(&mut state, Command::Todo("today task".to_string())).unwrap();
 
-        state.panel_todos =
-            crate::ui::right_panel::collect_panel_todos(&state.notes_dir, state.date, &state.config);
+        state.panel_todos = crate::ui::right_panel::collect_panel_todos(
+            &state.notes_dir,
+            state.date,
+            &state.config,
+        );
 
         state.focus = crate::app::state::Focus::RightPanel;
         state.right_panel_selected = 0;
@@ -1379,7 +1398,10 @@ mod tests {
         let other_chat = crate::storage::chat_path_for(tmp.path(), other, &config.date_format);
         crate::storage::save_chat(
             &other_chat,
-            &[ChatMessage { role: ChatRole::Assistant, content: "from other day".into() }],
+            &[ChatMessage {
+                role: ChatRole::Assistant,
+                content: "from other day".into(),
+            }],
         )
         .unwrap();
 
@@ -1389,7 +1411,10 @@ mod tests {
 
         go_to_date(&mut state, other).unwrap();
 
-        assert!(state.chat.event_tx.is_some(), "sender must survive day switch");
+        assert!(
+            state.chat.event_tx.is_some(),
+            "sender must survive day switch"
+        );
         assert_eq!(state.chat.messages.len(), 1);
         assert_eq!(state.chat.messages[0].content, "from other day");
     }
@@ -1448,7 +1473,11 @@ mod tests {
 
         dispatch(&mut state, Command::Todo("new task".to_string())).unwrap();
 
-        assert_eq!(state.panel_todos.len(), 1, "panel_todos should refresh after adding todo");
+        assert_eq!(
+            state.panel_todos.len(),
+            1,
+            "panel_todos should refresh after adding todo"
+        );
         assert_eq!(state.panel_todos[0].text, "new task");
     }
 
@@ -1542,7 +1571,11 @@ mod tests {
         dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
         dispatch(&mut state, Command::End).unwrap();
         let text = state.doc.to_text();
-        assert!(text.contains("meta:Ended: "), "Ended line missing: {}", text);
+        assert!(
+            text.contains("meta:Ended: "),
+            "Ended line missing: {}",
+            text
+        );
     }
 
     #[test]
@@ -1563,7 +1596,10 @@ mod tests {
     fn scheduled_in_meeting_updates_panel_agenda() {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
-        assert!(state.panel_agenda.is_empty(), "panel_agenda should start empty");
+        assert!(
+            state.panel_agenda.is_empty(),
+            "panel_agenda should start empty"
+        );
         dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
         dispatch(&mut state, Command::Scheduled("09:00".to_string())).unwrap();
         assert_eq!(state.panel_agenda.len(), 1);
@@ -1619,8 +1655,16 @@ mod tests {
         dispatch(&mut state, Command::Purpose("first goal".to_string())).unwrap();
         dispatch(&mut state, Command::Purpose("revised goal".to_string())).unwrap();
         let text = state.doc.to_text();
-        assert!(text.contains("meta:Purpose: revised goal\n"), "got: {}", text);
-        assert!(!text.contains("meta:Purpose: first goal\n"), "old should be gone: {}", text);
+        assert!(
+            text.contains("meta:Purpose: revised goal\n"),
+            "got: {}",
+            text
+        );
+        assert!(
+            !text.contains("meta:Purpose: first goal\n"),
+            "old should be gone: {}",
+            text
+        );
     }
 
     #[test]
@@ -1713,9 +1757,13 @@ mod tests {
 
         dispatch(&mut state, Command::Ask("persist me".to_string())).unwrap();
 
-        let path = crate::storage::chat_path_for(&state.notes_dir, state.date, &state.config.date_format);
+        let path =
+            crate::storage::chat_path_for(&state.notes_dir, state.date, &state.config.date_format);
         let loaded = crate::storage::load_chat(&path);
-        assert_eq!(loaded.first().map(|m| m.content.as_str()), Some("persist me"));
+        assert_eq!(
+            loaded.first().map(|m| m.content.as_str()),
+            Some("persist me")
+        );
     }
 
     #[test]
@@ -1723,7 +1771,10 @@ mod tests {
         use crate::app::state::{ChatMessage, ChatRole};
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
-        state.chat.messages = vec![ChatMessage { role: ChatRole::User, content: "x".into() }];
+        state.chat.messages = vec![ChatMessage {
+            role: ChatRole::User,
+            content: "x".into(),
+        }];
         state.chat.active_request = 0;
         state.chat.pending = true;
 
@@ -1744,7 +1795,10 @@ mod tests {
         assert!(text.contains("#### Updates\n"), "got: {}", text);
         let standup_pos = text.find("### Standup").unwrap();
         let section_pos = text.find("#### Updates").unwrap();
-        assert!(section_pos > standup_pos, "section should be after meeting heading");
+        assert!(
+            section_pos > standup_pos,
+            "section should be after meeting heading"
+        );
         assert!(matches!(state.context, Context::Section { level: 4, .. }));
         assert_eq!(state.context_display, "context: Updates");
     }
@@ -1759,7 +1813,11 @@ mod tests {
         let text = state.doc.to_text();
         let section_pos = text.find("#### Updates").unwrap();
         let entry_pos = text.find("my point").unwrap();
-        assert!(entry_pos > section_pos, "entry should be under section: {}", text);
+        assert!(
+            entry_pos > section_pos,
+            "entry should be under section: {}",
+            text
+        );
     }
 
     #[test]
@@ -1829,10 +1887,21 @@ mod tests {
         dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
         // Manually inject the Section context (dispatch for Section isn't written yet)
         // Find the line index of ### Standup
-        let heading_line = state.doc.lines.iter().position(|l| l == "### Standup").unwrap();
+        let heading_line = state
+            .doc
+            .lines
+            .iter()
+            .position(|l| l == "### Standup")
+            .unwrap();
         // Insert #### Updates manually
-        state.doc.lines.insert(heading_line + 1, "#### Updates".to_string());
-        state.context = Context::Section { heading_line: heading_line + 1, level: 4 };
+        state
+            .doc
+            .lines
+            .insert(heading_line + 1, "#### Updates".to_string());
+        state.context = Context::Section {
+            heading_line: heading_line + 1,
+            level: 4,
+        };
         state.update_context_display();
         assert_eq!(state.context_display, "context: Updates");
     }
@@ -1890,7 +1959,11 @@ mod tests {
         let text = state.doc.to_text();
         let section_pos = text.find("#### Updates").unwrap();
         let entry_pos = text.find("after resume").unwrap();
-        assert!(entry_pos > section_pos, "entry should be under section after resume: {}", text);
+        assert!(
+            entry_pos > section_pos,
+            "entry should be under section after resume: {}",
+            text
+        );
     }
 
     #[test]
@@ -1920,10 +1993,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = crate::app::state::Focus::VimNormal;
-        state.doc.lines = vec![
-            "# Day".to_string(),
-            String::new(),
-        ];
+        state.doc.lines = vec!["# Day".to_string(), String::new()];
         state.selectables = state.doc.selectables();
         state.vim.cursor_line = 1; // empty line — not a selectable
 
@@ -1965,7 +2035,11 @@ mod tests {
         dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
         dispatch(&mut state, Command::Start).unwrap();
 
-        assert_eq!(state.chat.meeting_ordinal, Some(0), "meeting ordinal should be set");
+        assert_eq!(
+            state.chat.meeting_ordinal,
+            Some(0),
+            "meeting ordinal should be set"
+        );
         assert!(state.chat.visible, "chat should be visible");
         assert_eq!(state.focus, Focus::Chat, "focus should shift to chat");
         assert!(state.chat.pending, "LLM call should be pending");
@@ -2018,7 +2092,10 @@ mod tests {
 
         dispatch(&mut state, Command::End).unwrap();
 
-        assert!(!state.chat.pending, "no LLM call should fire without meeting assistant mode");
+        assert!(
+            !state.chat.pending,
+            "no LLM call should fire without meeting assistant mode"
+        );
         assert_eq!(state.chat.meeting_ordinal, None);
     }
 
@@ -2035,11 +2112,19 @@ mod tests {
         dispatch(&mut state, Command::Meeting("Standup".to_string())).unwrap();
         state.chat.meeting_ordinal = Some(0);
 
-        dispatch(&mut state, Command::Ask("what's on the agenda?".to_string())).unwrap();
+        dispatch(
+            &mut state,
+            Command::Ask("what's on the agenda?".to_string()),
+        )
+        .unwrap();
 
         // User message should be in chat history
         assert!(
-            state.chat.messages.iter().any(|m| m.content.contains("what's on the agenda?")),
+            state
+                .chat
+                .messages
+                .iter()
+                .any(|m| m.content.contains("what's on the agenda?")),
             "user message should be in history"
         );
         assert!(state.chat.pending);

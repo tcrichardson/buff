@@ -82,9 +82,7 @@ pub fn is_quote(line: &str) -> bool {
 
 pub fn is_bullet(line: &str) -> bool {
     let t = line.trim_start();
-    (t.starts_with("- ") && !t.starts_with("- ["))
-        || t.starts_with("* ")
-        || t.starts_with("+ ")
+    (t.starts_with("- ") && !t.starts_with("- [")) || t.starts_with("* ") || t.starts_with("+ ")
 }
 
 /// `Some(false)` for `- [ ]`, `Some(true)` for `- [x]`/`- [X]`, else `None`.

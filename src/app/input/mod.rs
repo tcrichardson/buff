@@ -177,9 +177,13 @@ pub(super) fn next_word_start(line: &str, col: usize) -> usize {
     let chars: Vec<char> = line[col..].chars().collect();
     let mut i = 0;
     // skip current word chars (non-whitespace)
-    while i < chars.len() && !chars[i].is_whitespace() { i += 1; }
+    while i < chars.len() && !chars[i].is_whitespace() {
+        i += 1;
+    }
     // skip whitespace
-    while i < chars.len() && chars[i].is_whitespace() { i += 1; }
+    while i < chars.len() && chars[i].is_whitespace() {
+        i += 1;
+    }
     col + chars[..i].iter().map(|c| c.len_utf8()).sum::<usize>()
 }
 
@@ -188,9 +192,13 @@ pub(super) fn prev_word_start(line: &str, col: usize) -> usize {
     let before: Vec<char> = line[..col].chars().collect();
     let mut i = before.len();
     // skip whitespace going backward
-    while i > 0 && before[i - 1].is_whitespace() { i -= 1; }
+    while i > 0 && before[i - 1].is_whitespace() {
+        i -= 1;
+    }
     // skip word chars going backward
-    while i > 0 && !before[i - 1].is_whitespace() { i -= 1; }
+    while i > 0 && !before[i - 1].is_whitespace() {
+        i -= 1;
+    }
     before[..i].iter().map(|c| c.len_utf8()).sum::<usize>()
 }
 
@@ -199,11 +207,17 @@ pub(super) fn word_end(line: &str, col: usize) -> usize {
     let chars: Vec<char> = line[col..].chars().collect();
     let mut i = 0;
     // skip one char if at a non-whitespace (to find NEXT end)
-    if i < chars.len() && !chars[i].is_whitespace() { i += 1; }
+    if i < chars.len() && !chars[i].is_whitespace() {
+        i += 1;
+    }
     // skip whitespace
-    while i < chars.len() && chars[i].is_whitespace() { i += 1; }
+    while i < chars.len() && chars[i].is_whitespace() {
+        i += 1;
+    }
     // skip non-whitespace to end of word
-    while i < chars.len() && !chars[i].is_whitespace() { i += 1; }
+    while i < chars.len() && !chars[i].is_whitespace() {
+        i += 1;
+    }
     let end_byte = col + chars[..i].iter().map(|c| c.len_utf8()).sum::<usize>();
     // position on last char of word (one back)
     if end_byte > col {
@@ -253,17 +267,19 @@ fn global_ctrl_hotkeys(key: KeyEvent) -> Option<UiAction> {
 fn focus_cycle_keys(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     match key.code {
         KeyCode::Tab => match state.focus {
-            Focus::Capture   => Some(UiAction::Capture(CaptureAction::TypeIndent)),
+            Focus::Capture => Some(UiAction::Capture(CaptureAction::TypeIndent)),
             Focus::VimNormal => Some(UiAction::Focus(FocusAction::FocusRightPanel)),
             Focus::VimInsert => None, // falls through to vim_insert::key_to_action
-            Focus::Chat      => Some(UiAction::Focus(FocusAction::FocusRightPanel)),
+            Focus::Chat => Some(UiAction::Focus(FocusAction::FocusRightPanel)),
             Focus::RightPanel => Some(UiAction::Focus(FocusAction::FocusVimNormal)),
         },
         KeyCode::BackTab => match state.focus {
-            Focus::Capture              => Some(UiAction::Capture(CaptureAction::RemoveIndent)),
-            Focus::VimNormal | Focus::VimInsert => Some(UiAction::Focus(FocusAction::FocusRightPanel)),
-            Focus::Chat                 => Some(UiAction::Focus(FocusAction::FocusVimNormal)),
-            Focus::RightPanel           => Some(UiAction::Focus(FocusAction::FocusVimNormal)),
+            Focus::Capture => Some(UiAction::Capture(CaptureAction::RemoveIndent)),
+            Focus::VimNormal | Focus::VimInsert => {
+                Some(UiAction::Focus(FocusAction::FocusRightPanel))
+            }
+            Focus::Chat => Some(UiAction::Focus(FocusAction::FocusVimNormal)),
+            Focus::RightPanel => Some(UiAction::Focus(FocusAction::FocusVimNormal)),
         },
         _ => None,
     }
@@ -281,10 +297,10 @@ fn esc_keys(state: &AppState, key: KeyEvent) -> Option<UiAction> {
                 Some(UiAction::Focus(FocusAction::ExitCaptureMode))
             }
         }
-        Focus::VimNormal  => Some(UiAction::Focus(FocusAction::SwitchToCapture)),
-        Focus::VimInsert  => Some(UiAction::VimInsert(VimInsertAction::ExitInsert)),
+        Focus::VimNormal => Some(UiAction::Focus(FocusAction::SwitchToCapture)),
+        Focus::VimInsert => Some(UiAction::VimInsert(VimInsertAction::ExitInsert)),
         Focus::RightPanel => Some(UiAction::Focus(FocusAction::RightPanelBlur)),
-        Focus::Chat       => Some(UiAction::Focus(FocusAction::ChatBlur)),
+        Focus::Chat => Some(UiAction::Focus(FocusAction::ChatBlur)),
     }
 }
 
@@ -303,25 +319,25 @@ fn day_navigation(state: &AppState, key: KeyEvent) -> Option<UiAction> {
 
 fn mode_dispatch(state: &AppState, key: KeyEvent) -> Option<UiAction> {
     match state.focus {
-        Focus::Capture    => capture::key_to_action(state, key),
+        Focus::Capture => capture::key_to_action(state, key),
         Focus::RightPanel => right_panel::key_to_action(state, key),
-        Focus::Chat       => chat::key_to_action(state, key),
-        Focus::VimNormal  => vim_normal::key_to_action(state, key),
-        Focus::VimInsert  => vim_insert::key_to_action(state, key),
+        Focus::Chat => chat::key_to_action(state, key),
+        Focus::VimNormal => vim_normal::key_to_action(state, key),
+        Focus::VimInsert => vim_insert::key_to_action(state, key),
     }
 }
 
 pub fn execute_action(state: &mut AppState, action: UiAction) -> Result<EventOutcome> {
     match action {
-        UiAction::Quit           => return Ok(EventOutcome::Quit),
-        UiAction::Global(a)      => execute_global(state, a)?,
-        UiAction::Overlay(a)     => execute_overlay(state, a),
-        UiAction::Focus(a)       => execute_focus(state, a),
-        UiAction::Capture(a)     => return capture::execute_action(state, a),
-        UiAction::VimNormal(a)   => return vim_normal::execute_action(state, a),
-        UiAction::VimInsert(a)   => return vim_insert::execute_action(state, a),
-        UiAction::RightPanel(a)  => return right_panel::execute_action(state, a),
-        UiAction::Chat(a)        => return chat::execute_action(state, a),
+        UiAction::Quit => return Ok(EventOutcome::Quit),
+        UiAction::Global(a) => execute_global(state, a)?,
+        UiAction::Overlay(a) => execute_overlay(state, a),
+        UiAction::Focus(a) => execute_focus(state, a),
+        UiAction::Capture(a) => return capture::execute_action(state, a),
+        UiAction::VimNormal(a) => return vim_normal::execute_action(state, a),
+        UiAction::VimInsert(a) => return vim_insert::execute_action(state, a),
+        UiAction::RightPanel(a) => return right_panel::execute_action(state, a),
+        UiAction::Chat(a) => return chat::execute_action(state, a),
     }
     if state.should_quit {
         return Ok(EventOutcome::Quit);
@@ -335,8 +351,8 @@ fn execute_global(state: &mut AppState, action: GlobalAction) -> Result<()> {
             crate::app::actions::go_today(state)?;
             state.status.clear();
         }
-        GlobalAction::PrevDay    => crate::app::actions::go_prev_day(state)?,
-        GlobalAction::NextDay    => crate::app::actions::go_next_day(state)?,
+        GlobalAction::PrevDay => crate::app::actions::go_prev_day(state)?,
+        GlobalAction::NextDay => crate::app::actions::go_next_day(state)?,
         GlobalAction::ToggleChat => {
             state.chat.visible = !state.chat.visible;
             if !state.chat.visible && state.focus == Focus::Chat {
@@ -349,7 +365,7 @@ fn execute_global(state: &mut AppState, action: GlobalAction) -> Result<()> {
 
 fn execute_overlay(state: &mut AppState, action: OverlayAction) {
     match action {
-        OverlayAction::OpenHelp  => state.overlay = Overlay::Help,
+        OverlayAction::OpenHelp => state.overlay = Overlay::Help,
         OverlayAction::CloseHelp => state.overlay = Overlay::None,
     }
 }
@@ -361,20 +377,20 @@ fn execute_focus(state: &mut AppState, action: FocusAction) {
             state.vim.cursor_line = state.doc_anchor_line;
             state.vim.cursor_col = 0;
         }
-        FocusAction::ExitVimNormal   => state.focus = Focus::Capture,
+        FocusAction::ExitVimNormal => state.focus = Focus::Capture,
         FocusAction::SwitchToCapture => {
             state.focus = Focus::Capture;
             state.doc_anchor_line =
                 crate::app::context::context_heading_line(&state.doc.lines, &state.context);
         }
-        FocusAction::FocusVimNormal  => state.focus = Focus::VimNormal,
+        FocusAction::FocusVimNormal => state.focus = Focus::VimNormal,
         FocusAction::FocusRightPanel => {
             state.right_panel_selected = 0;
             state.focus = Focus::RightPanel;
         }
-        FocusAction::RightPanelBlur  => state.focus = Focus::Capture,
-        FocusAction::FocusChat       => state.focus = Focus::Chat,
-        FocusAction::ChatBlur        => state.focus = Focus::Capture,
+        FocusAction::RightPanelBlur => state.focus = Focus::Capture,
+        FocusAction::FocusChat => state.focus = Focus::Chat,
+        FocusAction::ChatBlur => state.focus = Focus::Capture,
     }
 }
 
@@ -419,7 +435,10 @@ mod tests {
     fn ctrl_c_always_quits() {
         let tmp = tempfile::tempdir().unwrap();
         let state = test_state(&tmp);
-        assert_eq!(key_to_action(&state, ctrl(KeyCode::Char('c'))), Some(UiAction::Quit));
+        assert_eq!(
+            key_to_action(&state, ctrl(KeyCode::Char('c'))),
+            Some(UiAction::Quit)
+        );
     }
 
     #[test]
@@ -537,14 +556,20 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
-        assert_eq!(key_to_action(&state, make_key(KeyCode::Esc)), Some(UiAction::Focus(FocusAction::SwitchToCapture)));
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Esc)),
+            Some(UiAction::Focus(FocusAction::SwitchToCapture))
+        );
     }
 
     #[test]
     fn ctrl_t_goes_today() {
         let tmp = tempfile::tempdir().unwrap();
         let state = test_state(&tmp);
-        assert_eq!(key_to_action(&state, ctrl(KeyCode::Char('t'))), Some(UiAction::Global(GlobalAction::GoToday)));
+        assert_eq!(
+            key_to_action(&state, ctrl(KeyCode::Char('t'))),
+            Some(UiAction::Global(GlobalAction::GoToday))
+        );
     }
 
     #[test]
@@ -800,8 +825,14 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::Chat;
-        assert_eq!(key_to_action(&state, make_key(KeyCode::Char('k'))), Some(UiAction::Chat(ChatAction::ScrollUp)));
-        assert_eq!(key_to_action(&state, make_key(KeyCode::Char('j'))), Some(UiAction::Chat(ChatAction::ScrollDown)));
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Char('k'))),
+            Some(UiAction::Chat(ChatAction::ScrollUp))
+        );
+        assert_eq!(
+            key_to_action(&state, make_key(KeyCode::Char('j'))),
+            Some(UiAction::Chat(ChatAction::ScrollDown))
+        );
     }
 
     #[test]
@@ -841,7 +872,10 @@ mod tests {
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
         };
-        assert_eq!(key_to_action(&state, key), Some(UiAction::Capture(CaptureAction::RemoveIndent)));
+        assert_eq!(
+            key_to_action(&state, key),
+            Some(UiAction::Capture(CaptureAction::RemoveIndent))
+        );
     }
 
     #[test]
@@ -929,7 +963,10 @@ mod tests {
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
         };
-        assert_eq!(key_to_action(&state, key), Some(UiAction::Focus(FocusAction::FocusRightPanel)));
+        assert_eq!(
+            key_to_action(&state, key),
+            Some(UiAction::Focus(FocusAction::FocusRightPanel))
+        );
     }
 
     #[test]
@@ -943,7 +980,10 @@ mod tests {
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
         };
-        assert_eq!(key_to_action(&state, key), Some(UiAction::Focus(FocusAction::FocusVimNormal)));
+        assert_eq!(
+            key_to_action(&state, key),
+            Some(UiAction::Focus(FocusAction::FocusVimNormal))
+        );
     }
 
     #[test]
@@ -958,7 +998,10 @@ mod tests {
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
         };
-        assert_eq!(key_to_action(&state, key), Some(UiAction::Focus(FocusAction::FocusVimNormal)));
+        assert_eq!(
+            key_to_action(&state, key),
+            Some(UiAction::Focus(FocusAction::FocusVimNormal))
+        );
     }
 
     #[test]
@@ -1106,7 +1149,10 @@ mod tests {
         state.vim.cursor_line = 0;
         state.vim.cursor_col = 1; // on 'i', last char
         execute_action(&mut state, UiAction::VimNormal(VimNormalAction::MoveRight)).unwrap();
-        assert_eq!(state.vim.cursor_col, 1, "cursor should not move past last char");
+        assert_eq!(
+            state.vim.cursor_col, 1,
+            "cursor should not move past last char"
+        );
     }
 
     #[test]
@@ -1137,7 +1183,11 @@ mod tests {
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
         state.doc.lines = vec!["a".to_string(), "b".to_string(), "c".to_string()];
-        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::MoveFileEnd)).unwrap();
+        execute_action(
+            &mut state,
+            UiAction::VimNormal(VimNormalAction::MoveFileEnd),
+        )
+        .unwrap();
         assert_eq!(state.vim.cursor_line, 2);
     }
 
@@ -1147,7 +1197,11 @@ mod tests {
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
         state.doc.lines = vec!["hello".to_string()];
-        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::EnterInsert)).unwrap();
+        execute_action(
+            &mut state,
+            UiAction::VimNormal(VimNormalAction::EnterInsert),
+        )
+        .unwrap();
         assert_eq!(state.focus, Focus::VimInsert);
     }
 
@@ -1158,7 +1212,11 @@ mod tests {
         state.focus = Focus::VimNormal;
         state.doc.lines = vec!["hello".to_string()];
         assert!(state.vim.undo_stack.is_empty());
-        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::EnterInsert)).unwrap();
+        execute_action(
+            &mut state,
+            UiAction::VimNormal(VimNormalAction::EnterInsert),
+        )
+        .unwrap();
         assert_eq!(state.vim.undo_stack.len(), 1);
     }
 
@@ -1167,9 +1225,17 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
-        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::SetPendingOp('d'))).unwrap();
+        execute_action(
+            &mut state,
+            UiAction::VimNormal(VimNormalAction::SetPendingOp('d')),
+        )
+        .unwrap();
         assert_eq!(state.vim.pending_op, Some('d'));
-        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::ClearPendingOp)).unwrap();
+        execute_action(
+            &mut state,
+            UiAction::VimNormal(VimNormalAction::ClearPendingOp),
+        )
+        .unwrap();
         assert!(state.vim.pending_op.is_none());
     }
 
@@ -1181,7 +1247,11 @@ mod tests {
         state.doc.lines = vec!["hello".to_string()];
         state.vim.cursor_line = 0;
         state.vim.cursor_col = 5; // end of "hello"
-        execute_action(&mut state, UiAction::VimInsert(VimInsertAction::InsertChar('!'))).unwrap();
+        execute_action(
+            &mut state,
+            UiAction::VimInsert(VimInsertAction::InsertChar('!')),
+        )
+        .unwrap();
         assert_eq!(state.doc.lines[0], "hello!");
         assert_eq!(state.vim.cursor_col, 6);
     }
@@ -1194,7 +1264,11 @@ mod tests {
         state.doc.lines = vec!["hello world".to_string()];
         state.vim.cursor_line = 0;
         state.vim.cursor_col = 5; // between "hello" and " world"
-        execute_action(&mut state, UiAction::VimInsert(VimInsertAction::InsertNewline)).unwrap();
+        execute_action(
+            &mut state,
+            UiAction::VimInsert(VimInsertAction::InsertNewline),
+        )
+        .unwrap();
         assert_eq!(state.doc.lines[0], "hello");
         assert_eq!(state.doc.lines[1], " world");
         assert_eq!(state.vim.cursor_line, 1);
@@ -1209,7 +1283,11 @@ mod tests {
         state.doc.lines = vec!["hello".to_string()];
         state.vim.cursor_line = 0;
         state.vim.cursor_col = 3; // after "hel"
-        execute_action(&mut state, UiAction::VimInsert(VimInsertAction::InsertBackspace)).unwrap();
+        execute_action(
+            &mut state,
+            UiAction::VimInsert(VimInsertAction::InsertBackspace),
+        )
+        .unwrap();
         assert_eq!(state.doc.lines[0], "helo");
         assert_eq!(state.vim.cursor_col, 2);
     }
@@ -1222,7 +1300,11 @@ mod tests {
         state.doc.lines = vec!["first".to_string(), "second".to_string()];
         state.vim.cursor_line = 1;
         state.vim.cursor_col = 0;
-        execute_action(&mut state, UiAction::VimInsert(VimInsertAction::InsertBackspace)).unwrap();
+        execute_action(
+            &mut state,
+            UiAction::VimInsert(VimInsertAction::InsertBackspace),
+        )
+        .unwrap();
         assert_eq!(state.doc.lines.len(), 1);
         assert_eq!(state.doc.lines[0], "firstsecond");
         assert_eq!(state.vim.cursor_line, 0);
@@ -1234,7 +1316,11 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
-        state.doc.lines = vec!["keep".to_string(), "delete me".to_string(), "keep2".to_string()];
+        state.doc.lines = vec![
+            "keep".to_string(),
+            "delete me".to_string(),
+            "keep2".to_string(),
+        ];
         state.vim.cursor_line = 1;
         execute_action(&mut state, UiAction::VimNormal(VimNormalAction::DeleteLine)).unwrap();
         assert_eq!(state.doc.lines.len(), 2);
@@ -1274,7 +1360,11 @@ mod tests {
         state.focus = Focus::VimNormal;
         state.doc.lines = vec!["original".to_string()];
         // Simulate entering insert and making a change
-        execute_action(&mut state, UiAction::VimNormal(VimNormalAction::EnterInsert)).unwrap(); // pushes snapshot
+        execute_action(
+            &mut state,
+            UiAction::VimNormal(VimNormalAction::EnterInsert),
+        )
+        .unwrap(); // pushes snapshot
         state.doc.lines[0] = "modified".to_string();
         execute_action(&mut state, UiAction::VimInsert(VimInsertAction::ExitInsert)).unwrap();
         // Now undo
@@ -1329,7 +1419,12 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let mut state = test_state(&tmp);
         state.focus = Focus::VimNormal;
-        state.doc.lines = vec!["# Day".to_string(), String::new(), "## Notes".to_string(), "line".to_string()];
+        state.doc.lines = vec![
+            "# Day".to_string(),
+            String::new(),
+            "## Notes".to_string(),
+            "line".to_string(),
+        ];
         state.vim.cursor_line = 0;
         state.vim.cursor_col = 0;
         state.context = Context::Notes;

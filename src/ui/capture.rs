@@ -23,8 +23,7 @@ pub fn render_status(
             Span::raw(help),
         ])
     };
-    let paragraph = Paragraph::new(text)
-        .style(Style::default().bg(theme.capture_bg));
+    let paragraph = Paragraph::new(text).style(Style::default().bg(theme.capture_bg));
     frame.render_widget(paragraph, area);
 }
 
@@ -34,16 +33,15 @@ pub fn render_input(
     area: Rect,
     theme: &crate::ui::theme::Theme,
 ) {
-    use ratatui::text::Text;
     use crate::app::state::Focus;
+    use ratatui::text::Text;
 
     let prefix = if app.editing.is_some() {
         "Edit: › "
     } else {
         "› "
     };
-    let block = Block::default()
-        .style(Style::default().bg(theme.capture_bg));
+    let block = Block::default().style(Style::default().bg(theme.capture_bg));
 
     let input_lines: Vec<&str> = app.input.split('\n').collect();
     let rendered: Vec<Line> = input_lines

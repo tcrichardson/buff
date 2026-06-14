@@ -19,7 +19,10 @@ impl<'de> serde::Deserialize<'de> for PaneSize {
         impl<'de> serde::de::Visitor<'de> for PaneSizeVisitor {
             type Value = PaneSize;
             fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(f, "an integer column count or a percentage string like \"25%\"")
+                write!(
+                    f,
+                    "an integer column count or a percentage string like \"25%\""
+                )
             }
             fn visit_u64<E: serde::de::Error>(self, v: u64) -> Result<PaneSize, E> {
                 Ok(PaneSize::Columns(v as u16))
@@ -29,11 +32,15 @@ impl<'de> serde::Deserialize<'de> for PaneSize {
             }
             fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<PaneSize, E> {
                 if let Some(digits) = v.strip_suffix('%') {
-                    digits.parse::<u16>()
+                    digits
+                        .parse::<u16>()
                         .map(PaneSize::Percent)
                         .map_err(|_| E::custom(format!("invalid percentage: {}", v)))
                 } else {
-                    Err(E::custom(format!("expected integer or \"N%\" string, got: {}", v)))
+                    Err(E::custom(format!(
+                        "expected integer or \"N%\" string, got: {}",
+                        v
+                    )))
                 }
             }
         }
@@ -325,7 +332,10 @@ mod tests {
         let config: Config = toml::from_str(toml).unwrap();
         assert_eq!(config.theme, "light");
         assert_eq!(config.theme_overrides.heading1, Some("red".to_string()));
-        assert_eq!(config.theme_overrides.border_focused, Some("#0000ff".to_string()));
+        assert_eq!(
+            config.theme_overrides.border_focused,
+            Some("#0000ff".to_string())
+        );
     }
 
     #[test]
@@ -372,8 +382,14 @@ mod tests {
             terminal_fg = "white"
         "##;
         let config: Config = toml::from_str(toml).unwrap();
-        assert_eq!(config.theme_overrides.terminal_bg, Some("#1e1e1e".to_string()));
-        assert_eq!(config.theme_overrides.terminal_fg, Some("white".to_string()));
+        assert_eq!(
+            config.theme_overrides.terminal_bg,
+            Some("#1e1e1e".to_string())
+        );
+        assert_eq!(
+            config.theme_overrides.terminal_fg,
+            Some("white".to_string())
+        );
     }
 
     #[test]
@@ -384,4 +400,3 @@ mod tests {
         assert!(config.theme_overrides.terminal_fg.is_none());
     }
 }
-

@@ -74,7 +74,7 @@ pub fn parse(input: &str) -> Command {
             } else {
                 Command::Ask(rest.to_string())
             }
-        },
+        }
         "/todo" => {
             if rest.is_empty() {
                 Command::InvalidArgs("/todo needs text".to_string())
@@ -291,12 +291,18 @@ mod tests {
 
     #[test]
     fn parse_ask_with_text() {
-        assert_eq!(parse("/ask how are you"), Command::Ask("how are you".to_string()));
+        assert_eq!(
+            parse("/ask how are you"),
+            Command::Ask("how are you".to_string())
+        );
     }
 
     #[test]
     fn parse_ask_empty_is_invalid() {
-        assert_eq!(parse("/ask"), Command::InvalidArgs("/ask needs a message".to_string()));
+        assert_eq!(
+            parse("/ask"),
+            Command::InvalidArgs("/ask needs a message".to_string())
+        );
     }
 
     #[test]

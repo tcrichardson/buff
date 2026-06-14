@@ -62,26 +62,23 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, area: Rect, theme: &Th
 
     // Place terminal cursor for vim modes
     if vim_active {
-        let line_text = app.doc.lines.get(cursor_line).map(|l| l.as_str()).unwrap_or("");
+        let line_text = app
+            .doc
+            .lines
+            .get(cursor_line)
+            .map(|l| l.as_str())
+            .unwrap_or("");
         let display_col = line_text[..app.vim.cursor_col.min(line_text.len())]
             .chars()
             .count() as u16;
         let display_row = (cursor_line.saturating_sub(scroll_offset)) as u16;
         if display_row < area.height {
-            frame.set_cursor_position((
-                area.x + display_col,
-                area.y + display_row,
-            ));
+            frame.set_cursor_position((area.x + display_col, area.y + display_row));
         }
     }
 }
 
-pub fn render_mode_line(
-    frame: &mut ratatui::Frame,
-    app: &AppState,
-    area: Rect,
-    theme: &Theme,
-) {
+pub fn render_mode_line(frame: &mut ratatui::Frame, app: &AppState, area: Rect, theme: &Theme) {
     use crate::app::state::Focus;
     let total = app.doc.lines.len();
     let current = app.vim.cursor_line + 1;
@@ -96,11 +93,7 @@ pub fn render_mode_line(
     let left_len = mode_label.len() as u16;
     let right_len = format!("ln {}/{}", current, total).len() as u16;
     let gap = area.width.saturating_sub(left_len + right_len);
-    let line = Line::from(vec![
-        left,
-        Span::raw(" ".repeat(gap as usize)),
-        right,
-    ]);
+    let line = Line::from(vec![left, Span::raw(" ".repeat(gap as usize)), right]);
     let widget = ratatui::widgets::Paragraph::new(line);
     frame.render_widget(widget, area);
 }
@@ -126,7 +119,9 @@ mod tests {
             result,
             Line::from(Span::styled(
                 "My Note",
-                Style::default().fg(th().heading1).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(th().heading1)
+                    .add_modifier(Modifier::BOLD),
             ))
         );
     }
@@ -139,7 +134,9 @@ mod tests {
             result,
             Line::from(Span::styled(
                 "Notes",
-                Style::default().fg(th().heading2).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(th().heading2)
+                    .add_modifier(Modifier::BOLD),
             ))
         );
     }
@@ -152,7 +149,9 @@ mod tests {
             result,
             Line::from(Span::styled(
                 "Sub",
-                Style::default().fg(th().heading3).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(th().heading3)
+                    .add_modifier(Modifier::BOLD),
             ))
         );
     }
@@ -165,7 +164,9 @@ mod tests {
             result,
             Line::from(Span::styled(
                 "Deep",
-                Style::default().fg(th().heading4).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(th().heading4)
+                    .add_modifier(Modifier::BOLD),
             ))
         );
     }
@@ -178,7 +179,9 @@ mod tests {
             result,
             Line::from(Span::styled(
                 "Five",
-                Style::default().fg(th().heading5).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(th().heading5)
+                    .add_modifier(Modifier::BOLD),
             ))
         );
     }
@@ -191,7 +194,9 @@ mod tests {
             result,
             Line::from(Span::styled(
                 "Six",
-                Style::default().fg(th().heading6).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(th().heading6)
+                    .add_modifier(Modifier::BOLD),
             ))
         );
     }
@@ -215,10 +220,7 @@ mod tests {
     fn unindented_bullet_still_works() {
         let mut in_code = false;
         let result = style_line("- item", &mut in_code, false, &th());
-        assert_eq!(
-            result,
-            Line::from(vec![Span::raw("• "), Span::raw("item")])
-        );
+        assert_eq!(result, Line::from(vec![Span::raw("• "), Span::raw("item")]));
     }
 
     #[test]
@@ -334,7 +336,9 @@ mod tests {
             line,
             Line::from(ratatui::text::Span::styled(
                 "Purpose: kick off Q3",
-                Style::default().fg(t.metadata).add_modifier(Modifier::ITALIC),
+                Style::default()
+                    .fg(t.metadata)
+                    .add_modifier(Modifier::ITALIC),
             ))
         );
     }
@@ -348,7 +352,9 @@ mod tests {
             line,
             Line::from(ratatui::text::Span::styled(
                 "Scheduled: 09:00",
-                Style::default().fg(t.metadata).add_modifier(Modifier::ITALIC),
+                Style::default()
+                    .fg(t.metadata)
+                    .add_modifier(Modifier::ITALIC),
             ))
         );
     }
@@ -375,7 +381,9 @@ mod tests {
             line,
             Line::from(ratatui::text::Span::styled(
                 "Purpose: kick off Q3",
-                Style::default().fg(t.metadata).add_modifier(Modifier::ITALIC),
+                Style::default()
+                    .fg(t.metadata)
+                    .add_modifier(Modifier::ITALIC),
             ))
         );
     }

@@ -1,38 +1,39 @@
-use crate::app::state::{AppState, Focus};
 use crate::app::input::{EventOutcome, UiAction, VimInsertAction, VimNormalAction};
+use crate::app::state::{AppState, Focus};
 use anyhow::Result;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 pub(super) fn key_to_action(_state: &AppState, key: KeyEvent) -> Option<UiAction> {
     match key.code {
-        KeyCode::Esc       => Some(UiAction::VimInsert(VimInsertAction::ExitInsert)),
-        KeyCode::Enter     => Some(UiAction::VimInsert(VimInsertAction::InsertNewline)),
+        KeyCode::Esc => Some(UiAction::VimInsert(VimInsertAction::ExitInsert)),
+        KeyCode::Enter => Some(UiAction::VimInsert(VimInsertAction::InsertNewline)),
         KeyCode::Backspace => Some(UiAction::VimInsert(VimInsertAction::InsertBackspace)),
-        KeyCode::Tab       => Some(UiAction::VimInsert(VimInsertAction::InsertTab)),
-        KeyCode::Left      => Some(UiAction::VimNormal(VimNormalAction::MoveLeft)),
-        KeyCode::Right     => Some(UiAction::VimNormal(VimNormalAction::MoveRight)),
-        KeyCode::Up        => Some(UiAction::VimNormal(VimNormalAction::MoveUp)),
-        KeyCode::Down      => Some(UiAction::VimNormal(VimNormalAction::MoveDown)),
+        KeyCode::Tab => Some(UiAction::VimInsert(VimInsertAction::InsertTab)),
+        KeyCode::Left => Some(UiAction::VimNormal(VimNormalAction::MoveLeft)),
+        KeyCode::Right => Some(UiAction::VimNormal(VimNormalAction::MoveRight)),
+        KeyCode::Up => Some(UiAction::VimNormal(VimNormalAction::MoveUp)),
+        KeyCode::Down => Some(UiAction::VimNormal(VimNormalAction::MoveDown)),
         KeyCode::Char('w') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             Some(UiAction::VimInsert(VimInsertAction::DeleteWordBefore))
         }
-        KeyCode::Char(c)
-            if !key.modifiers.contains(KeyModifiers::CONTROL) && !c.is_control() =>
-        {
+        KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) && !c.is_control() => {
             Some(UiAction::VimInsert(VimInsertAction::InsertChar(c)))
         }
         _ => None,
     }
 }
 
-pub(super) fn execute_action(state: &mut AppState, action: VimInsertAction) -> Result<EventOutcome> {
+pub(super) fn execute_action(
+    state: &mut AppState,
+    action: VimInsertAction,
+) -> Result<EventOutcome> {
     match action {
-        VimInsertAction::ExitInsert       => exit_insert(state),
-        VimInsertAction::InsertChar(c)    => insert_char(state, c),
-        VimInsertAction::InsertNewline    => insert_newline(state),
-        VimInsertAction::InsertBackspace  => insert_backspace(state),
+        VimInsertAction::ExitInsert => exit_insert(state),
+        VimInsertAction::InsertChar(c) => insert_char(state, c),
+        VimInsertAction::InsertNewline => insert_newline(state),
+        VimInsertAction::InsertBackspace => insert_backspace(state),
         VimInsertAction::DeleteWordBefore => delete_word_before(state),
-        VimInsertAction::InsertTab        => insert_tab(state),
+        VimInsertAction::InsertTab => insert_tab(state),
     }
     Ok(EventOutcome::Continue)
 }

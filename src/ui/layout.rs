@@ -17,10 +17,10 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, theme: &crate::ui::the
     let outer = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(6),             // header (5 rows + 1 padding line at bottom)
-            Constraint::Min(0),                // middle row (notes + chat + right panel)
-            Constraint::Length(1),             // status bar
-            Constraint::Length(input_height),  // capture input (footer)
+            Constraint::Length(6),            // header (5 rows + 1 padding line at bottom)
+            Constraint::Min(0),               // middle row (notes + chat + right panel)
+            Constraint::Length(1),            // status bar
+            Constraint::Length(input_height), // capture input (footer)
         ])
         .split(frame.area());
     let header_area = outer[0];
@@ -62,7 +62,11 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, theme: &crate::ui::the
     let (notes_area, chat_area_opt) = if app.chat.visible {
         let row = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Min(0), Constraint::Length(1), Constraint::Min(0)])
+            .constraints([
+                Constraint::Min(0),
+                Constraint::Length(1),
+                Constraint::Min(0),
+            ])
             .split(content_row);
         (row[0], Some(row[2]))
     } else {
@@ -70,8 +74,7 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, theme: &crate::ui::the
     };
 
     // Notes pane (no border)
-    let notes_block = Block::default()
-        .style(Style::default().bg(theme.notes_panel_bg));
+    let notes_block = Block::default().style(Style::default().bg(theme.notes_panel_bg));
     frame.render_widget(notes_block, notes_area);
 
     let notes_layout = ratatui::layout::Layout::default()
@@ -86,8 +89,11 @@ pub fn render(frame: &mut ratatui::Frame, app: &AppState, theme: &crate::ui::the
     let notes_content_area = notes_layout[1];
     let notes_mode_area = notes_layout[2];
 
-    let notes_label = ratatui::widgets::Paragraph::new(" Notes ")
-        .style(Style::default().add_modifier(Modifier::BOLD).bg(theme.notes_panel_bg));
+    let notes_label = ratatui::widgets::Paragraph::new(" Notes ").style(
+        Style::default()
+            .add_modifier(Modifier::BOLD)
+            .bg(theme.notes_panel_bg),
+    );
     frame.render_widget(notes_label, notes_label_area);
 
     super::document::render(frame, app, notes_content_area, theme);
@@ -204,18 +210,18 @@ mod tests {
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
         // Time is HH:MM — look for the colon surrounded by digits
-        let has_time = content
-            .chars()
-            .collect::<Vec<_>>()
-            .windows(5)
-            .any(|w| {
-                w[0].is_ascii_digit()
-                    && w[1].is_ascii_digit()
-                    && w[2] == ':'
-                    && w[3].is_ascii_digit()
-                    && w[4].is_ascii_digit()
-            });
-        assert!(has_time, "Expected HH:MM time in header, buffer: {}", content);
+        let has_time = content.chars().collect::<Vec<_>>().windows(5).any(|w| {
+            w[0].is_ascii_digit()
+                && w[1].is_ascii_digit()
+                && w[2] == ':'
+                && w[3].is_ascii_digit()
+                && w[4].is_ascii_digit()
+        });
+        assert!(
+            has_time,
+            "Expected HH:MM time in header, buffer: {}",
+            content
+        );
     }
 
     #[test]
@@ -276,7 +282,9 @@ mod tests {
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
+        terminal
+            .draw(|frame| render(frame, &app, &test_theme()))
+            .unwrap();
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
@@ -304,7 +312,9 @@ mod tests {
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
+        terminal
+            .draw(|frame| render(frame, &app, &test_theme()))
+            .unwrap();
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
@@ -365,7 +375,9 @@ mod tests {
         let app = test_app(doc, Focus::Capture, 0);
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
+        terminal
+            .draw(|frame| render(frame, &app, &test_theme()))
+            .unwrap();
     }
 
     #[test]
@@ -377,7 +389,9 @@ mod tests {
 
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
+        terminal
+            .draw(|frame| render(frame, &app, &test_theme()))
+            .unwrap();
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
@@ -410,9 +424,21 @@ mod tests {
 
         let backend = TestBackend::new(120, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
-        let content: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("paneltext"), "chat text missing: {}", content);
+        terminal
+            .draw(|frame| render(frame, &app, &test_theme()))
+            .unwrap();
+        let content: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|c| c.symbol())
+            .collect();
+        assert!(
+            content.contains("paneltext"),
+            "chat text missing: {}",
+            content
+        );
     }
 
     #[test]
@@ -427,12 +453,22 @@ mod tests {
 
         let backend = TestBackend::new(120, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
-        let content: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
-        assert!(!content.contains("paneltext"), "chat should be hidden: {}", content);
+        terminal
+            .draw(|frame| render(frame, &app, &test_theme()))
+            .unwrap();
+        let content: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|c| c.symbol())
+            .collect();
+        assert!(
+            !content.contains("paneltext"),
+            "chat should be hidden: {}",
+            content
+        );
     }
-
-
 
     #[test]
     fn right_panel_has_full_height_independently() {
@@ -444,10 +480,15 @@ mod tests {
         app.chat.visible = true;
         let backend = TestBackend::new(120, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
+        terminal
+            .draw(|frame| render(frame, &app, &test_theme()))
+            .unwrap();
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("June 2026"), "calendar header should be present with chat visible");
+        assert!(
+            content.contains("June 2026"),
+            "calendar header should be present with chat visible"
+        );
     }
 
     #[test]
@@ -456,13 +497,17 @@ mod tests {
         let app = test_app(doc, Focus::Capture, 0);
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
+        terminal
+            .draw(|frame| render(frame, &app, &test_theme()))
+            .unwrap();
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
-        assert!(content.contains("Notes"), "Expected 'Notes' block title, got: {}", content);
+        assert!(
+            content.contains("Notes"),
+            "Expected 'Notes' block title, got: {}",
+            content
+        );
     }
-
-
 
     #[test]
     fn render_h4_h5_h6_headings() {
@@ -470,12 +515,15 @@ mod tests {
         let app = test_app(doc, Focus::Capture, 0);
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
+        terminal
+            .draw(|frame| render(frame, &app, &test_theme()))
+            .unwrap();
         let buffer = terminal.backend().buffer();
         // h4 color = Color::Rgb(49, 130, 206) in light theme
-        let has_h4_color = buffer.content.iter().any(|cell| {
-            cell.style().fg == Some(ratatui::style::Color::Rgb(49, 130, 206))
-        });
+        let has_h4_color = buffer
+            .content
+            .iter()
+            .any(|cell| cell.style().fg == Some(ratatui::style::Color::Rgb(49, 130, 206)));
         assert!(has_h4_color, "expected h4 heading color applied");
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
         assert!(content.contains("Level 4"), "h4 text missing: {}", content);
@@ -489,12 +537,17 @@ mod tests {
         let app = test_app(doc, Focus::Capture, 0);
         let backend = TestBackend::new(80, 24);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
+        terminal
+            .draw(|frame| render(frame, &app, &test_theme()))
+            .unwrap();
         let buffer = terminal.backend().buffer();
         // light theme h1 = Color::Rgb(26, 54, 93)
         let has_h1_color = buffer.content.iter().any(|cell| {
             cell.style().fg == Some(ratatui::style::Color::Rgb(26, 54, 93))
-                && cell.style().add_modifier.contains(ratatui::style::Modifier::BOLD)
+                && cell
+                    .style()
+                    .add_modifier
+                    .contains(ratatui::style::Modifier::BOLD)
         });
         assert!(has_h1_color, "expected h1 theme color with BOLD");
     }
@@ -507,7 +560,9 @@ mod tests {
 
         let backend = TestBackend::new(80, 30);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
+        terminal
+            .draw(|frame| render(frame, &app, &test_theme()))
+            .unwrap();
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
@@ -526,7 +581,9 @@ mod tests {
 
         let backend = TestBackend::new(80, 30);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
+        terminal
+            .draw(|frame| render(frame, &app, &test_theme()))
+            .unwrap();
 
         let buffer = terminal.backend().buffer();
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
@@ -546,13 +603,16 @@ mod tests {
 
         let backend = TestBackend::new(80, 30);
         let mut terminal = Terminal::new(backend).unwrap();
-        terminal.draw(|frame| render(frame, &app, &test_theme())).unwrap();
+        terminal
+            .draw(|frame| render(frame, &app, &test_theme()))
+            .unwrap();
 
         let buffer = terminal.backend().buffer();
         // light theme vim_cursor_line = Color::Rgb(224, 231, 255)
-        let has_highlight = buffer.content.iter().any(|cell| {
-            cell.style().bg == Some(Color::Rgb(224, 231, 255))
-        });
+        let has_highlight = buffer
+            .content
+            .iter()
+            .any(|cell| cell.style().bg == Some(Color::Rgb(224, 231, 255)));
         assert!(
             has_highlight,
             "expected vim_cursor_line background on the cursor line, got none"

@@ -1,6 +1,8 @@
 use crate::model::day::SectionKind;
 use crate::model::day::{Document, EntryTarget, Meeting, Selectable, SelectableKind};
-use crate::model::parser::{block_insert_index, ensure_section, heading_level, heading_line, section_end};
+use crate::model::parser::{
+    block_insert_index, ensure_section, heading_level, heading_line, section_end,
+};
 
 /// Strip leading `->` markers and replace each with two spaces.
 /// `->` appearing anywhere other than the very start of the line is preserved.
@@ -108,7 +110,8 @@ impl Document {
         for meeting in self.meetings() {
             for line in &self.lines[meeting.heading_line + 1..] {
                 // Accept both new `meta:Scheduled: HH:MM` and legacy `Scheduled: HH:MM`.
-                let value = line.strip_prefix("meta:Scheduled: ")
+                let value = line
+                    .strip_prefix("meta:Scheduled: ")
                     .or_else(|| line.strip_prefix("Scheduled: "));
                 if let Some(v) = value {
                     if !v.is_empty() {
@@ -212,7 +215,10 @@ impl Document {
                     .unwrap_or(self.lines.len());
                 block_insert_index(&self.lines, start, end)
             }
-            EntryTarget::Section { heading_line, level } => {
+            EntryTarget::Section {
+                heading_line,
+                level,
+            } => {
                 let start = *heading_line;
                 let end = self
                     .lines
@@ -250,7 +256,8 @@ impl Document {
     pub fn add_section_heading(&mut self, target: &EntryTarget, level: u8, name: &str) -> usize {
         let insert_idx = self.insertion_index_for_target(target);
         let hashes = "#".repeat(level as usize);
-        self.lines.insert(insert_idx, format!("{} {}", hashes, name));
+        self.lines
+            .insert(insert_idx, format!("{} {}", hashes, name));
         insert_idx
     }
 
@@ -289,7 +296,10 @@ impl Document {
             // Insert after the last non-blank content line in the section.
             let mut insert_at = section_end;
             while insert_at > heading_line + 1
-                && self.lines.get(insert_at - 1).map_or(false, |l| l.trim().is_empty())
+                && self
+                    .lines
+                    .get(insert_at - 1)
+                    .map_or(false, |l| l.trim().is_empty())
             {
                 insert_at -= 1;
             }
@@ -570,12 +580,7 @@ fn is_legacy_time_field_line(line: &str) -> bool {
 /// The metadata block is any consecutive run of `meta:` lines (or legacy bare
 /// time-field lines, which are transparently migrated to `meta:` format on write).
 /// The block is always rewritten in the canonical order defined by `METADATA_FIELD_ORDER`.
-pub fn set_metadata_field(
-    lines: &mut Vec<String>,
-    heading_line: usize,
-    key: &str,
-    value: &str,
-) {
+pub fn set_metadata_field(lines: &mut Vec<String>, heading_line: usize, key: &str, value: &str) {
     // Find the end of the existing metadata block (supports both formats).
     let mut meta_end = heading_line + 1;
     while meta_end < lines.len()
@@ -585,17 +590,16 @@ pub fn set_metadata_field(
     }
 
     // Parse existing fields into a map, stripping `meta:` prefix when present.
-    let mut fields: std::collections::HashMap<String, String> =
-        lines[heading_line + 1..meta_end]
-            .iter()
-            .filter_map(|line| {
-                let data = line.strip_prefix("meta:").unwrap_or(line.as_str());
-                let mut parts = data.splitn(2, ": ");
-                let k = parts.next()?.to_string();
-                let v = parts.next()?.to_string();
-                Some((k, v))
-            })
-            .collect();
+    let mut fields: std::collections::HashMap<String, String> = lines[heading_line + 1..meta_end]
+        .iter()
+        .filter_map(|line| {
+            let data = line.strip_prefix("meta:").unwrap_or(line.as_str());
+            let mut parts = data.splitn(2, ": ");
+            let k = parts.next()?.to_string();
+            let v = parts.next()?.to_string();
+            Some((k, v))
+        })
+        .collect();
 
     // Insert or overwrite the target key.
     fields.insert(key.to_string(), value.to_string());
@@ -808,11 +812,7 @@ mod tests {
         let mut doc = Document::from_text("# Title\n\n## Meetings\n\n## To-dos\n");
         doc.add_entry(&EntryTarget::Notes, "idea", None);
         let text = doc.to_text();
-        assert!(
-            text.contains("## Notes\nidea\n"),
-            "got: {}",
-            text
-        );
+        assert!(text.contains("## Notes\nidea\n"), "got: {}", text);
     }
 
     #[test]
@@ -840,11 +840,7 @@ mod tests {
         let mut doc = Document::from_text("# Title\n\n## Notes\n\n## To-dos\n");
         doc.add_meeting("Standup");
         let text = doc.to_text();
-        assert!(
-            text.contains("## Meetings\n### Standup\n"),
-            "got: {}",
-            text
-        );
+        assert!(text.contains("## Meetings\n### Standup\n"), "got: {}", text);
     }
 
     #[test]
@@ -1124,7 +1120,8 @@ mod tests {
 
     #[test]
     fn indented_todo_is_independent_selectable() {
-        let doc = Document::from_text("# Day\n\n## Notes\n\n- parent\n  - [ ] child\n\n## To-dos\n");
+        let doc =
+            Document::from_text("# Day\n\n## Notes\n\n- parent\n  - [ ] child\n\n## To-dos\n");
         let sel = doc.selectables();
         assert_eq!(sel.len(), 2, "expected two selectables, got: {:?}", sel);
         assert_eq!(sel[0].kind, SelectableKind::Bullet);
@@ -1135,9 +1132,8 @@ mod tests {
 
     #[test]
     fn parent_with_continuation_then_sub_bullet() {
-        let doc = Document::from_text(
-            "# Day\n\n## Notes\n\n- parent\n  cont\n  - child\n\n## To-dos\n",
-        );
+        let doc =
+            Document::from_text("# Day\n\n## Notes\n\n- parent\n  cont\n  - child\n\n## To-dos\n");
         let sel = doc.selectables();
         assert_eq!(sel.len(), 2, "expected two selectables, got: {:?}", sel);
         assert_eq!(sel[0].kind, SelectableKind::Bullet);
@@ -1148,9 +1144,8 @@ mod tests {
 
     #[test]
     fn replace_sub_bullet_does_not_join_parent() {
-        let mut doc = Document::from_text(
-            "# Day\n\n## Notes\n\n- parent\n  - child\n\n## To-dos\n",
-        );
+        let mut doc =
+            Document::from_text("# Day\n\n## Notes\n\n- parent\n  - child\n\n## To-dos\n");
         let sel = doc.selectables();
         let child_idx = sel
             .iter()
@@ -1159,13 +1154,21 @@ mod tests {
         doc.replace_selectable(child_idx, &["  - changed".to_string()])
             .unwrap();
         let text = doc.to_text();
-        assert!(text.contains("- parent\n"), "parent should remain: {}", text);
+        assert!(
+            text.contains("- parent\n"),
+            "parent should remain: {}",
+            text
+        );
         assert!(
             text.contains("  - changed\n"),
             "child should be changed: {}",
             text
         );
-        assert!(!text.contains("  - child\n"), "old child should be gone: {}", text);
+        assert!(
+            !text.contains("  - child\n"),
+            "old child should be gone: {}",
+            text
+        );
     }
 
     #[test]
@@ -1191,16 +1194,23 @@ mod tests {
         let heading = doc.meetings()[0].heading_line;
         set_metadata_field(&mut doc.lines, heading, "Started", "09:15");
         let text = doc.to_text();
-        assert!(text.contains("meta:Started: 09:15\n"), "should have new time: {}", text);
-        assert!(!text.contains("meta:Started: 09:00\n"), "old time should be gone: {}", text);
+        assert!(
+            text.contains("meta:Started: 09:15\n"),
+            "should have new time: {}",
+            text
+        );
+        assert!(
+            !text.contains("meta:Started: 09:00\n"),
+            "old time should be gone: {}",
+            text
+        );
     }
 
     #[test]
     fn set_metadata_field_canonical_order() {
         // Add Ended first, then Started, then Scheduled — result should be Purpose, Scheduled, Started, Ended
-        let mut doc = Document::from_text(
-            "# Day\n\n## Meetings\n\n### Standup\n\n## Notes\n\n## To-dos\n",
-        );
+        let mut doc =
+            Document::from_text("# Day\n\n## Meetings\n\n### Standup\n\n## Notes\n\n## To-dos\n");
         let heading = doc.meetings()[0].heading_line;
         set_metadata_field(&mut doc.lines, heading, "Ended", "10:00");
         set_metadata_field(&mut doc.lines, heading, "Started", "09:15");
@@ -1225,15 +1235,22 @@ mod tests {
         let heading = doc.meetings()[0].heading_line;
         set_metadata_field(&mut doc.lines, heading, "Started", "09:15");
         let text = doc.to_text();
-        assert!(text.contains("- note one\n"), "note one should remain: {}", text);
-        assert!(text.contains("- note two\n"), "note two should remain: {}", text);
+        assert!(
+            text.contains("- note one\n"),
+            "note one should remain: {}",
+            text
+        );
+        assert!(
+            text.contains("- note two\n"),
+            "note two should remain: {}",
+            text
+        );
     }
 
     #[test]
     fn set_metadata_field_all_three_fields() {
-        let mut doc = Document::from_text(
-            "# Day\n\n## Meetings\n\n### Standup\n\n## Notes\n\n## To-dos\n",
-        );
+        let mut doc =
+            Document::from_text("# Day\n\n## Meetings\n\n### Standup\n\n## Notes\n\n## To-dos\n");
         let heading = doc.meetings()[0].heading_line;
         set_metadata_field(&mut doc.lines, heading, "Scheduled", "09:00");
         let heading = doc.meetings()[0].heading_line;
@@ -1271,9 +1288,7 @@ mod tests {
 
     #[test]
     fn set_metadata_field_inserts_topic_in_note_block() {
-        let mut doc = Document::from_text(
-            "# Day\n\n## Notes\n\n### Design\n- note\n\n## To-dos\n",
-        );
+        let mut doc = Document::from_text("# Day\n\n## Notes\n\n### Design\n- note\n\n## To-dos\n");
         let heading = doc.note_headings()[0].heading_line;
         set_metadata_field(&mut doc.lines, heading, "Topic", "API v2");
         let text = doc.to_text();
@@ -1289,7 +1304,11 @@ mod tests {
         set_metadata_field(&mut doc.lines, heading, "Purpose", "new");
         let text = doc.to_text();
         assert!(text.contains("meta:Purpose: new\n"), "got: {}", text);
-        assert!(!text.contains("meta:Purpose: old\n"), "old should be gone: {}", text);
+        assert!(
+            !text.contains("meta:Purpose: old\n"),
+            "old should be gone: {}",
+            text
+        );
     }
 
     #[test]
@@ -1302,17 +1321,28 @@ mod tests {
         set_metadata_field(&mut doc.lines, heading, "Started", "09:05");
         let text = doc.to_text();
         // Legacy Scheduled line should be rewritten to meta: prefix
-        assert!(text.contains("meta:Scheduled: 09:00\n"), "legacy migrated: {}", text);
-        assert!(text.contains("meta:Started: 09:05\n"), "new field written: {}", text);
-        assert!(!text.contains("Scheduled: 09:00\n") || text.contains("meta:Scheduled:"), "legacy gone: {}", text);
+        assert!(
+            text.contains("meta:Scheduled: 09:00\n"),
+            "legacy migrated: {}",
+            text
+        );
+        assert!(
+            text.contains("meta:Started: 09:05\n"),
+            "new field written: {}",
+            text
+        );
+        assert!(
+            !text.contains("Scheduled: 09:00\n") || text.contains("meta:Scheduled:"),
+            "legacy gone: {}",
+            text
+        );
     }
 
     #[test]
     fn set_metadata_field_canonical_order_with_purpose() {
         // Purpose, Topic, Scheduled, Started, Ended — regardless of insertion order
-        let mut doc = Document::from_text(
-            "# Day\n\n## Meetings\n\n### Standup\n\n## Notes\n\n## To-dos\n",
-        );
+        let mut doc =
+            Document::from_text("# Day\n\n## Meetings\n\n### Standup\n\n## Notes\n\n## To-dos\n");
         let heading = doc.meetings()[0].heading_line;
         set_metadata_field(&mut doc.lines, heading, "Ended", "10:00");
         let heading = doc.meetings()[0].heading_line;
@@ -1339,8 +1369,16 @@ mod tests {
         let heading = doc.meetings()[0].heading_line;
         set_metadata_field(&mut doc.lines, heading, "Started", "09:15");
         let text = doc.to_text();
-        assert!(text.contains("- note one\n"), "note one should remain: {}", text);
-        assert!(text.contains("- note two\n"), "note two should remain: {}", text);
+        assert!(
+            text.contains("- note one\n"),
+            "note one should remain: {}",
+            text
+        );
+        assert!(
+            text.contains("- note two\n"),
+            "note two should remain: {}",
+            text
+        );
     }
 
     #[test]
@@ -1403,15 +1441,26 @@ mod tests {
         );
         let heading_line = doc.lines.iter().position(|l| l == "#### Updates").unwrap();
         doc.add_block(
-            &EntryTarget::Section { heading_line, level: 4 },
+            &EntryTarget::Section {
+                heading_line,
+                level: 4,
+            },
             &["- note".to_string()],
         );
         let text = doc.to_text();
         let section_pos = text.find("#### Updates").unwrap();
         let entry_pos = text.find("- note").unwrap();
         let notes_pos = text.find("## Notes").unwrap();
-        assert!(entry_pos > section_pos, "entry should be after section heading: {}", text);
-        assert!(entry_pos < notes_pos, "entry should be before ## Notes: {}", text);
+        assert!(
+            entry_pos > section_pos,
+            "entry should be after section heading: {}",
+            text
+        );
+        assert!(
+            entry_pos < notes_pos,
+            "entry should be before ## Notes: {}",
+            text
+        );
     }
 
     #[test]
@@ -1422,41 +1471,53 @@ mod tests {
         );
         let alice_line = doc.lines.iter().position(|l| l == "#### Alice").unwrap();
         doc.add_block(
-            &EntryTarget::Section { heading_line: alice_line, level: 4 },
+            &EntryTarget::Section {
+                heading_line: alice_line,
+                level: 4,
+            },
             &["- alice note".to_string()],
         );
         let text = doc.to_text();
         let alice_pos = text.find("#### Alice").unwrap();
         let entry_pos = text.find("- alice note").unwrap();
         let bob_pos = text.find("#### Bob").unwrap();
-        assert!(entry_pos > alice_pos, "entry should be after Alice: {}", text);
+        assert!(
+            entry_pos > alice_pos,
+            "entry should be after Alice: {}",
+            text
+        );
         assert!(entry_pos < bob_pos, "entry should be before Bob: {}", text);
     }
 
     #[test]
     fn add_section_heading_in_meeting_creates_h4_returns_line() {
-        let mut doc = Document::new_for_date(
-            chrono::NaiveDate::from_ymd_opt(2026, 6, 8).unwrap(),
-        );
+        let mut doc = Document::new_for_date(chrono::NaiveDate::from_ymd_opt(2026, 6, 8).unwrap());
         let ord = doc.add_meeting("Standup");
         let heading_line = doc.add_section_heading(&EntryTarget::Meeting(ord), 4, "Updates");
         let text = doc.to_text();
         assert!(text.contains("#### Updates\n"), "got: {}", text);
         let standup_pos = text.find("### Standup").unwrap();
         let section_pos = text.find("#### Updates").unwrap();
-        assert!(section_pos > standup_pos, "section should be after meeting heading");
-        assert_eq!(doc.lines[heading_line], "#### Updates", "heading_line should point to the heading");
+        assert!(
+            section_pos > standup_pos,
+            "section should be after meeting heading"
+        );
+        assert_eq!(
+            doc.lines[heading_line], "#### Updates",
+            "heading_line should point to the heading"
+        );
     }
 
     #[test]
     fn add_section_heading_nested_in_section_creates_h5() {
-        let mut doc = Document::new_for_date(
-            chrono::NaiveDate::from_ymd_opt(2026, 6, 8).unwrap(),
-        );
+        let mut doc = Document::new_for_date(chrono::NaiveDate::from_ymd_opt(2026, 6, 8).unwrap());
         let ord = doc.add_meeting("Standup");
         let h4_line = doc.add_section_heading(&EntryTarget::Meeting(ord), 4, "Updates");
         let h5_line = doc.add_section_heading(
-            &EntryTarget::Section { heading_line: h4_line, level: 4 },
+            &EntryTarget::Section {
+                heading_line: h4_line,
+                level: 4,
+            },
             5,
             "Details",
         );
@@ -1475,7 +1536,10 @@ mod tests {
         );
         let details_line = doc.lines.iter().position(|l| l == "##### Details").unwrap();
         doc.add_block(
-            &EntryTarget::Section { heading_line: details_line, level: 5 },
+            &EntryTarget::Section {
+                heading_line: details_line,
+                level: 5,
+            },
             &["- detail".to_string()],
         );
         let text = doc.to_text();
@@ -1488,9 +1552,7 @@ mod tests {
 
     #[test]
     fn toggle_todo_at_line_unchecked_to_checked() {
-        let mut doc = Document::from_text(
-            "# Day\n\n## To-dos\n\n- [ ] write tests\n",
-        );
+        let mut doc = Document::from_text("# Day\n\n## To-dos\n\n- [ ] write tests\n");
         // line 4 is "- [ ] write tests"
         doc.toggle_todo_at_line(4).unwrap();
         assert_eq!(doc.lines[4], "- [x] write tests");
@@ -1498,18 +1560,14 @@ mod tests {
 
     #[test]
     fn toggle_todo_at_line_checked_to_unchecked() {
-        let mut doc = Document::from_text(
-            "# Day\n\n## To-dos\n\n- [x] done task\n",
-        );
+        let mut doc = Document::from_text("# Day\n\n## To-dos\n\n- [x] done task\n");
         doc.toggle_todo_at_line(4).unwrap();
         assert_eq!(doc.lines[4], "- [ ] done task");
     }
 
     #[test]
     fn toggle_todo_at_line_uppercase_x_to_unchecked() {
-        let mut doc = Document::from_text(
-            "# Day\n\n## To-dos\n\n- [X] done task\n",
-        );
+        let mut doc = Document::from_text("# Day\n\n## To-dos\n\n- [X] done task\n");
         doc.toggle_todo_at_line(4).unwrap();
         assert_eq!(doc.lines[4], "- [ ] done task");
     }
@@ -1536,9 +1594,8 @@ mod tests {
 
     #[test]
     fn meetings_with_scheduled_excludes_meeting_without_scheduled() {
-        let doc = Document::from_text(
-            "# Day\n\n## Meetings\n\n### Standup\n\n## Notes\n\n## To-dos\n",
-        );
+        let doc =
+            Document::from_text("# Day\n\n## Meetings\n\n### Standup\n\n## Notes\n\n## To-dos\n");
         let result = doc.meetings_with_scheduled();
         assert!(result.is_empty());
     }
@@ -1617,10 +1674,18 @@ mod tests {
         let text = doc.to_text();
         let note_two_pos = text.find("- note two").unwrap();
         let summary_pos = text.find("#### Meeting Summary").unwrap();
-        assert!(summary_pos > note_two_pos, "summary should be after notes: {}", text);
+        assert!(
+            summary_pos > note_two_pos,
+            "summary should be after notes: {}",
+            text
+        );
         // Must not bleed into Notes section
         let notes_pos = text.find("## Notes").unwrap();
-        assert!(summary_pos < notes_pos, "summary must be before ## Notes: {}", text);
+        assert!(
+            summary_pos < notes_pos,
+            "summary must be before ## Notes: {}",
+            text
+        );
     }
 
     #[test]
@@ -1630,10 +1695,23 @@ mod tests {
         );
         doc.add_meeting_summary(0, "#### Meeting Summary\n**Key Decisions:** new");
         let text = doc.to_text();
-        assert!(text.contains("**Key Decisions:** new"), "new summary missing: {}", text);
-        assert!(!text.contains("**Key Decisions:** old"), "old summary should be gone: {}", text);
+        assert!(
+            text.contains("**Key Decisions:** new"),
+            "new summary missing: {}",
+            text
+        );
+        assert!(
+            !text.contains("**Key Decisions:** old"),
+            "old summary should be gone: {}",
+            text
+        );
         // Only one #### Meeting Summary heading
-        assert_eq!(text.matches("#### Meeting Summary").count(), 1, "duplicate summary: {}", text);
+        assert_eq!(
+            text.matches("#### Meeting Summary").count(),
+            1,
+            "duplicate summary: {}",
+            text
+        );
     }
 
     #[test]
@@ -1644,8 +1722,16 @@ mod tests {
         // AI response without the heading
         doc.add_meeting_summary(0, "**Key Decisions:** Ship it");
         let text = doc.to_text();
-        assert!(text.contains("#### Meeting Summary"), "heading should be added: {}", text);
-        assert!(text.contains("**Key Decisions:** Ship it"), "content should be present: {}", text);
+        assert!(
+            text.contains("#### Meeting Summary"),
+            "heading should be added: {}",
+            text
+        );
+        assert!(
+            text.contains("**Key Decisions:** Ship it"),
+            "content should be present: {}",
+            text
+        );
     }
 
     #[test]
@@ -1663,11 +1749,22 @@ mod tests {
         let mut doc = Document::from_text(
             "# Day\n\n## Meetings\n\n### Standup\n- standup note\n\n### Review\n- review note\n\n## Notes\n\n## To-dos\n",
         );
-        doc.add_meeting_summary(0, "#### Meeting Summary\n**Key Decisions:** standup decision");
+        doc.add_meeting_summary(
+            0,
+            "#### Meeting Summary\n**Key Decisions:** standup decision",
+        );
         let text = doc.to_text();
         let summary_pos = text.find("#### Meeting Summary").unwrap();
         let review_pos = text.find("### Review").unwrap();
-        assert!(summary_pos < review_pos, "summary should not pass the Review meeting: {}", text);
-        assert!(text.contains("- review note"), "review notes must be intact: {}", text);
+        assert!(
+            summary_pos < review_pos,
+            "summary should not pass the Review meeting: {}",
+            text
+        );
+        assert!(
+            text.contains("- review note"),
+            "review notes must be intact: {}",
+            text
+        );
     }
 }

@@ -1,5 +1,5 @@
-use ratatui::style::Color;
 use crate::config::ThemeOverrides;
+use ratatui::style::Color;
 
 #[derive(Clone, Debug)]
 pub struct Theme {
@@ -43,7 +43,7 @@ pub fn light() -> Theme {
         todo_done: Color::Rgb(56, 161, 105),
         todo_overdue: Color::Rgb(197, 48, 48),
         vim_cursor_line: Color::Rgb(224, 231, 255),
-        capture_bg: Color::Rgb(250, 251,252),
+        capture_bg: Color::Rgb(250, 251, 252),
         metadata: Color::Rgb(160, 174, 192),
         terminal_bg: Color::Rgb(250, 251, 252),
         terminal_fg: Color::Rgb(43, 48, 64),
