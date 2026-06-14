@@ -226,7 +226,7 @@ impl Document {
                     .enumerate()
                     .skip(start + 1)
                     .position(|(_, line)| {
-                        heading_level(line).map_or(false, |lv| lv <= *level as usize)
+                        heading_level(line).is_some_and(|lv| lv <= *level as usize)
                     })
                     .map(|i| start + 1 + i)
                     .unwrap_or(self.lines.len());
@@ -299,7 +299,7 @@ impl Document {
                 && self
                     .lines
                     .get(insert_at - 1)
-                    .map_or(false, |l| l.trim().is_empty())
+                    .is_some_and(|l| l.trim().is_empty())
             {
                 insert_at -= 1;
             }
@@ -309,7 +309,7 @@ impl Document {
             if self
                 .lines
                 .get(insert_at.saturating_sub(1))
-                .map_or(false, |l| !l.trim().is_empty())
+                .is_some_and(|l| !l.trim().is_empty())
             {
                 to_insert.push(String::new());
             }

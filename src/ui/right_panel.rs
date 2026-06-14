@@ -27,11 +27,10 @@ fn display_text(raw: &str) -> String {
         .unwrap_or(raw);
     let first_line = stripped.lines().next().unwrap_or(stripped);
     // Strip trailing " _(Tag)_"
-    if let Some(tag_start) = first_line.rfind(" _(") {
-        if first_line.ends_with(")_") {
+    if let Some(tag_start) = first_line.rfind(" _(")
+        && first_line.ends_with(")_") {
             return first_line[..tag_start].to_string();
         }
-    }
     first_line.to_string()
 }
 
