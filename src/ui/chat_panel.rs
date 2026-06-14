@@ -1,34 +1,151 @@
 use crate::app::state::{AppState, ChatRole, Focus};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::Line;
+use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Padding, Paragraph};
 
-/// Wrap `text` to `width` columns, splitting on spaces and honoring existing newlines.
-fn wrap_line(text: &str, width: usize) -> Vec<String> {
+/// Word-wrap `text` to fit in `width` columns, splitting on spaces.
+/// Returns at least one element even for empty input.
+fn wrap_text(text: &str, width: usize) -> Vec<String> {
     if width == 0 {
         return vec![text.to_string()];
     }
     let mut out = Vec::new();
-    for raw in text.split('\n') {
-        let mut current = String::new();
-        for word in raw.split(' ') {
-            if current.is_empty() {
-                current = word.to_string();
-            } else if current.chars().count() + 1 + word.chars().count() <= width {
-                current.push(' ');
-                current.push_str(word);
-            } else {
-                out.push(std::mem::take(&mut current));
-                current = word.to_string();
-            }
+    let mut current = String::new();
+    for word in text.split(' ') {
+        if current.is_empty() {
+            current = word.to_string();
+        } else if current.chars().count() + 1 + word.chars().count() <= width {
+            current.push(' ');
+            current.push_str(word);
+        } else {
+            out.push(std::mem::take(&mut current));
+            current = word.to_string();
         }
-        out.push(current);
     }
-    if out.is_empty() {
-        out.push(String::new());
-    }
+    out.push(current);
     out
+}
+
+/// Render a single raw chat message line as zero or more styled `Line<'static>`,
+/// applying markdown classification and word-wrap to fit `width` columns.
+fn render_markdown_wrapped(
+    raw: &str,
+    in_code: &mut bool,
+    width: usize,
+    theme: &crate::ui::theme::Theme,
+) -> Vec<Line<'static>> {
+    use crate::ui::markdown::{classify_line, parse_inline_formatting, LineKind};
+    use ratatui::style::{Modifier, Style};
+
+    if width == 0 {
+        return vec![];
+    }
+
+    let kind = classify_line(raw, in_code);
+    match kind {
+        LineKind::Code(text) => {
+            // Code: no word-wrap — preserve as-is.
+            vec![Line::from(Span::styled(
+                text.to_owned(),
+                Style::default().fg(theme.code),
+            ))]
+        }
+
+        LineKind::Heading(level, text) => {
+            let color = match level {
+                1 => theme.heading1,
+                2 => theme.heading2,
+                3 => theme.heading3,
+                4 => theme.heading4,
+                5 => theme.heading5,
+                _ => theme.heading6,
+            };
+            let style = Style::default().fg(color).add_modifier(Modifier::BOLD);
+            wrap_text(text, width)
+                .into_iter()
+                .map(|seg| Line::from(Span::styled(seg, style)))
+                .collect()
+        }
+
+        LineKind::Bullet(indent, rest) => {
+            let prefix = format!("{}• ", indent);
+            let cont = format!("{}  ", indent);
+            let prefix_width = indent.chars().count() + 2; // "• " = 2 visible chars
+            let avail = width.saturating_sub(prefix_width).max(1);
+            wrap_text(rest, avail)
+                .into_iter()
+                .enumerate()
+                .map(|(i, seg)| {
+                    let p = if i == 0 { prefix.clone() } else { cont.clone() };
+                    let mut spans: Vec<Span<'static>> = vec![Span::raw(p)];
+                    spans.extend(parse_inline_formatting(&seg, Style::default()));
+                    Line::from(spans)
+                })
+                .collect()
+        }
+
+        LineKind::TodoUnchecked(indent, rest) => {
+            let prefix = format!("{}☐ ", indent);
+            let cont = format!("{}  ", indent);
+            let prefix_width = indent.chars().count() + 2;
+            let avail = width.saturating_sub(prefix_width).max(1);
+            wrap_text(rest, avail)
+                .into_iter()
+                .enumerate()
+                .map(|(i, seg)| {
+                    let p = if i == 0 { prefix.clone() } else { cont.clone() };
+                    let mut spans: Vec<Span<'static>> = vec![Span::raw(p)];
+                    spans.extend(parse_inline_formatting(&seg, Style::default()));
+                    Line::from(spans)
+                })
+                .collect()
+        }
+
+        LineKind::TodoDone(indent, rest) => {
+            let prefix = format!("{}☑ ", indent);
+            let cont = format!("{}  ", indent);
+            let prefix_width = indent.chars().count() + 2;
+            let avail = width.saturating_sub(prefix_width).max(1);
+            let base_style = Style::default()
+                .fg(theme.todo_done)
+                .add_modifier(Modifier::CROSSED_OUT);
+            wrap_text(rest, avail)
+                .into_iter()
+                .enumerate()
+                .map(|(i, seg)| {
+                    let p = if i == 0 { prefix.clone() } else { cont.clone() };
+                    let mut spans: Vec<Span<'static>> =
+                        vec![Span::styled(p, Style::default().fg(theme.todo_done))];
+                    spans.extend(parse_inline_formatting(&seg, base_style));
+                    Line::from(spans)
+                })
+                .collect()
+        }
+
+        LineKind::Quote(rest) => {
+            let avail = width.saturating_sub(2).max(1); // "│ " = 2 visible chars
+            let base = Style::default().add_modifier(Modifier::ITALIC);
+            wrap_text(rest, avail)
+                .into_iter()
+                .map(|seg| {
+                    let mut spans: Vec<Span<'static>> = vec![Span::styled(
+                        "│ ",
+                        Style::default()
+                            .fg(theme.quote_marker)
+                            .add_modifier(Modifier::ITALIC),
+                    )];
+                    spans.extend(parse_inline_formatting(&seg, base));
+                    Line::from(spans)
+                })
+                .collect()
+        }
+
+        LineKind::Ordered(text) | LineKind::Plain(text) => wrap_text(text, width)
+            .into_iter()
+            .map(|seg| Line::from(parse_inline_formatting(&seg, Style::default())))
+            .collect(),
+    }
 }
 
 pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &crate::ui::theme::Theme) {
@@ -67,15 +184,31 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &cr
     let body_area = chunks[1];
     let width = body_area.width as usize;
 
-    let mut lines: Vec<Line> = Vec::new();
-    for msg in &app.chat.messages {
-        let (prefix, style) = match msg.role {
-            ChatRole::User => ("You: ", Style::default().add_modifier(Modifier::DIM)),
-            ChatRole::Assistant => ("AI:  ", Style::default()),
+    let mut lines: Vec<Line<'static>> = Vec::new();
+    let mut msg_iter = app.chat.messages.iter().peekable();
+    while let Some(msg) = msg_iter.next() {
+        // Speaker label on its own line.
+        let label_style = match msg.role {
+            ChatRole::User => Style::default().add_modifier(Modifier::DIM),
+            ChatRole::Assistant => Style::default(),
         };
-        let full = format!("{}{}", prefix, msg.content);
-        for wl in wrap_line(&full, width) {
-            lines.push(Line::styled(wl, style.bg(theme.chat_panel_bg)));
+        let label = match msg.role {
+            ChatRole::User => "You",
+            ChatRole::Assistant => "AI",
+        };
+        lines.push(Line::from(Span::styled(label, label_style)));
+
+        // Render message body with markdown and word-wrap.
+        if !msg.content.is_empty() {
+            let mut in_code = false;
+            for raw in msg.content.split('\n') {
+                lines.extend(render_markdown_wrapped(raw, &mut in_code, width, theme));
+            }
+        }
+
+        // Blank line between messages (not after the last one).
+        if msg_iter.peek().is_some() {
+            lines.push(Line::raw(""));
         }
     }
     // Thinking indicator while waiting for the first token.
@@ -85,7 +218,7 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &cr
             Some(m) if m.role == ChatRole::Assistant && m.content.is_empty()
         )
     {
-        lines.push(Line::styled("…", Style::default().bg(theme.chat_panel_bg)));
+        lines.push(Line::raw("…"));
     }
 
     let height = body_area.height as usize;
@@ -118,14 +251,14 @@ mod tests {
 
     #[test]
     fn wrap_breaks_on_width() {
-        let lines = wrap_line("one two three", 7);
+        let lines = wrap_text("one two three", 7);
         assert_eq!(lines, vec!["one two".to_string(), "three".to_string()]);
     }
 
     #[test]
-    fn wrap_preserves_newlines() {
-        let lines = wrap_line("a\nb", 10);
-        assert_eq!(lines, vec!["a".to_string(), "b".to_string()]);
+    fn wrap_text_handles_single_word() {
+        let lines = wrap_text("hello", 10);
+        assert_eq!(lines, vec!["hello".to_string()]);
     }
 
     fn app_with_messages(messages: Vec<ChatMessage>) -> AppState {
@@ -139,6 +272,72 @@ mod tests {
         s.chat.visible = true;
         s.chat.messages = messages;
         s
+    }
+
+    #[test]
+    fn render_speaker_label_on_own_line() {
+        let app = app_with_messages(vec![
+            ChatMessage { role: ChatRole::User, content: "hello".into() },
+            ChatMessage { role: ChatRole::Assistant, content: "world".into() },
+        ]);
+        let backend = TestBackend::new(40, 20);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| render(f, f.area(), &app, &crate::ui::theme::light())).unwrap();
+        let content: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
+        // labels are their own tokens — not prefixed onto message text
+        assert!(content.contains("You"), "user label missing: {}", content);
+        assert!(content.contains("AI"), "assistant label missing: {}", content);
+        // message text appears separately
+        assert!(content.contains("hello"), "user message missing: {}", content);
+        assert!(content.contains("world"), "assistant message missing: {}", content);
+    }
+
+    #[test]
+    fn render_markdown_bullet_in_chat() {
+        let app = app_with_messages(vec![
+            ChatMessage {
+                role: ChatRole::Assistant,
+                content: "- first\n- second".into(),
+            },
+        ]);
+        let backend = TestBackend::new(40, 20);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| render(f, f.area(), &app, &crate::ui::theme::light()))
+            .unwrap();
+        let content: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|c| c.symbol())
+            .collect();
+        assert!(content.contains('•'), "bullet should be rendered as •: {}", content);
+    }
+
+    #[test]
+    fn render_markdown_heading_in_chat() {
+        let app = app_with_messages(vec![
+            ChatMessage {
+                role: ChatRole::Assistant,
+                content: "# Section".into(),
+            },
+        ]);
+        let backend = TestBackend::new(40, 20);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| render(f, f.area(), &app, &crate::ui::theme::light()))
+            .unwrap();
+        let content: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|c| c.symbol())
+            .collect();
+        // The heading text "Section" should appear; the "# " prefix should be stripped
+        assert!(content.contains("Section"), "heading text missing: {}", content);
+        assert!(!content.contains("# Section"), "heading markers should be stripped: {}", content);
     }
 
     #[test]
