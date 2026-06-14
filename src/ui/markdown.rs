@@ -83,7 +83,7 @@ pub fn classify_line<'a>(line: &'a str, in_code: &mut bool) -> LineKind<'a> {
 }
 
 /// Maps a heading level (1–6) to its theme colour.
-fn heading_color(level: u8, theme: &Theme) -> ratatui::style::Color {
+pub(crate) fn heading_color(level: u8, theme: &Theme) -> ratatui::style::Color {
     match level {
         1 => theme.heading1,
         2 => theme.heading2,

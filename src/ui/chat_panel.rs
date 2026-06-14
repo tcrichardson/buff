@@ -27,6 +27,30 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
     out
 }
 
+fn wrap_prefixed(
+    prefix: String,
+    cont: String,
+    rest: &str,
+    prefix_width: usize,
+    width: usize,
+    prefix_style: Style,
+    content_style: Style,
+) -> Vec<Line<'static>> {
+    use crate::ui::markdown::parse_inline_formatting;
+
+    let avail = width.saturating_sub(prefix_width).max(1);
+    wrap_text(rest, avail)
+        .into_iter()
+        .enumerate()
+        .map(|(i, seg)| {
+            let p = if i == 0 { prefix.clone() } else { cont.clone() };
+            let mut spans: Vec<Span<'static>> = vec![Span::styled(p, prefix_style)];
+            spans.extend(parse_inline_formatting(&seg, content_style));
+            Line::from(spans)
+        })
+        .collect()
+}
+
 /// Render a single raw chat message line as zero or more styled `Line<'static>`,
 /// applying markdown classification and word-wrap to fit `width` columns.
 fn render_markdown_wrapped(
@@ -53,14 +77,7 @@ fn render_markdown_wrapped(
         }
 
         LineKind::Heading(level, text) => {
-            let color = match level {
-                1 => theme.heading1,
-                2 => theme.heading2,
-                3 => theme.heading3,
-                4 => theme.heading4,
-                5 => theme.heading5,
-                _ => theme.heading6,
-            };
+            let color = crate::ui::markdown::heading_color(level, theme);
             let style = Style::default().fg(color).add_modifier(Modifier::BOLD);
             wrap_text(text, width)
                 .into_iter()
@@ -72,55 +89,48 @@ fn render_markdown_wrapped(
             let prefix = format!("{}• ", indent);
             let cont = format!("{}  ", indent);
             let prefix_width = indent.chars().count() + 2; // "• " = 2 visible chars
-            let avail = width.saturating_sub(prefix_width).max(1);
-            wrap_text(rest, avail)
-                .into_iter()
-                .enumerate()
-                .map(|(i, seg)| {
-                    let p = if i == 0 { prefix.clone() } else { cont.clone() };
-                    let mut spans: Vec<Span<'static>> = vec![Span::raw(p)];
-                    spans.extend(parse_inline_formatting(&seg, Style::default()));
-                    Line::from(spans)
-                })
-                .collect()
+            wrap_prefixed(
+                prefix,
+                cont,
+                rest,
+                prefix_width,
+                width,
+                Style::default(),
+                Style::default(),
+            )
         }
 
         LineKind::TodoUnchecked(indent, rest) => {
             let prefix = format!("{}☐ ", indent);
             let cont = format!("{}  ", indent);
             let prefix_width = indent.chars().count() + 2;
-            let avail = width.saturating_sub(prefix_width).max(1);
-            wrap_text(rest, avail)
-                .into_iter()
-                .enumerate()
-                .map(|(i, seg)| {
-                    let p = if i == 0 { prefix.clone() } else { cont.clone() };
-                    let mut spans: Vec<Span<'static>> = vec![Span::raw(p)];
-                    spans.extend(parse_inline_formatting(&seg, Style::default()));
-                    Line::from(spans)
-                })
-                .collect()
+            wrap_prefixed(
+                prefix,
+                cont,
+                rest,
+                prefix_width,
+                width,
+                Style::default(),
+                Style::default(),
+            )
         }
 
         LineKind::TodoDone(indent, rest) => {
             let prefix = format!("{}☑ ", indent);
             let cont = format!("{}  ", indent);
             let prefix_width = indent.chars().count() + 2;
-            let avail = width.saturating_sub(prefix_width).max(1);
             let base_style = Style::default()
                 .fg(theme.todo_done)
                 .add_modifier(Modifier::CROSSED_OUT);
-            wrap_text(rest, avail)
-                .into_iter()
-                .enumerate()
-                .map(|(i, seg)| {
-                    let p = if i == 0 { prefix.clone() } else { cont.clone() };
-                    let mut spans: Vec<Span<'static>> =
-                        vec![Span::styled(p, Style::default().fg(theme.todo_done))];
-                    spans.extend(parse_inline_formatting(&seg, base_style));
-                    Line::from(spans)
-                })
-                .collect()
+            wrap_prefixed(
+                prefix,
+                cont,
+                rest,
+                prefix_width,
+                width,
+                Style::default().fg(theme.todo_done),
+                base_style,
+            )
         }
 
         LineKind::Quote(rest) => {
@@ -280,16 +290,23 @@ mod tests {
             ChatMessage { role: ChatRole::User, content: "hello".into() },
             ChatMessage { role: ChatRole::Assistant, content: "world".into() },
         ]);
-        let backend = TestBackend::new(40, 20);
+        let width = 40;
+        let backend = TestBackend::new(width, 20);
         let mut terminal = Terminal::new(backend).unwrap();
         terminal.draw(|f| render(f, f.area(), &app, &crate::ui::theme::light())).unwrap();
-        let content: String = terminal.backend().buffer().content.iter().map(|c| c.symbol()).collect();
-        // labels are their own tokens — not prefixed onto message text
-        assert!(content.contains("You"), "user label missing: {}", content);
-        assert!(content.contains("AI"), "assistant label missing: {}", content);
-        // message text appears separately
-        assert!(content.contains("hello"), "user message missing: {}", content);
-        assert!(content.contains("world"), "assistant message missing: {}", content);
+        let buffer = terminal.backend().buffer();
+        let rows: Vec<String> = buffer
+            .content
+            .chunks(width as usize)
+            .map(|row| row.iter().map(|c| c.symbol()).collect::<String>().trim().to_string())
+            .collect();
+        assert!(rows.iter().any(|r| r == "You"), "user label should be on its own row: {:?}", rows);
+        assert!(rows.iter().any(|r| r == "AI"), "assistant label should be on its own row: {:?}", rows);
+        assert!(rows.iter().any(|r| r.contains("hello")), "user message missing: {:?}", rows);
+        assert!(rows.iter().any(|r| r.contains("world")), "assistant message missing: {:?}", rows);
+        let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
+        assert!(!content.contains("You: "), "old prefixed format should be gone: {}", content);
+        assert!(!content.contains("AI: "), "old prefixed format should be gone: {}", content);
     }
 
     #[test]
