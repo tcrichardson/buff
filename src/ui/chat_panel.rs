@@ -58,6 +58,7 @@ fn render_markdown_wrapped(
     in_code: &mut bool,
     width: usize,
     theme: &crate::ui::theme::Theme,
+    base_style: Style,
 ) -> Vec<Line<'static>> {
     use crate::ui::markdown::{classify_line, parse_inline_formatting, LineKind};
     use ratatui::style::{Modifier, Style};
@@ -95,8 +96,8 @@ fn render_markdown_wrapped(
                 rest,
                 prefix_width,
                 width,
-                Style::default(),
-                Style::default(),
+                base_style,
+                base_style,
             )
         }
 
@@ -110,8 +111,8 @@ fn render_markdown_wrapped(
                 rest,
                 prefix_width,
                 width,
-                Style::default(),
-                Style::default(),
+                base_style,
+                base_style,
             )
         }
 
@@ -119,7 +120,7 @@ fn render_markdown_wrapped(
             let prefix = format!("{}☑ ", indent);
             let cont = format!("{}  ", indent);
             let prefix_width = indent.chars().count() + 2;
-            let base_style = Style::default()
+            let content_style = base_style
                 .fg(theme.todo_done)
                 .add_modifier(Modifier::CROSSED_OUT);
             wrap_prefixed(
@@ -128,14 +129,14 @@ fn render_markdown_wrapped(
                 rest,
                 prefix_width,
                 width,
-                Style::default().fg(theme.todo_done),
-                base_style,
+                base_style.fg(theme.todo_done),
+                content_style,
             )
         }
 
         LineKind::Quote(rest) => {
             let avail = width.saturating_sub(2).max(1); // "│ " = 2 visible chars
-            let base = Style::default().add_modifier(Modifier::ITALIC);
+            let content_style = base_style.add_modifier(Modifier::ITALIC);
             wrap_text(rest, avail)
                 .into_iter()
                 .map(|seg| {
@@ -145,7 +146,7 @@ fn render_markdown_wrapped(
                             .fg(theme.quote_marker)
                             .add_modifier(Modifier::ITALIC),
                     )];
-                    spans.extend(parse_inline_formatting(&seg, base));
+                    spans.extend(parse_inline_formatting(&seg, content_style));
                     Line::from(spans)
                 })
                 .collect()
@@ -153,7 +154,7 @@ fn render_markdown_wrapped(
 
         LineKind::Ordered(text) | LineKind::Plain(text) => wrap_text(text, width)
             .into_iter()
-            .map(|seg| Line::from(parse_inline_formatting(&seg, Style::default())))
+            .map(|seg| Line::from(parse_inline_formatting(&seg, base_style)))
             .collect(),
     }
 }
@@ -198,13 +199,13 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &cr
     let mut msg_iter = app.chat.messages.iter().peekable();
     while let Some(msg) = msg_iter.next() {
         // Speaker label on its own line.
-        let label_style = match msg.role {
-            ChatRole::User => Style::default().add_modifier(Modifier::DIM),
-            ChatRole::Assistant => Style::default(),
-        };
-        let label = match msg.role {
-            ChatRole::User => "You",
-            ChatRole::Assistant => "AI",
+        let (label, label_style, body_style) = match msg.role {
+            ChatRole::User => (
+                "You",
+                Style::default().add_modifier(Modifier::DIM),
+                Style::default().add_modifier(Modifier::DIM),
+            ),
+            ChatRole::Assistant => ("AI", Style::default(), Style::default()),
         };
         lines.push(Line::from(Span::styled(label, label_style)));
 
@@ -212,7 +213,7 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &AppState, theme: &cr
         if !msg.content.is_empty() {
             let mut in_code = false;
             for raw in msg.content.split('\n') {
-                lines.extend(render_markdown_wrapped(raw, &mut in_code, width, theme));
+                lines.extend(render_markdown_wrapped(raw, &mut in_code, width, theme, body_style));
             }
         }
 
@@ -299,11 +300,19 @@ mod tests {
             .content
             .chunks(width as usize)
             .map(|row| row.iter().map(|c| c.symbol()).collect::<String>().trim().to_string())
+            .filter(|r| !r.is_empty())
             .collect();
-        assert!(rows.iter().any(|r| r == "You"), "user label should be on its own row: {:?}", rows);
-        assert!(rows.iter().any(|r| r == "AI"), "assistant label should be on its own row: {:?}", rows);
-        assert!(rows.iter().any(|r| r.contains("hello")), "user message missing: {:?}", rows);
-        assert!(rows.iter().any(|r| r.contains("world")), "assistant message missing: {:?}", rows);
+        // Label immediately precedes its content; messages separated by a blank row.
+        assert!(
+            rows.windows(3).any(|w| w == ["You", "hello", "AI"]),
+            "expected ordered labels and content, got: {:?}",
+            rows
+        );
+        assert!(
+            rows.windows(2).any(|w| w == ["AI", "world"]),
+            "expected AI label before world, got: {:?}",
+            rows
+        );
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
         assert!(!content.contains("You: "), "old prefixed format should be gone: {}", content);
         assert!(!content.contains("AI: "), "old prefixed format should be gone: {}", content);
@@ -317,19 +326,21 @@ mod tests {
                 content: "- first\n- second".into(),
             },
         ]);
-        let backend = TestBackend::new(40, 20);
+        let width = 40;
+        let backend = TestBackend::new(width, 20);
         let mut terminal = Terminal::new(backend).unwrap();
         terminal
             .draw(|f| render(f, f.area(), &app, &crate::ui::theme::light()))
             .unwrap();
-        let content: String = terminal
-            .backend()
-            .buffer()
+        let buffer = terminal.backend().buffer();
+        let rows: Vec<String> = buffer
             .content
-            .iter()
-            .map(|c| c.symbol())
+            .chunks(width as usize)
+            .map(|row| row.iter().map(|c| c.symbol()).collect::<String>().trim().to_string())
+            .filter(|r| !r.is_empty())
             .collect();
-        assert!(content.contains('•'), "bullet should be rendered as •: {}", content);
+        assert!(rows.contains(&"• first".to_string()), "first bullet missing: {:?}", rows);
+        assert!(rows.contains(&"• second".to_string()), "second bullet missing: {:?}", rows);
     }
 
     #[test]
