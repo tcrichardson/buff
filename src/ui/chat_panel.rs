@@ -29,8 +29,8 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
 }
 
 fn wrap_prefixed(
-    prefix: String,
-    cont: String,
+    prefix: &str,
+    cont: &str,
     rest: &str,
     prefix_width: usize,
     width: usize,
@@ -44,7 +44,7 @@ fn wrap_prefixed(
         .into_iter()
         .enumerate()
         .map(|(i, seg)| {
-            let p = if i == 0 { prefix.clone() } else { cont.clone() };
+            let p = if i == 0 { prefix.to_owned() } else { cont.to_owned() };
             let mut spans: Vec<Span<'static>> = vec![Span::styled(p, prefix_style)];
             spans.extend(parse_inline_formatting(&seg, content_style));
             Line::from(spans)
@@ -92,8 +92,8 @@ fn render_markdown_wrapped(
             let cont = format!("{}  ", indent);
             let prefix_width = indent.chars().count() + 2; // "• " = 2 visible chars
             wrap_prefixed(
-                prefix,
-                cont,
+                &prefix,
+                &cont,
                 rest,
                 prefix_width,
                 width,
@@ -107,8 +107,8 @@ fn render_markdown_wrapped(
             let cont = format!("{}  ", indent);
             let prefix_width = indent.chars().count() + 2;
             wrap_prefixed(
-                prefix,
-                cont,
+                &prefix,
+                &cont,
                 rest,
                 prefix_width,
                 width,
@@ -125,8 +125,8 @@ fn render_markdown_wrapped(
                 .fg(theme.todo_done)
                 .add_modifier(Modifier::CROSSED_OUT);
             wrap_prefixed(
-                prefix,
-                cont,
+                &prefix,
+                &cont,
                 rest,
                 prefix_width,
                 width,
@@ -320,31 +320,54 @@ mod tests {
 
     #[test]
     fn render_user_content_is_dim() {
+        fn cell_has_dim_at(buffer: &ratatui::buffer::Buffer, symbol: char) -> bool {
+            buffer
+                .content
+                .iter()
+                .any(|c| c.symbol() == symbol.to_string() && c.style().add_modifier.contains(Modifier::DIM))
+        }
+
+        fn cell_not_dim_at(buffer: &ratatui::buffer::Buffer, symbol: char) -> bool {
+            buffer
+                .content
+                .iter()
+                .any(|c| c.symbol() == symbol.to_string() && !c.style().add_modifier.contains(Modifier::DIM))
+        }
+
+        // Plain user content is dim; plain assistant content is not.
         let app = app_with_messages(vec![
             ChatMessage { role: ChatRole::User, content: "hello".into() },
             ChatMessage { role: ChatRole::Assistant, content: "world".into() },
         ]);
-        let width = 40;
-        let backend = TestBackend::new(width, 20);
+        let backend = TestBackend::new(40, 20);
         let mut terminal = Terminal::new(backend).unwrap();
         terminal.draw(|f| render(f, f.area(), &app, &crate::ui::theme::light())).unwrap();
         let buffer = terminal.backend().buffer();
-
-        // Find a cell containing 'h' from the user message and assert it is DIM.
-        let user_dim = buffer
-            .content
-            .iter()
-            .any(|c| c.symbol() == "h" && c.style().add_modifier == Modifier::DIM);
-        assert!(user_dim, "user message content should be rendered with DIM modifier");
-
-        // Find a cell containing 'w' from the assistant message and assert it is NOT DIM.
-        let assistant_not_dim = buffer
-            .content
-            .iter()
-            .any(|c| c.symbol() == "w" && c.style().add_modifier != Modifier::DIM);
         assert!(
-            assistant_not_dim,
-            "assistant message content should not be rendered with DIM modifier"
+            cell_has_dim_at(buffer, 'h'),
+            "plain user message content should be rendered with DIM modifier"
+        );
+        assert!(
+            cell_not_dim_at(buffer, 'w'),
+            "plain assistant message content should not be rendered with DIM modifier"
+        );
+
+        // User headings and code blocks are also dim.
+        let app = app_with_messages(vec![
+            ChatMessage { role: ChatRole::User, content: "# Heading".into() },
+            ChatMessage { role: ChatRole::User, content: "`code`".into() },
+        ]);
+        let backend = TestBackend::new(40, 20);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| render(f, f.area(), &app, &crate::ui::theme::light())).unwrap();
+        let buffer = terminal.backend().buffer();
+        assert!(
+            cell_has_dim_at(buffer, 'H'),
+            "user heading content should be rendered with DIM modifier"
+        );
+        assert!(
+            cell_has_dim_at(buffer, 'c'),
+            "user code content should be rendered with DIM modifier"
         );
     }
 
