@@ -59,6 +59,35 @@ fn parse_cli_args() -> Result<Option<CliArgs>> {
     Ok(Some(CliArgs { notes_dir }))
 }
 
+fn set_cursor_style(focus: &Focus) -> Result<()> {
+    let style = match focus {
+        Focus::VimNormal => SetCursorStyle::SteadyBlock,
+        Focus::VimInsert => SetCursorStyle::SteadyBar,
+        _                => SetCursorStyle::DefaultUserShape,
+    };
+    execute!(std::io::stdout(), style)?;
+    Ok(())
+}
+
+fn drain_llm_events(
+    app: &mut buff::app::state::AppState,
+    rx: &std::sync::mpsc::Receiver<buff::app::llm::LlmEvent>,
+) {
+    while let Ok(event) = rx.try_recv() {
+        app.handle_llm_event(event);
+    }
+}
+
+fn process_key(app: &mut buff::app::state::AppState) -> Result<buff::app::input::EventOutcome> {
+    let Some(key) = read_key()? else {
+        return Ok(buff::app::input::EventOutcome::Continue);
+    };
+    let Some(action) = buff::app::input::key_to_action(app, key) else {
+        return Ok(buff::app::input::EventOutcome::Continue);
+    };
+    buff::app::input::execute_action(app, action)
+}
+
 fn run() -> Result<()> {
     let Some(cli) = parse_cli_args()? else {
         return Ok(());
@@ -78,36 +107,11 @@ fn run() -> Result<()> {
 
     loop {
         let theme = buff::ui::theme::resolve_theme(&app.config.theme, &app.config.theme_overrides);
-        terminal.draw(|frame| {
-            buff::ui::render(frame, &app, &theme);
-        })?;
-
-        // Set cursor shape to match the current vim mode.
-        match app.focus {
-            Focus::VimNormal => {
-                execute!(std::io::stdout(), SetCursorStyle::SteadyBlock)?;
-            }
-            Focus::VimInsert => {
-                execute!(std::io::stdout(), SetCursorStyle::SteadyBar)?;
-            }
-            _ => {
-                execute!(std::io::stdout(), SetCursorStyle::DefaultUserShape)?;
-            }
-        }
-
-        // Drain any LLM events that arrived since the last iteration.
-        while let Ok(event) = llm_rx.try_recv() {
-            app.handle_llm_event(event);
-        }
-
-        if let Some(key) = read_key()? {
-            if let Some(action) = buff::app::input::key_to_action(&app, key) {
-                if buff::app::input::execute_action(&mut app, action)?
-                    == buff::app::input::EventOutcome::Quit
-                {
-                    break;
-                }
-            }
+        terminal.draw(|frame| buff::ui::render(frame, &app, &theme))?;
+        set_cursor_style(&app.focus)?;
+        drain_llm_events(&mut app, &llm_rx);
+        if process_key(&mut app)? == buff::app::input::EventOutcome::Quit {
+            break;
         }
     }
 
