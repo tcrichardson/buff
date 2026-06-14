@@ -62,7 +62,7 @@ fn render_markdown_wrapped(
     base_style: Style,
 ) -> Vec<Line<'static>> {
     use crate::ui::markdown::{classify_line, parse_inline_formatting, LineKind};
-    use ratatui::style::{Modifier, Style};
+    use ratatui::style::Modifier;
 
     if width == 0 {
         return vec![];
@@ -138,15 +138,13 @@ fn render_markdown_wrapped(
         LineKind::Quote(rest) => {
             let avail = width.saturating_sub(2).max(1); // "│ " = 2 visible chars
             let content_style = base_style.add_modifier(Modifier::ITALIC);
+            let marker_style = base_style
+                .fg(theme.quote_marker)
+                .add_modifier(Modifier::ITALIC);
             wrap_text(rest, avail)
                 .into_iter()
                 .map(|seg| {
-                    let mut spans: Vec<Span<'static>> = vec![Span::styled(
-                        "│ ",
-                        Style::default()
-                            .fg(theme.quote_marker)
-                            .add_modifier(Modifier::ITALIC),
-                    )];
+                    let mut spans: Vec<Span<'static>> = vec![Span::styled("│ ", marker_style)];
                     spans.extend(parse_inline_formatting(&seg, content_style));
                     Line::from(spans)
                 })
