@@ -4,7 +4,8 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Padding, Paragraph};
 
-/// Word-wrap `text` to fit in `width` columns, splitting on spaces.
+/// Word-wrap a single logical line of `text` to fit in `width` columns,
+/// splitting on spaces. Callers must split multi-line input on `'\n'` first.
 /// Returns at least one element even for empty input.
 fn wrap_text(text: &str, width: usize) -> Vec<String> {
     if width == 0 {
@@ -73,13 +74,13 @@ fn render_markdown_wrapped(
             // Code: no word-wrap — preserve as-is.
             vec![Line::from(Span::styled(
                 text.to_owned(),
-                Style::default().fg(theme.code),
+                base_style.fg(theme.code),
             ))]
         }
 
         LineKind::Heading(level, text) => {
             let color = crate::ui::markdown::heading_color(level, theme);
-            let style = Style::default().fg(color).add_modifier(Modifier::BOLD);
+            let style = base_style.fg(color).add_modifier(Modifier::BOLD);
             wrap_text(text, width)
                 .into_iter()
                 .map(|seg| Line::from(Span::styled(seg, style)))
@@ -300,22 +301,51 @@ mod tests {
             .content
             .chunks(width as usize)
             .map(|row| row.iter().map(|c| c.symbol()).collect::<String>().trim().to_string())
-            .filter(|r| !r.is_empty())
             .collect();
         // Label immediately precedes its content; messages separated by a blank row.
-        assert!(
-            rows.windows(3).any(|w| w == ["You", "hello", "AI"]),
+        let nonempty_rows: Vec<&String> = rows
+            .iter()
+            .filter(|r| !r.is_empty() && *r != "Chat")
+            .collect();
+        assert_eq!(
+            nonempty_rows,
+            vec!["You", "hello", "AI", "world"],
             "expected ordered labels and content, got: {:?}",
-            rows
-        );
-        assert!(
-            rows.windows(2).any(|w| w == ["AI", "world"]),
-            "expected AI label before world, got: {:?}",
-            rows
+            nonempty_rows
         );
         let content: String = buffer.content.iter().map(|c| c.symbol()).collect();
         assert!(!content.contains("You: "), "old prefixed format should be gone: {}", content);
         assert!(!content.contains("AI: "), "old prefixed format should be gone: {}", content);
+    }
+
+    #[test]
+    fn render_user_content_is_dim() {
+        let app = app_with_messages(vec![
+            ChatMessage { role: ChatRole::User, content: "hello".into() },
+            ChatMessage { role: ChatRole::Assistant, content: "world".into() },
+        ]);
+        let width = 40;
+        let backend = TestBackend::new(width, 20);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal.draw(|f| render(f, f.area(), &app, &crate::ui::theme::light())).unwrap();
+        let buffer = terminal.backend().buffer();
+
+        // Find a cell containing 'h' from the user message and assert it is DIM.
+        let user_dim = buffer
+            .content
+            .iter()
+            .any(|c| c.symbol() == "h" && c.style().add_modifier == Modifier::DIM);
+        assert!(user_dim, "user message content should be rendered with DIM modifier");
+
+        // Find a cell containing 'w' from the assistant message and assert it is NOT DIM.
+        let assistant_not_dim = buffer
+            .content
+            .iter()
+            .any(|c| c.symbol() == "w" && c.style().add_modifier != Modifier::DIM);
+        assert!(
+            assistant_not_dim,
+            "assistant message content should not be rendered with DIM modifier"
+        );
     }
 
     #[test]
@@ -339,8 +369,19 @@ mod tests {
             .map(|row| row.iter().map(|c| c.symbol()).collect::<String>().trim().to_string())
             .filter(|r| !r.is_empty())
             .collect();
-        assert!(rows.contains(&"• first".to_string()), "first bullet missing: {:?}", rows);
-        assert!(rows.contains(&"• second".to_string()), "second bullet missing: {:?}", rows);
+        let first_idx = rows
+            .iter()
+            .position(|r| r == "• first")
+            .expect("first bullet missing");
+        let second_idx = rows
+            .iter()
+            .position(|r| r == "• second")
+            .expect("second bullet missing");
+        assert!(
+            first_idx < second_idx,
+            "bullets should appear in order, got: {:?}",
+            rows
+        );
     }
 
     #[test]
